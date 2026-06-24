@@ -2,31 +2,46 @@
 
 ## 最新完成的工作
 
-2026-06-25 本輪只修棋盤邊界路數顯示：
+2026-06-25 本輪只做 Vercel 部署設定正式修正與手機版最新部署準備：
 
-- 修正上方黑方邊界路數 UI：顯示為 `1 2 3 4 5 6 7 8 9`。
-- 修正下方紅方邊界路數 helper：顯示為 `九 八 七 六 五 四 三 二 一`。
-- 移除 `.topFileLabels` 的 180 度旋轉，避免手機與桌面看到的黑方邊界順序相反或錯亂。
-- 補上 board edge labels 回歸測試，確認黑方邊界不會左右顛倒。
+- 已固定 package versions，不再使用 `latest`。
+- 已將 React 固定為 `18.3.1`。
+- 已將 React DOM 固定為 `18.3.1`。
+- 已將 Vite 固定為 `5.4.11`。
+- 已將 `@vitejs/plugin-react` 固定為 `4.3.3`。
+- 已將 TypeScript 固定為 `5.6.3`。
+- 已修正 tsconfig build 問題，移除 TypeScript 5.6.3 不支援的 `ignoreDeprecations: "6.0"`。
+- 已重新產生 / 更新 `package-lock.json`。
+- Vercel 可回到標準 `npm run build`。
+- 已更新 `DEPLOYMENT.md` 與 `README_V0.1.md` 的部署說明。
 
-## 本輪確認
+## 本輪未改動
 
-- 這次修的是 board edge labels。
-- 不是重新修 AI 座標。
-- 沒有改 `board[10][9]` 內部座標。
-- 沒有改合法步產生。
-- 沒有改 AI。
-- 沒有改 move history 主流程。
-- `moveNotation` 的黑方路數已有回歸測試，未重改。
-- `AiPanel` 與 `MoveList` 仍共用 `moveText`。
+- 沒有重做士 / 象揭棋規則。
+- 沒有重做炮 / 包顯示。
+- 沒有重做暗子被吃 / 明子被吃。
+- 沒有重做黑方 board edge labels。
+- 沒有改 moveNotation。
+- 沒有改 `board[10][9]` 座標系。
+- 沒有改 AI 評分。
 
 ## 修改了哪些檔案
 
-- `src/game/boardLayout.ts`
-- `src/style.css`
-- `tests/rules.test.ts`
+- `package.json`
+- `package-lock.json`
+- `tsconfig.json`
+- `DEPLOYMENT.md`
+- `README_V0.1.md`
 - `CODEX_STATUS.md`
 - `NEXT_TASK.md`
+
+## npm install 是否完成
+
+完成。
+
+```bash
+npm.cmd install
+```
 
 ## npm test 是否通過
 
@@ -54,4 +69,4 @@ npm.cmd run build
 
 ## 是否已經 push 到 GitHub
 
-是。本輪會以 commit message `fix board edge labels for black side` push 到 GitHub。
+是。本輪會以 commit message `stabilize vercel build configuration` push 到 GitHub。

@@ -53,3 +53,5 @@ npm run build
 本專案是 Vite React 專案，建議部署到 Vercel。部署後，手機可以直接用 Vercel 提供的網址測試，不需要同 Wi-Fi，也不需要電腦開著。
 
 詳細步驟請看 `DEPLOYMENT.md`。
+
+部署後，手機可以直接開 Vercel 提供的網址測試最新版本；正式 Build Command 請使用 `npm run build`，詳細設定見 `DEPLOYMENT.md`。
