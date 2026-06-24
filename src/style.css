@@ -45,6 +45,9 @@ select{width:100%;margin:6px 0 10px;background:#f7e2bd;color:#2c160b;border:1px 
 .editorPanel button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-radius:8px;padding:8px 12px}
 ol{padding-left:22px}
 li{margin-bottom:6px}
+li.hiddenCapture{color:#ffd36a;font-weight:700}
+li.hiddenCapture::after{content:'  暗子資訊';font-size:12px;color:#ffefbd}
+li.revealedCapture{color:#ffe8be}
 @media(max-width:1100px){
   .layout{flex-direction:column}
   .boardGrid{--cell:42px}

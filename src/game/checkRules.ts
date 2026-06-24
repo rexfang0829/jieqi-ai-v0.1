@@ -43,7 +43,18 @@ export function getAllLegalMoves(board: Board, side: Side): Move[] {
       if (!isBasicLegalMove(board, from, to)) continue;
       const next = applyMoveToBoard(board, from, to);
       if (kingsFace(next)) continue;
-      if (!isInCheck(next, side)) moves.push({from, to, piece, captured: board[tr][tc], flipped: !piece.revealed});
+      if (!isInCheck(next, side)) {
+        const captured = board[tr][tc];
+        moves.push({
+          from,
+          to,
+          piece,
+          captured,
+          capturedWasHidden: captured ? !captured.revealed : undefined,
+          captureKind: captured ? (captured.revealed ? 'revealed' : 'hidden') : undefined,
+          flipped: !piece.revealed,
+        });
+      }
     }
   }
   return moves;

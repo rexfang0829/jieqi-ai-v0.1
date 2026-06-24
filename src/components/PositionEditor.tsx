@@ -1,19 +1,12 @@
 import { useState } from 'react';
 import type { Piece, PieceType, Position, Side } from '../types/chess';
 import type { PieceDraft } from '../game/boardEditing';
+import { editorPieceTypeNames } from '../game/pieceText';
 
 const pieceTypes: PieceType[] = ['rook', 'horse', 'elephant', 'advisor', 'cannon', 'pawn', 'king'];
 const sides: Side[] = ['red', 'black'];
 
-const labels: Record<PieceType, string> = {
-  king: '帥/將',
-  advisor: '仕/士',
-  elephant: '相/象',
-  rook: '車',
-  horse: '馬',
-  cannon: '炮',
-  pawn: '兵/卒',
-};
+const labels: Record<PieceType, string> = editorPieceTypeNames;
 
 const sideLabels: Record<Side, string> = {
   red: '紅方',

@@ -7,6 +7,7 @@ import { createInitialBoard } from '../src/game/initialBoard';
 import { cancelLastMoveSync, syncLastMove } from '../src/game/lastMoveSync';
 import { moveText } from '../src/game/moveNotation';
 import { isBasicLegalMove, kingsFace } from '../src/game/moveRules';
+import { realPieceName } from '../src/game/pieceText';
 import { fromSavedPosition, loadPosition, POSITION_STORAGE_KEY, savePosition, toSavedPosition } from '../src/game/positionStorage';
 import type { Board, Piece, PieceType, Side } from '../src/types/chess';
 
@@ -111,13 +112,45 @@ test('pawn moves sideways only after crossing river', () => {
   assertEqual(isBasicLegalMove(board, { row: 4, col: 2 }, { row: 5, col: 2 }), false);
 });
 
-test('king and advisor stay inside palace', () => {
+test('king stays inside palace while jieqi advisor can leave palace', () => {
   const board = withKings();
   place(board, 9, 3, piece('red', 'advisor'));
   assertEqual(isBasicLegalMove(board, { row: 9, col: 4 }, { row: 8, col: 4 }), true);
   assertEqual(isBasicLegalMove(board, { row: 9, col: 4 }, { row: 9, col: 5 }), true);
   assertEqual(isBasicLegalMove(board, { row: 9, col: 4 }, { row: 9, col: 6 }), false);
-  assertEqual(isBasicLegalMove(board, { row: 9, col: 3 }, { row: 8, col: 2 }), false);
+  assertEqual(isBasicLegalMove(board, { row: 9, col: 3 }, { row: 8, col: 2 }), true);
+  assertEqual(isBasicLegalMove(board, { row: 9, col: 3 }, { row: 8, col: 3 }), false);
+  assertEqual(isBasicLegalMove(board, { row: 9, col: 3 }, { row: 10, col: 2 }), false);
+});
+
+test('jieqi elephant can cross river but still needs field move and clear eye', () => {
+  const board = withKings();
+  place(board, 5, 2, piece('red', 'elephant'));
+  assertEqual(isBasicLegalMove(board, { row: 5, col: 2 }, { row: 3, col: 4 }), true);
+  assertEqual(isBasicLegalMove(board, { row: 5, col: 2 }, { row: 4, col: 3 }), false);
+  place(board, 4, 3, piece('red', 'pawn'));
+  assertEqual(isBasicLegalMove(board, { row: 5, col: 2 }, { row: 3, col: 4 }), false);
+});
+
+test('hidden and revealed advisors use jieqi advisor movement', () => {
+  const board = withKings();
+  place(board, 4, 4, piece('red', 'advisor', 'rook', false));
+  assertEqual(isBasicLegalMove(board, { row: 4, col: 4 }, { row: 3, col: 3 }), true);
+  assertEqual(isBasicLegalMove(board, { row: 4, col: 4 }, { row: 2, col: 2 }), false);
+
+  board[4][4] = piece('red', 'rook', 'advisor', true);
+  assertEqual(isBasicLegalMove(board, { row: 4, col: 4 }, { row: 3, col: 3 }), true);
+  assertEqual(isBasicLegalMove(board, { row: 4, col: 4 }, { row: 4, col: 3 }), false);
+});
+
+test('hidden and revealed elephants use jieqi elephant movement', () => {
+  const board = withKings();
+  place(board, 5, 2, piece('red', 'elephant', 'rook', false));
+  assertEqual(isBasicLegalMove(board, { row: 5, col: 2 }, { row: 3, col: 4 }), true);
+
+  board[5][2] = piece('red', 'rook', 'elephant', true);
+  assertEqual(isBasicLegalMove(board, { row: 5, col: 2 }, { row: 3, col: 4 }), true);
+  assertEqual(isBasicLegalMove(board, { row: 5, col: 2 }, { row: 5, col: 4 }), false);
 });
 
 test('facing kings are detected and illegal moves are filtered', () => {
@@ -210,7 +243,66 @@ test('move notation uses Tiantian Xiangqi file order and hidden prefix', () => {
     from: { row: 3, col: 0 },
     to: { row: 4, col: 0 },
     piece: blackPawn,
-  }), '卒一進一');
+  }), '卒1進1');
+});
+
+test('cannon display uses red cannon and black bao labels', () => {
+  assertEqual(realPieceName(piece('red', 'cannon')), '炮');
+  assertEqual(realPieceName(piece('black', 'cannon')), '包');
+  assertEqual(moveText({ from: { row: 9, col: 7 }, to: { row: 8, col: 7 }, piece: piece('red', 'cannon') }), '炮二進一');
+  assertEqual(moveText({ from: { row: 0, col: 1 }, to: { row: 1, col: 1 }, piece: piece('black', 'cannon') }), '包2進1');
+});
+
+test('capture notation distinguishes revealed and hidden captured pieces', () => {
+  const revealedCapture = moveText({
+    from: { row: 5, col: 0 },
+    to: { row: 5, col: 1 },
+    piece: piece('red', 'rook'),
+    captured: piece('black', 'horse', 'horse', true),
+    capturedWasHidden: false,
+    captureKind: 'revealed',
+  });
+  assertEqual(revealedCapture.includes('吃黑馬'), true);
+
+  const hiddenBlackBaoCapture = moveText({
+    from: { row: 5, col: 0 },
+    to: { row: 5, col: 1 },
+    piece: piece('red', 'rook'),
+    captured: piece('black', 'pawn', 'cannon', false),
+    capturedWasHidden: true,
+    captureKind: 'hidden',
+  });
+  assertEqual(hiddenBlackBaoCapture.includes('吃黑暗子（翻出包）'), true);
+
+  const hiddenRedCannonCapture = moveText({
+    from: { row: 4, col: 0 },
+    to: { row: 4, col: 1 },
+    piece: piece('black', 'rook'),
+    captured: piece('red', 'pawn', 'cannon', false),
+    capturedWasHidden: true,
+    captureKind: 'hidden',
+  });
+  assertEqual(hiddenRedCannonCapture.includes('吃紅暗子（翻出炮）'), true);
+});
+
+test('applyMove records whether captured piece was hidden or revealed', () => {
+  const hiddenBoard = withKings();
+  place(hiddenBoard, 5, 0, piece('red', 'rook'));
+  place(hiddenBoard, 5, 1, piece('black', 'pawn', 'cannon', false));
+  const hiddenState = { board: hiddenBoard, turn: 'red' as const, history: [], status: 'playing' as const };
+  const hiddenNext = applyMove(hiddenState, { row: 5, col: 0 }, { row: 5, col: 1 });
+  const hiddenMove = hiddenNext.history[0];
+  assertEqual(hiddenMove.captureKind, 'hidden');
+  assertEqual(hiddenMove.capturedWasHidden, true);
+  assertEqual(hiddenMove.captured?.realType, 'cannon');
+
+  const revealedBoard = withKings();
+  place(revealedBoard, 5, 0, piece('red', 'rook'));
+  place(revealedBoard, 5, 1, piece('black', 'horse', 'horse', true));
+  const revealedState = { board: revealedBoard, turn: 'red' as const, history: [], status: 'playing' as const };
+  const revealedNext = applyMove(revealedState, { row: 5, col: 0 }, { row: 5, col: 1 });
+  assertEqual(revealedNext.history[0].captureKind, 'revealed');
+  assertEqual(revealedNext.history[0].capturedWasHidden, false);
 });
 
 test('AI scoring does not peek at hidden captured real type', () => {

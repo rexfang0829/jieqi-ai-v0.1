@@ -18,7 +18,15 @@ export function applyMove(state: GameState, from: Position, to: Position): GameS
   const flipped = !moving.revealed;
   board[to.row][to.col] = {...moving, revealed: true};
   board[from.row][from.col] = null;
-  const move: Move = { from, to, piece: moving, captured, flipped };
+  const move: Move = {
+    from,
+    to,
+    piece: moving,
+    captured,
+    capturedWasHidden: captured ? !captured.revealed : undefined,
+    captureKind: captured ? (captured.revealed ? 'revealed' : 'hidden') : undefined,
+    flipped,
+  };
   const nextTurn = state.turn === 'red' ? 'black' : 'red';
   const status = isCheckmate(board, nextTurn) ? (state.turn === 'red' ? 'red_win' : 'black_win') : 'playing';
   return { ...state, board, turn: nextTurn, history: [...state.history, move], status };

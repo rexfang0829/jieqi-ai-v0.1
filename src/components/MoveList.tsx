@@ -5,7 +5,7 @@ export function MoveList({ moves }: { moves: Move[] }) {
   return (
     <div className="panel">
       <h3>棋譜</h3>
-      <ol>{moves.map((m, i) => <li key={i}>{moveText(m)}</li>)}</ol>
+      <ol>{moves.map((m, i) => <li key={i} className={m.captureKind === 'hidden' ? 'hiddenCapture' : m.captureKind === 'revealed' ? 'revealedCapture' : ''}>{moveText(m)}</li>)}</ol>
     </div>
   );
 }

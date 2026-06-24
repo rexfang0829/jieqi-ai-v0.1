@@ -18,6 +18,8 @@ export type Move = {
   to: Position;
   piece: Piece;
   captured?: Piece | null;
+  capturedWasHidden?: boolean;
+  captureKind?: 'hidden' | 'revealed';
   flipped?: boolean;
 };
 

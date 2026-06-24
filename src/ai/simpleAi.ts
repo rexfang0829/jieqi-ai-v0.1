@@ -36,7 +36,21 @@ function opponent(side: Side): Side {
   return side === 'red' ? 'black' : 'red';
 }
 
-function opponentReplyRisk(board: Board, side: Side, movedTo: Position, movedPiece: Piece): { risk: number; immediateCapture: boolean; maxReplyGain: number } {
+function captureScore(move: Move): number {
+  return move.captured ? pieceValue(move.captured) : 0;
+}
+
+function revealScore(move: Move): number {
+  return move.flipped ? 20 : 0;
+}
+
+function positionScore(move: Move): number {
+  let score = 4 - Math.abs(4 - move.to.col);
+  if (move.to.row >= 3 && move.to.row <= 6) score += 3;
+  return score;
+}
+
+function opponentReplyPenalty(board: Board, side: Side, movedTo: Position, movedPiece: Piece): { risk: number; immediateCapture: boolean; maxReplyGain: number } {
   const replies = getAllLegalMoves(board, opponent(side));
   let immediateCapture = false;
   let maxReplyGain = 0;
@@ -57,12 +71,7 @@ function opponentReplyRisk(board: Board, side: Side, movedTo: Position, movedPie
 }
 
 function baseScore(move: Move): number {
-  let score = 0;
-  if (move.captured) score += pieceValue(move.captured);
-  if (move.flipped) score += 20;
-  score += 4 - Math.abs(4 - move.to.col);
-  if (move.to.row >= 3 && move.to.row <= 6) score += 3;
-  return score;
+  return captureScore(move) + revealScore(move) + positionScore(move);
 }
 
 export function recommendMove(state: GameState): { move: Move | null; score: number; reason: string } {
@@ -75,7 +84,7 @@ export function recommendMove(state: GameState): { move: Move | null; score: num
   for (const move of moves) {
     const nextBoard = applyMoveToBoard(state.board, move);
     const moved = nextBoard[move.to.row][move.to.col]!;
-    const reply = opponentReplyRisk(nextBoard, state.turn, move.to, moved);
+    const reply = opponentReplyPenalty(nextBoard, state.turn, move.to, moved);
     const score = baseScore(move) - reply.risk;
 
     if (reply.risk > 0) sawRiskyMove = true;

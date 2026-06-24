@@ -1,38 +1,19 @@
 import type { Move, Piece, PieceType, Side } from '../types/chess';
+import { pieceTypeName, realPieceName, sideNames } from './pieceText';
 
-const numerals = ['一', '二', '三', '四', '五', '六', '七', '八', '九'];
-
-const pieceNames: Record<Side, Record<PieceType, string>> = {
-  red: {
-    king: '帥',
-    advisor: '仕',
-    elephant: '相',
-    rook: '車',
-    horse: '馬',
-    cannon: '炮',
-    pawn: '兵',
-  },
-  black: {
-    king: '將',
-    advisor: '士',
-    elephant: '象',
-    rook: '車',
-    horse: '馬',
-    cannon: '炮',
-    pawn: '卒',
-  },
-};
+const redNumerals = ['一', '二', '三', '四', '五', '六', '七', '八', '九'];
+const blackNumerals = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
 function typeForNotation(piece: Piece): PieceType {
   return piece.revealed ? piece.realType : piece.originalType;
 }
 
-function fileNumber(side: Side, col: number): string {
-  return numerals[side === 'red' ? 8 - col : col];
+function numberText(side: Side, n: number): string {
+  return side === 'red' ? redNumerals[n - 1] ?? String(n) : blackNumerals[n - 1] ?? String(n);
 }
 
-function stepNumber(n: number): string {
-  return numerals[n - 1] ?? String(n);
+function fileNumber(side: Side, col: number): string {
+  return numberText(side, side === 'red' ? 9 - col : col + 1);
 }
 
 function forwardDelta(side: Side, fromRow: number, toRow: number): number {
@@ -46,13 +27,24 @@ function actionText(piece: Piece, move: Move): string {
   const action = delta > 0 ? '進' : '退';
   const type = typeForNotation(piece);
   const diagonalPiece = type === 'advisor' || type === 'elephant' || type === 'horse';
-  const value = diagonalPiece ? fileNumber(piece.side, move.to.col) : stepNumber(Math.abs(delta));
+  const value = diagonalPiece ? fileNumber(piece.side, move.to.col) : numberText(piece.side, Math.abs(delta));
   return `${action}${value}`;
+}
+
+export function captureText(move: Move): string {
+  if (!move.captured) return '';
+
+  const capturedSide = sideNames[move.captured.side];
+  const capturedName = realPieceName(move.captured);
+  if (move.captureKind === 'hidden' || move.capturedWasHidden) {
+    return `，吃${capturedSide}暗子（翻出${capturedName}）`;
+  }
+  return `，吃${capturedSide}${capturedName}`;
 }
 
 export function moveText(move: Move): string {
   const piece = move.piece;
   const type = typeForNotation(piece);
   const hiddenPrefix = piece.revealed ? '' : '暗';
-  return `${hiddenPrefix}${pieceNames[piece.side][type]}${fileNumber(piece.side, move.from.col)}${actionText(piece, move)}`;
+  return `${hiddenPrefix}${pieceTypeName(piece.side, type)}${fileNumber(piece.side, move.from.col)}${actionText(piece, move)}${captureText(move)}`;
 }

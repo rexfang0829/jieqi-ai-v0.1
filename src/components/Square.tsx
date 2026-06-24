@@ -1,28 +1,8 @@
-import type { Piece, PieceType, Side } from '../types/chess';
-
-const names: Record<Side, Record<PieceType, string>> = {
-  red: {
-    king: '帥',
-    advisor: '仕',
-    elephant: '相',
-    rook: '車',
-    horse: '馬',
-    cannon: '炮',
-    pawn: '兵',
-  },
-  black: {
-    king: '將',
-    advisor: '士',
-    elephant: '象',
-    rook: '車',
-    horse: '馬',
-    cannon: '炮',
-    pawn: '卒',
-  },
-};
+import type { Piece } from '../types/chess';
+import { realPieceName } from '../game/pieceText';
 
 export function pieceName(piece: Piece): string {
-  return names[piece.side][piece.realType];
+  return realPieceName(piece);
 }
 
 export function Square({ piece, selected, syncOrigin = false, legal, onClick }: { piece: Piece | null; selected: boolean; syncOrigin?: boolean; legal: boolean; onClick: () => void }) {

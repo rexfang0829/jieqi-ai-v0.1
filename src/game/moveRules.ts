@@ -57,13 +57,11 @@ export function isBasicLegalMove(board: Board, from: Position, to: Position): bo
 
   if (type === 'elephant') {
     if (!(adr === 2 && adc === 2)) return false;
-    if (piece.side === 'red' && to.row < 5) return false;
-    if (piece.side === 'black' && to.row > 4) return false;
     const eye = { row: from.row + dr / 2, col: from.col + dc / 2 };
     return !board[eye.row][eye.col];
   }
 
-  if (type === 'advisor') return adr === 1 && adc === 1 && palace(piece.side, to);
+  if (type === 'advisor') return adr === 1 && adc === 1;
 
   if (type === 'king') return ((adr === 1 && adc === 0) || (adr === 0 && adc === 1)) && palace(piece.side, to);
 
