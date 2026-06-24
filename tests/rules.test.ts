@@ -554,6 +554,22 @@ test('board data remains 10 by 9 with 90 playable intersections', () => {
   assertEqual(BOTTOM_FILE_LABELS.join(''), '九八七六五四三二一');
 });
 
+test('board edge labels for red side are nine to one', () => {
+  assertEqual(BOTTOM_FILE_LABELS.join(''), `${'\u4e5d'}${'\u516b'}${'\u4e03'}${'\u516d'}${'\u4e94'}${'\u56db'}${'\u4e09'}${'\u4e8c'}${'\u4e00'}`);
+  assertEqual(BOTTOM_FILE_LABELS[0], '\u4e5d');
+  assertEqual(BOTTOM_FILE_LABELS[8], '\u4e00');
+});
+
+test('board edge labels for black side are one to nine', () => {
+  assertEqual(TOP_FILE_LABELS.join(''), '123456789');
+  assertEqual(TOP_FILE_LABELS[0], '1');
+  assertEqual(TOP_FILE_LABELS[8], '9');
+});
+
+test('black board edge labels are not reversed', () => {
+  assertEqual(TOP_FILE_LABELS.join('') === '987654321', false);
+});
+
 test('river is a visual gap and does not add a board row', () => {
   assertEqual(visualRowForBoardRow(0), 0);
   assertEqual(visualRowForBoardRow(4), 4);

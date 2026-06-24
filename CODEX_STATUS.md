@@ -2,37 +2,35 @@
 
 ## 最新完成的工作
 
-2026-06-25 本輪完成「缺口補齊 + 回歸確認 + 手機部署準備」：
+2026-06-25 本輪只修棋盤邊界路數顯示：
 
-- 補上黑方路數回歸測試，確認黑方 `col=0` 顯示 1 路、`col=8` 顯示 9 路。
-- 補上紅方路數回歸測試，確認紅方 `col=0` 顯示九路、`col=8` 顯示一路。
-- 補上黑方橫走 `col=0 -> col=8` 的 notation 測試，防止黑方路數左右顛倒。
-- 確認 `AiPanel` 與 `MoveList` 都使用 `moveText`，沒有各自寫一套棋譜轉換。
-- 新增 `DEPLOYMENT.md`，記錄 Vercel 部署與手機測試方式。
-- 更新 `README_V0.1.md`，加入手機測試 / 線上部署入口。
+- 修正上方黑方邊界路數 UI：顯示為 `1 2 3 4 5 6 7 8 9`。
+- 修正下方紅方邊界路數 helper：顯示為 `九 八 七 六 五 四 三 二 一`。
+- 移除 `.topFileLabels` 的 180 度旋轉，避免手機與桌面看到的黑方邊界順序相反或錯亂。
+- 補上 board edge labels 回歸測試，確認黑方邊界不會左右顛倒。
 
-## 本輪回歸確認
+## 本輪確認
 
-- 士 / 象揭棋規則已完成。
-- 炮 / 包顯示已完成。
-- 暗子被吃 / 明子被吃已完成。
-- 黑方路數顯示已補測試確認。
-- `DEPLOYMENT.md` 已新增。
-- `README_V0.1.md` 已補手機部署說明。
+- 這次修的是 board edge labels。
+- 不是重新修 AI 座標。
+- 沒有改 `board[10][9]` 內部座標。
+- 沒有改合法步產生。
+- 沒有改 AI。
+- 沒有改 move history 主流程。
+- `moveNotation` 的黑方路數已有回歸測試，未重改。
+- `AiPanel` 與 `MoveList` 仍共用 `moveText`。
 
 ## 修改了哪些檔案
 
-- `DEPLOYMENT.md`
-- `README_V0.1.md`
+- `src/game/boardLayout.ts`
+- `src/style.css`
+- `tests/rules.test.ts`
 - `CODEX_STATUS.md`
 - `NEXT_TASK.md`
-- `tests/rules.test.ts`
 
 ## npm test 是否通過
 
 通過。
-
-執行指令：
 
 ```bash
 npm.cmd test
@@ -41,8 +39,6 @@ npm.cmd test
 ## npm run build 是否通過
 
 通過。
-
-執行指令：
 
 ```bash
 npm.cmd run build
@@ -54,9 +50,8 @@ npm.cmd run build
 - 尚未做 Monte Carlo。
 - 尚未做 OCR / 自動截圖辨識。
 - 尚未做 Ponder。
-- 尚未做雲端同步、多局面管理、登入系統或後端。
-- AI 仍是規則型評分加一層安全檢查，不是完整搜尋或機率推理。
+- AI 仍是規則型評分加一層安全檢查。
 
 ## 是否已經 push 到 GitHub
 
-是。本輪會以 commit message `add deployment docs and notation regression tests` push 到 GitHub。
+是。本輪會以 commit message `fix board edge labels for black side` push 到 GitHub。

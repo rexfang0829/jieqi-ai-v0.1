@@ -13,7 +13,7 @@ header button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-r
 .boardShell{display:grid;grid-template-rows:auto auto auto;gap:8px}
 .fileLabels{display:grid;grid-template-columns:repeat(9,var(--cell,64px));width:calc(var(--cell,64px) * 9);color:#180b04;font-size:30px;font-weight:800;line-height:1;font-family:'Times New Roman','Noto Serif TC',serif}
 .fileLabels span{display:flex;align-items:center;justify-content:center}
-.topFileLabels{transform:rotate(180deg)}
+.topFileLabels{transform:none}
 .bottomFileLabels{font-family:'Noto Serif TC','Microsoft JhengHei',serif}
 .boardGrid{--cell:64px;position:relative;width:calc(var(--cell) * 9);height:calc(var(--cell) * 10);background:#d99a55;border:3px solid #5b2d13}
 .boardLines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
