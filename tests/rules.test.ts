@@ -1,5 +1,6 @@
 import { getAllLegalMoves, isCheckmate, isInCheck } from '../src/game/checkRules';
 import { recommendMove } from '../src/ai/simpleAi';
+import { applyMove, newGame } from '../src/game/gameState';
 import { createInitialBoard } from '../src/game/initialBoard';
 import { moveText } from '../src/game/moveNotation';
 import { isBasicLegalMove, kingsFace } from '../src/game/moveRules';
@@ -206,4 +207,29 @@ test('AI scoring does not peek at hidden captured real type', () => {
   const stateA = { board: boardA, turn: 'red' as const, history: [], status: 'playing' as const };
   const stateB = { board: boardB, turn: 'red' as const, history: [], status: 'playing' as const };
   assertEqual(recommendMove(stateA).score, recommendMove(stateB).score);
+});
+
+test('checkmate after a move updates status to red_win', () => {
+  const board = emptyBoard();
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 1, 3, piece('red', 'rook'));
+  place(board, 0, 3, piece('red', 'rook'));
+  place(board, 0, 5, piece('red', 'rook'));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const next = applyMove(state, { row: 1, col: 3 }, { row: 1, col: 4 });
+  assertEqual(next.status, 'red_win');
+  assertEqual(next.turn, 'black');
+});
+
+test('non-playing status prevents further moves', () => {
+  const board = withKings();
+  place(board, 6, 0, piece('red', 'pawn'));
+  const state = { board, turn: 'red' as const, history: [], status: 'red_win' as const };
+  const next = applyMove(state, { row: 6, col: 0 }, { row: 5, col: 0 });
+  assertEqual(next, state);
+});
+
+test('new game starts with playing status', () => {
+  assertEqual(newGame().status, 'playing');
 });

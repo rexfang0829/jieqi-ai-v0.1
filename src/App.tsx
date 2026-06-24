@@ -12,9 +12,22 @@ export default function App() {
   const [state, setState] = useState(() => newGame());
   const [past, setPast] = useState<GameState[]>([]);
   const [selected, setSelected] = useState<Position | null>(null);
-  const legalMoves = useMemo(() => selected ? getAllLegalMoves(state.board, state.turn).filter(m => m.from.row === selected.row && m.from.col === selected.col).map(m => m.to) : [], [state, selected]);
+  const legalMoves = useMemo(() => state.status === 'playing' && selected ? getAllLegalMoves(state.board, state.turn).filter(m => m.from.row === selected.row && m.from.col === selected.col).map(m => m.to) : [], [state, selected]);
+
+  const statusText = state.status === 'playing'
+    ? `輪到：${state.turn === 'red' ? '紅方' : '黑方'}`
+    : state.status === 'red_win'
+      ? '紅方勝'
+      : state.status === 'black_win'
+        ? '黑方勝'
+        : '和局';
 
   function click(pos: Position) {
+    if (state.status !== 'playing') {
+      setSelected(null);
+      return;
+    }
+
     const piece = state.board[pos.row][pos.col];
     if (selected && legalMoves.some(p => p.row === pos.row && p.col === pos.col)) {
       const next = applyMove(state, selected, pos);
@@ -69,7 +82,7 @@ export default function App() {
         <h1>大盤揭棋 AI v0.1</h1>
         <button onClick={reset}>重新開始</button>
         <button onClick={undo} disabled={!past.length}>回上一步</button>
-        <span>輪到：{state.turn === 'red' ? '紅方' : '黑方'}</span>
+        <span>{statusText}</span>
       </header>
       <div className="layout">
         <Board board={state.board} selected={selected} legalMoves={legalMoves} onSquareClick={click} />
