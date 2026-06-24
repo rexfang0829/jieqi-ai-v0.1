@@ -27,7 +27,7 @@ export function pieceName(piece: Piece): string {
 
 export function Square({ piece, selected, legal, onClick }: { piece: Piece | null; selected: boolean; legal: boolean; onClick: () => void }) {
   return (
-    <button className={`square ${selected ? 'selected' : ''} ${legal ? 'legal' : ''}`} onClick={onClick}>
+    <button className={`square ${selected ? 'selected' : ''} ${legal ? 'legal' : ''} ${legal && piece ? 'captureTarget' : ''}`} onClick={onClick}>
       {piece && (
         <div className={`piece ${piece.side} ${piece.revealed ? 'revealed' : 'hidden'}`}>
           {piece.revealed ? pieceName(piece) : ''}

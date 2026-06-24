@@ -2,6 +2,7 @@ import { getAllLegalMoves, isCheckmate, isInCheck } from '../src/game/checkRules
 import { recommendMove } from '../src/ai/simpleAi';
 import { applyMove, newGame } from '../src/game/gameState';
 import { clearBoard, clearSquare, editSquare, revealHotkeyType, revealSelectedByHotkey, setTurn } from '../src/game/boardEditing';
+import { BOARD_COLS, BOARD_POINT_COUNT, BOARD_ROWS, hasLegalPosition, isBoardShape, visualRowForBoardRow } from '../src/game/boardLayout';
 import { createInitialBoard } from '../src/game/initialBoard';
 import { moveText } from '../src/game/moveNotation';
 import { isBasicLegalMove, kingsFace } from '../src/game/moveRules';
@@ -414,4 +415,73 @@ test('reveal hotkey does nothing without selected or on empty square', () => {
   assertEqual(revealSelectedByHotkey(state, null, '1'), state);
   assertEqual(revealSelectedByHotkey(state, { row: 4, col: 4 }, '1'), state);
   assertEqual(revealSelectedByHotkey(state, { row: 4, col: 4 }, 'x'), state);
+});
+
+test('board data remains 10 by 9 with 90 playable intersections', () => {
+  const board = createInitialBoard();
+  assertEqual(isBoardShape(board), true);
+  assertEqual(BOARD_ROWS, 10);
+  assertEqual(BOARD_COLS, 9);
+  assertEqual(BOARD_POINT_COUNT, 90);
+});
+
+test('river is a visual gap and does not add a board row', () => {
+  assertEqual(visualRowForBoardRow(0), 0);
+  assertEqual(visualRowForBoardRow(4), 4);
+  assertEqual(visualRowForBoardRow(5), 6);
+  assertEqual(visualRowForBoardRow(9), 10);
+});
+
+test('legal hint helper only marks coordinates returned by legal move generation', () => {
+  const board = withKings();
+  place(board, 7, 1, piece('red', 'horse'));
+  const legalMoves = getAllLegalMoves(board, 'red').filter(move => move.from.row === 7 && move.from.col === 1).map(move => move.to);
+  assertEqual(hasLegalPosition(legalMoves, { row: 5, col: 0 }), true);
+  assertEqual(hasLegalPosition(legalMoves, { row: 5, col: 2 }), true);
+  assertEqual(hasLegalPosition(legalMoves, { row: 6, col: 3 }), true);
+  assertEqual(hasLegalPosition(legalMoves, { row: 7, col: 2 }), false);
+});
+
+test('elephant legal hints stay on diagonal field positions after UI layout change', () => {
+  const board = withKings();
+  place(board, 9, 2, piece('red', 'elephant'));
+  const legalMoves = getAllLegalMoves(board, 'red').filter(move => move.from.row === 9 && move.from.col === 2).map(move => move.to);
+  assertEqual(hasLegalPosition(legalMoves, { row: 7, col: 0 }), true);
+  assertEqual(hasLegalPosition(legalMoves, { row: 7, col: 4 }), true);
+  assertEqual(hasLegalPosition(legalMoves, { row: 8, col: 2 }), false);
+  assertEqual(hasLegalPosition(legalMoves, { row: 9, col: 4 }), false);
+});
+
+test('AI avoids an immediate high-value recapture', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 4, 4, piece('red', 'pawn'));
+  place(board, 5, 0, piece('red', 'rook'));
+  place(board, 5, 1, piece('black', 'pawn', 'pawn', false));
+  place(board, 5, 8, piece('black', 'rook', 'pawn', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const recommended = recommendMove(state).move;
+  assertOk(recommended);
+  assertEqual(recommended.from.row === 5 && recommended.from.col === 0 && recommended.to.row === 5 && recommended.to.col === 1, false);
+});
+
+test('AI threat scoring for hidden enemies uses original type, not real type', () => {
+  const boardA = emptyBoard();
+  const boardB = emptyBoard();
+  place(boardA, 9, 4, piece('red', 'king'));
+  place(boardA, 0, 4, piece('black', 'king'));
+  place(boardA, 4, 4, piece('red', 'pawn'));
+  place(boardB, 9, 4, piece('red', 'king'));
+  place(boardB, 0, 4, piece('black', 'king'));
+  place(boardB, 4, 4, piece('red', 'pawn'));
+  place(boardA, 5, 0, piece('red', 'rook'));
+  place(boardB, 5, 0, piece('red', 'rook'));
+  place(boardA, 5, 1, piece('black', 'pawn', 'pawn', false));
+  place(boardB, 5, 1, piece('black', 'pawn', 'pawn', false));
+  place(boardA, 5, 8, piece('black', 'pawn', 'rook', false));
+  place(boardB, 5, 8, piece('black', 'pawn', 'pawn', false));
+  const stateA = { board: boardA, turn: 'red' as const, history: [], status: 'playing' as const };
+  const stateB = { board: boardB, turn: 'red' as const, history: [], status: 'playing' as const };
+  assertEqual(recommendMove(stateA).score, recommendMove(stateB).score);
 });

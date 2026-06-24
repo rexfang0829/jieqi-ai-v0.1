@@ -2,51 +2,48 @@
 
 ## 最新完成的工作
 
-本輪完成 Phase 1 的「翻子快捷鍵」最小版本。
+本輪完成兩件 Phase 1 / early AI 工作：
 
-已完成：
+1. 修正棋盤 UI，從「格子中心」改成中國象棋「十字交叉點」棋盤。
+2. 改善 `simpleAi`，加入最小版本安全評估，避免推薦明顯送子的步。
 
-- 選取棋子後可用鍵盤快捷鍵快速設定真實棋種並翻開：
-  - `1` = 車
-  - `2` = 馬
-  - `3` = 象 / 相
-  - `4` = 士 / 仕
-  - `5` = 炮
-  - `6` = 兵 / 卒
-- 快捷鍵只作用於目前 selected 的棋子。
-- 沒有 selected、selected 是空格、或按下非 1-6 時，不會改動局面。
-- 快捷鍵執行後：
-  - `realType` 會更新。
-  - `revealed` 會變成 `true`。
-  - `status` 會回到 `playing`。
-  - `originalType` 不會改變。
-  - `side` 不會改變。
-  - 其他格子不會改變。
-- UI 新增提示文字：「翻子快捷鍵：1車 2馬 3象 4士 5炮 6兵」。
+棋盤 UI 已完成：
+
+- 棋子視覺上站在線與線的交叉點。
+- 棋盤資料仍維持 `board[10][9]`。
+- 楚河漢界是第 4 排與第 5 排交叉點之間的視覺空白。
+- 楚河漢界不再是一排可走格子。
+- 合法步提示顯示在交叉點。
+- 合法吃子目標會高亮該交叉點上的棋子。
+- 象 / 相的合法提示仍只出現在田字位置。
+
+AI 安全評估已完成：
+
+- 每個候選走法會模擬走完後局面。
+- 會檢查對方下一手是否可吃回剛移動的棋子。
+- 若可被吃回，會依照該棋價值扣分。
+- 會估計對方下一手最大吃子收益並扣分。
+- 敵方暗子威脅只使用 `originalType`，不偷看未翻開的 `realType`。
+- 推薦理由會提示安全吃子、避免送子或已扣分。
 
 ## 修改了哪些檔案
 
-- `src/game/boardEditing.ts`
-  - 新增 `revealHotkeyType` 與 `revealSelectedByHotkey`。
-- `src/App.tsx`
-  - 新增鍵盤 `keydown` 監聽。
-  - 接上選取棋子的翻子快捷鍵。
-  - 新增快捷鍵提示文字。
+- `src/components/Board.tsx`
+  - 改成交叉點棋盤結構。
+  - 使用 SVG 畫 9 路直線、10 條橫線與九宮斜線。
+  - 楚河漢界改成非點擊的視覺空白。
+- `src/components/Square.tsx`
+  - 合法吃子目標新增高亮 class。
 - `src/style.css`
-  - 新增快捷鍵提示樣式。
+  - 重寫棋盤、交叉點、河界、合法點與吃子高亮樣式。
+- `src/game/boardLayout.ts`
+  - 新增棋盤視覺座標 helper 與 10 x 9 shape 檢查。
+- `src/ai/simpleAi.ts`
+  - 新增一層安全評估與 opponent reply 估值。
 - `tests/rules.test.ts`
-  - 新增測試：
-    - `1` 對應 rook。
-    - `2` 對應 horse。
-    - `3` 對應 elephant。
-    - `4` 對應 advisor。
-    - `5` 對應 cannon。
-    - `6` 對應 pawn。
-    - 快捷鍵會讓 `revealed` 變 `true`。
-    - 快捷鍵不會改 `originalType`。
-    - 快捷鍵不會改 `side`。
-    - 快捷鍵不會改其他格子。
-    - 空格或沒有 selected 時不會造成錯誤。
+  - 新增棋盤資料 / 河界 / 合法提示 / 象相提示測試。
+  - 新增 AI 避免立即被高價吃回測試。
+  - 新增 AI 評估敵方暗子威脅時不偷看 `realType` 測試。
 - `CODEX_STATUS.md`
   - 更新本輪狀態。
 - `NEXT_TASK.md`
@@ -74,6 +71,7 @@ npm.cmd run build
 
 ## 目前還有哪些已知限制
 
+- AI 只有一層安全評估，不是完整搜尋。
 - 目前只支援單一局面儲存，不支援多局面管理。
 - `history` 載入時會重設為空陣列。
 - 尚未完整實作雙方資訊不對稱。
@@ -86,4 +84,4 @@ npm.cmd run build
 
 ## 是否已經 push 到 GitHub
 
-是。本輪會以 commit message `add reveal hotkeys` push 到 GitHub。
+是。本輪會以 commit message `fix board intersection ui and improve ai safety scoring` push 到 GitHub。
