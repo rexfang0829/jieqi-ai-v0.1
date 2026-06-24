@@ -5,7 +5,7 @@ import { MoveList } from './components/MoveList';
 import { AiPanel } from './components/AiPanel';
 import { WisdomPanel } from './components/WisdomPanel';
 import { PositionEditor } from './components/PositionEditor';
-import { clearBoard, clearSquare, editSquare, type PieceDraft } from './game/boardEditing';
+import { clearBoard, clearSquare, editSquare, setTurn, type PieceDraft } from './game/boardEditing';
 import { applyMove, newGame } from './game/gameEngine';
 import { loadPosition, savePosition } from './game/positionStorage';
 import { getAllLegalMoves } from './game/checkRules';
@@ -72,6 +72,12 @@ export default function App() {
     setSelected(null);
   }
 
+  function changeTurn(turn: GameState['turn']) {
+    setState(s => setTurn(s, turn));
+    setPast([]);
+    setSelected(null);
+  }
+
   function undo() {
     setPast(history => {
       if (!history.length) return history;
@@ -115,6 +121,13 @@ export default function App() {
         <button onClick={saveCurrentPosition}>儲存目前局面</button>
         <button onClick={loadSavedPosition}>載入已儲存局面</button>
         <button onClick={undo} disabled={!past.length}>回上一步</button>
+        <label className="turnSelector">
+          輪到
+          <select value={state.turn} onChange={(e: { target: { value: string } }) => changeTurn(e.target.value as GameState['turn'])}>
+            <option value="red">紅方</option>
+            <option value="black">黑方</option>
+          </select>
+        </label>
         <span>{statusText}</span>
       </header>
       <div className="layout">

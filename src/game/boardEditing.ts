@@ -58,3 +58,11 @@ export function clearBoard(state: GameState): GameState {
     status: 'playing',
   };
 }
+
+export function setTurn(state: GameState, turn: Side): GameState {
+  return {
+    ...state,
+    turn,
+    status: 'playing',
+  };
+}

@@ -1,7 +1,7 @@
 import { getAllLegalMoves, isCheckmate, isInCheck } from '../src/game/checkRules';
 import { recommendMove } from '../src/ai/simpleAi';
 import { applyMove, newGame } from '../src/game/gameState';
-import { clearBoard, clearSquare, editSquare } from '../src/game/boardEditing';
+import { clearBoard, clearSquare, editSquare, setTurn } from '../src/game/boardEditing';
 import { createInitialBoard } from '../src/game/initialBoard';
 import { moveText } from '../src/game/moveNotation';
 import { isBasicLegalMove, kingsFace } from '../src/game/moveRules';
@@ -348,4 +348,31 @@ test('position storage returns null when localStorage is missing or empty', () =
 test('position storage ignores broken JSON and invalid saved data', () => {
   assertEqual(loadPosition(fakeStorage({ [POSITION_STORAGE_KEY]: '{not json' })), null);
   assertEqual(loadPosition(fakeStorage({ [POSITION_STORAGE_KEY]: JSON.stringify({ board: [], turn: 'red', status: 'playing' }) })), null);
+});
+
+test('manual turn setting can switch to red', () => {
+  const state = { board: emptyBoard(), turn: 'black' as const, history: [], status: 'playing' as const };
+  const next = setTurn(state, 'red');
+  assertEqual(next.turn, 'red');
+});
+
+test('manual turn setting can switch to black', () => {
+  const state = { board: emptyBoard(), turn: 'red' as const, history: [], status: 'playing' as const };
+  const next = setTurn(state, 'black');
+  assertEqual(next.turn, 'black');
+});
+
+test('manual turn setting resets status to playing', () => {
+  const state = { board: emptyBoard(), turn: 'red' as const, history: [], status: 'black_win' as const };
+  const next = setTurn(state, 'black');
+  assertEqual(next.status, 'playing');
+});
+
+test('manual turn setting keeps board unchanged', () => {
+  const board = emptyBoard();
+  place(board, 4, 4, piece('red', 'rook', 'horse', true));
+  const state = { board, turn: 'red' as const, history: [], status: 'red_win' as const };
+  const next = setTurn(state, 'black');
+  assertEqual(next.board[4][4]?.side, 'red');
+  assertEqual(next.board[4][4]?.realType, 'horse');
 });

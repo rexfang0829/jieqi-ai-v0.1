@@ -6,6 +6,8 @@ h1{margin:0;font-size:28px}
 button{cursor:pointer}
 button:disabled{cursor:not-allowed;opacity:.5}
 header button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-radius:8px;padding:9px 14px}
+.turnSelector{display:flex;gap:8px;align-items:center}
+.turnSelector select{width:auto;margin:0;padding:8px 28px 8px 10px}
 .layout{display:flex;gap:20px;align-items:flex-start}
 .boardWrap{background:#b86d32;padding:22px;border:8px solid #5b2d13;border-radius:16px;box-shadow:0 10px 30px #0008}
 .boardGrid{display:grid;grid-template-columns:repeat(9,64px);grid-template-rows:repeat(11,64px);position:relative;background:#d99a55;border:3px solid #5b2d13}
