@@ -1,6 +1,7 @@
 import { getAllLegalMoves, isCheckmate, isInCheck } from '../src/game/checkRules';
 import { recommendMove } from '../src/ai/simpleAi';
 import { applyMove, newGame } from '../src/game/gameState';
+import { clearBoard, clearSquare, editSquare } from '../src/game/boardEditing';
 import { createInitialBoard } from '../src/game/initialBoard';
 import { moveText } from '../src/game/moveNotation';
 import { isBasicLegalMove, kingsFace } from '../src/game/moveRules';
@@ -232,4 +233,59 @@ test('non-playing status prevents further moves', () => {
 
 test('new game starts with playing status', () => {
   assertEqual(newGame().status, 'playing');
+});
+
+test('editor can add a piece to an empty square', () => {
+  const state = { board: emptyBoard(), turn: 'red' as const, history: [], status: 'playing' as const };
+  const next = editSquare(state, { row: 4, col: 4 }, {}, {
+    side: 'black',
+    originalType: 'horse',
+    realType: 'rook',
+    revealed: false,
+  });
+  const added = next.board[4][4];
+  assertOk(added);
+  assertEqual(added.side, 'black');
+  assertEqual(added.originalType, 'horse');
+  assertEqual(added.realType, 'rook');
+  assertEqual(added.revealed, false);
+});
+
+test('editor can clear a piece', () => {
+  const board = emptyBoard();
+  place(board, 4, 4, piece('red', 'rook'));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const next = clearSquare(state, { row: 4, col: 4 });
+  assertEqual(next.board[4][4], null);
+});
+
+test('editor can change piece side', () => {
+  const board = emptyBoard();
+  place(board, 4, 4, piece('red', 'rook'));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const next = editSquare(state, { row: 4, col: 4 }, { side: 'black' });
+  assertEqual(next.board[4][4]?.side, 'black');
+});
+
+test('editor can change original type, real type, and revealed state', () => {
+  const board = emptyBoard();
+  place(board, 4, 4, piece('red', 'pawn', 'pawn', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const next = editSquare(state, { row: 4, col: 4 }, {
+    originalType: 'horse',
+    realType: 'rook',
+    revealed: true,
+  });
+  assertEqual(next.board[4][4]?.originalType, 'horse');
+  assertEqual(next.board[4][4]?.realType, 'rook');
+  assertEqual(next.board[4][4]?.revealed, true);
+});
+
+test('editing resets finished status back to playing', () => {
+  const board = emptyBoard();
+  place(board, 4, 4, piece('red', 'rook'));
+  const wonState = { board, turn: 'red' as const, history: [], status: 'red_win' as const };
+  assertEqual(editSquare(wonState, { row: 4, col: 4 }, { side: 'black' }).status, 'playing');
+  assertEqual(clearSquare(wonState, { row: 4, col: 4 }).status, 'playing');
+  assertEqual(clearBoard(wonState).status, 'playing');
 });

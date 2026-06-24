@@ -5,6 +5,7 @@ import { MoveList } from './components/MoveList';
 import { AiPanel } from './components/AiPanel';
 import { WisdomPanel } from './components/WisdomPanel';
 import { PositionEditor } from './components/PositionEditor';
+import { clearBoard, clearSquare, editSquare, type PieceDraft } from './game/boardEditing';
 import { applyMove, newGame } from './game/gameEngine';
 import { getAllLegalMoves } from './game/checkRules';
 
@@ -24,7 +25,7 @@ export default function App() {
 
   function click(pos: Position) {
     if (state.status !== 'playing') {
-      setSelected(null);
+      setSelected(pos);
       return;
     }
 
@@ -38,13 +39,19 @@ export default function App() {
       setSelected(null);
       return;
     }
-    if (piece?.side === state.turn) setSelected(pos);
-    else setSelected(null);
+    if (piece?.side === state.turn || !piece) setSelected(pos);
+    else setSelected(pos);
   }
 
-  function reset() {
+  function resetToInitial() {
     setState(newGame());
     setPast([]);
+    setSelected(null);
+  }
+
+  function clearCurrentBoard() {
+    setPast(history => [...history, state]);
+    setState(clearBoard(state));
     setSelected(null);
   }
 
@@ -60,27 +67,34 @@ export default function App() {
 
   function editSelectedPiece(patch: Partial<NonNullable<GameState['board'][number][number]>>) {
     if (!selected) return;
-    const current = state.board[selected.row][selected.col];
-    if (!current) return;
-    const board = state.board.map(row => row.map(piece => piece ? {...piece} : null));
-    board[selected.row][selected.col] = {...current, ...patch};
+    const next = editSquare(state, selected, patch);
+    if (next === state) return;
     setPast(history => [...history, state]);
-    setState({...state, board});
+    setState(next);
+  }
+
+  function createSelectedPiece(draft: PieceDraft) {
+    if (!selected) return;
+    const next = editSquare(state, selected, {}, draft);
+    if (next === state) return;
+    setPast(history => [...history, state]);
+    setState(next);
   }
 
   function clearSelectedSquare() {
-    if (!selected || !state.board[selected.row][selected.col]) return;
-    const board = state.board.map(row => row.map(piece => piece ? {...piece} : null));
-    board[selected.row][selected.col] = null;
+    if (!selected) return;
+    const next = clearSquare(state, selected);
+    if (next === state) return;
     setPast(history => [...history, state]);
-    setState({...state, board});
+    setState(next);
   }
 
   return (
     <main>
       <header>
         <h1>大盤揭棋 AI v0.1</h1>
-        <button onClick={reset}>重新開始</button>
+        <button onClick={resetToInitial}>恢復初始局面</button>
+        <button onClick={clearCurrentBoard}>清空棋盤</button>
         <button onClick={undo} disabled={!past.length}>回上一步</button>
         <span>{statusText}</span>
       </header>
@@ -92,6 +106,7 @@ export default function App() {
             selected={selected}
             piece={selected ? state.board[selected.row][selected.col] : null}
             onUpdatePiece={editSelectedPiece}
+            onCreatePiece={createSelectedPiece}
             onClearSquare={clearSelectedSquare}
           />
           <MoveList moves={state.history} />
