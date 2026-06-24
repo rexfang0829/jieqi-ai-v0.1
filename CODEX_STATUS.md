@@ -2,33 +2,31 @@
 
 ## 最新完成的工作
 
-2026-06-25 本輪完成 Phase 1 / early AI 小範圍修正：
+2026-06-25 本輪完成「缺口補齊 + 回歸確認 + 手機部署準備」：
 
-- 修正大盤揭棋版士 / 仕走法：斜走一格，可以離開九宮。
-- 修正大盤揭棋版象 / 相走法：走田字，可以過河，仍保留象眼。
-- 暗子未翻開仍依 `originalType`，翻開後依 `realType`；advisor / elephant 都套用揭棋版規則。
-- 統一棋子顯示 helper：紅方 cannon 顯示「炮」，黑方 cannon 顯示「包」。
-- 棋譜可區分明子被吃與暗子被吃，暗子被吃會顯示翻出的真實棋種。
-- `Move` 紀錄新增 `capturedWasHidden` / `captureKind`，保留被吃棋子是否為暗子。
-- `simpleAi` 只做小型 helper 命名整理與測試補強，沒有重寫 AI。
+- 補上黑方路數回歸測試，確認黑方 `col=0` 顯示 1 路、`col=8` 顯示 9 路。
+- 補上紅方路數回歸測試，確認紅方 `col=0` 顯示九路、`col=8` 顯示一路。
+- 補上黑方橫走 `col=0 -> col=8` 的 notation 測試，防止黑方路數左右顛倒。
+- 確認 `AiPanel` 與 `MoveList` 都使用 `moveText`，沒有各自寫一套棋譜轉換。
+- 新增 `DEPLOYMENT.md`，記錄 Vercel 部署與手機測試方式。
+- 更新 `README_V0.1.md`，加入手機測試 / 線上部署入口。
+
+## 本輪回歸確認
+
+- 士 / 象揭棋規則已完成。
+- 炮 / 包顯示已完成。
+- 暗子被吃 / 明子被吃已完成。
+- 黑方路數顯示已補測試確認。
+- `DEPLOYMENT.md` 已新增。
+- `README_V0.1.md` 已補手機部署說明。
 
 ## 修改了哪些檔案
 
-- `src/game/moveRules.ts`
-- `src/game/checkRules.ts`
-- `src/game/gameState.ts`
-- `src/game/moveNotation.ts`
-- `src/game/pieceText.ts`
-- `src/types/chess.ts`
-- `src/ai/simpleAi.ts`
-- `src/components/Square.tsx`
-- `src/components/PositionEditor.tsx`
-- `src/components/MoveList.tsx`
-- `src/style.css`
-- `tests/rules.test.ts`
-- `RULES_AND_AI_DESIGN.md`
+- `DEPLOYMENT.md`
+- `README_V0.1.md`
 - `CODEX_STATUS.md`
 - `NEXT_TASK.md`
+- `tests/rules.test.ts`
 
 ## npm test 是否通過
 
@@ -56,9 +54,9 @@ npm.cmd run build
 - 尚未做 Monte Carlo。
 - 尚未做 OCR / 自動截圖辨識。
 - 尚未做 Ponder。
+- 尚未做雲端同步、多局面管理、登入系統或後端。
 - AI 仍是規則型評分加一層安全檢查，不是完整搜尋或機率推理。
-- 被吃子區 UI 尚未整理成天天象棋式資訊區，目前先在棋譜文字與 className 區分。
 
 ## 是否已經 push 到 GitHub
 
-是。本輪會以 commit message `fix jieqi movement capture info and cannon labels` push 到 GitHub。
+是。本輪會以 commit message `add deployment docs and notation regression tests` push 到 GitHub。

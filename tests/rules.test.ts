@@ -305,6 +305,38 @@ test('applyMove records whether captured piece was hidden or revealed', () => {
   assertEqual(revealedNext.history[0].capturedWasHidden, false);
 });
 
+test('notation regression prevents black file numbers from being reversed', () => {
+  assertEqual(moveText({
+    from: { row: 9, col: 0 },
+    to: { row: 8, col: 0 },
+    piece: piece('red', 'rook'),
+  }), `車${'\u4e5d'}進${'\u4e00'}`);
+
+  assertEqual(moveText({
+    from: { row: 9, col: 8 },
+    to: { row: 8, col: 8 },
+    piece: piece('red', 'rook'),
+  }), `車${'\u4e00'}進${'\u4e00'}`);
+
+  assertEqual(moveText({
+    from: { row: 0, col: 0 },
+    to: { row: 1, col: 0 },
+    piece: piece('black', 'rook'),
+  }), '車1進1');
+
+  assertEqual(moveText({
+    from: { row: 0, col: 8 },
+    to: { row: 1, col: 8 },
+    piece: piece('black', 'rook'),
+  }), '車9進1');
+
+  assertEqual(moveText({
+    from: { row: 3, col: 0 },
+    to: { row: 3, col: 8 },
+    piece: piece('black', 'rook'),
+  }), '車1平9');
+});
+
 test('AI scoring does not peek at hidden captured real type', () => {
   const boardA = withKings();
   const boardB = withKings();
