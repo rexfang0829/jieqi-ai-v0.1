@@ -13,8 +13,8 @@ const layout: (PieceType | null)[][] = [
   ['rook','horse','elephant','advisor','king','advisor','elephant','horse','rook'],
 ];
 
-const redPool: PieceType[] = ['king','advisor','advisor','elephant','elephant','rook','rook','horse','horse','cannon','cannon','pawn','pawn','pawn','pawn','pawn'];
-const blackPool: PieceType[] = ['king','advisor','advisor','elephant','elephant','rook','rook','horse','horse','cannon','cannon','pawn','pawn','pawn','pawn','pawn'];
+const redPool: PieceType[] = ['advisor','advisor','elephant','elephant','rook','rook','horse','horse','cannon','cannon','pawn','pawn','pawn','pawn','pawn'];
+const blackPool: PieceType[] = ['advisor','advisor','elephant','elephant','rook','rook','horse','horse','cannon','cannon','pawn','pawn','pawn','pawn','pawn'];
 
 function shuffle<T>(items: T[]): T[] {
   const a = [...items];
@@ -31,7 +31,7 @@ function makePiece(side: Side, originalType: PieceType, realType: PieceType, ind
     side,
     originalType,
     realType,
-    revealed: originalType === 'king', // 帥將明示，避免暗王造成基本勝負判定困難
+    revealed: originalType === 'king',
   };
 }
 
@@ -44,10 +44,17 @@ export function createInitialBoard(): Board {
     for (let col = 0; col < 9; col++) {
       const originalType = layout[row][col];
       if (!originalType) continue;
+
       const side: Side = row <= 4 ? 'black' : 'red';
+      if (originalType === 'king') {
+        board[row][col] = makePiece(side, originalType, 'king', side === 'red' ? redI : blackI);
+        continue;
+      }
+
       const realType = side === 'red' ? pools.red[redI++] : pools.black[blackI++];
-      board[row][col] = makePiece(side, originalType, originalType === 'king' ? 'king' : realType, side === 'red' ? redI : blackI);
+      board[row][col] = makePiece(side, originalType, realType, side === 'red' ? redI : blackI);
     }
   }
+
   return board;
 }

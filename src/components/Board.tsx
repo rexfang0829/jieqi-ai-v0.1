@@ -8,21 +8,25 @@ function same(a: Position | null, b: Position): boolean {
 export function Board({ board, selected, legalMoves, onSquareClick }: {
   board: BoardType; selected: Position | null; legalMoves: Position[]; onSquareClick: (pos: Position) => void;
 }) {
+  function renderCell(piece: BoardType[number][number], r: number, c: number) {
+    return (
+      <div className={`cellWrap ${c === 8 ? 'rightEdge' : ''} ${r === 9 ? 'bottomEdge' : ''}`} key={`${r}-${c}`}>
+        <Square
+          piece={piece}
+          selected={same(selected, {row:r,col:c})}
+          legal={legalMoves.some(p => p.row === r && p.col === c)}
+          onClick={() => onSquareClick({row:r,col:c})}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="boardWrap">
       <div className="boardGrid">
-        {board.map((row, r) => row.map((piece, c) => (
-          <div className="cellWrap" key={`${r}-${c}`}>
-            {r === 4 && c === 1 && <div className="river riverLeft">楚河</div>}
-            {r === 4 && c === 5 && <div className="river riverRight">漢界</div>}
-            <Square
-              piece={piece}
-              selected={same(selected, {row:r,col:c})}
-              legal={legalMoves.some(p => p.row === r && p.col === c)}
-              onClick={() => onSquareClick({row:r,col:c})}
-            />
-          </div>
-        )))}
+        {board.slice(0, 5).map((row, r) => row.map((piece, c) => renderCell(piece, r, c)))}
+        <div className="riverRow"><span>楚河</span><span>漢界</span></div>
+        {board.slice(5).map((row, i) => row.map((piece, c) => renderCell(piece, i + 5, c)))}
       </div>
     </div>
   );

@@ -81,7 +81,7 @@ export function kingsFace(board: Board): boolean {
   let red: Position | null = null, black: Position | null = null;
   for (let r=0;r<10;r++) for (let c=0;c<9;c++) {
     const p = board[r][c];
-    if (p?.revealed && p.realType === 'king') {
+    if (p?.realType === 'king') {
       if (p.side === 'red') red = {row:r,col:c}; else black = {row:r,col:c};
     }
   }

@@ -17,7 +17,7 @@ function applyMoveToBoard(board: Board, from: Position, to: Position): Board {
 export function findKing(board: Board, side: Side): Position | null {
   for (let r=0;r<10;r++) for (let c=0;c<9;c++) {
     const p = board[r][c];
-    if (p?.side === side && p.revealed && p.realType === 'king') return {row:r,col:c};
+    if (p?.side === side && p.realType === 'king') return {row:r,col:c};
   }
   return null;
 }

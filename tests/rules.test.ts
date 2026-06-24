@@ -1,4 +1,7 @@
 import { getAllLegalMoves, isCheckmate, isInCheck } from '../src/game/checkRules';
+import { recommendMove } from '../src/ai/simpleAi';
+import { createInitialBoard } from '../src/game/initialBoard';
+import { moveText } from '../src/game/moveNotation';
 import { isBasicLegalMove, kingsFace } from '../src/game/moveRules';
 import type { Board, Piece, PieceType, Side } from '../src/types/chess';
 
@@ -120,6 +123,29 @@ test('hidden piece uses original type before first move', () => {
   assertEqual(isBasicLegalMove(board, { row: 7, col: 1 }, { row: 7, col: 5 }), false);
 });
 
+test('initial board has one revealed real king per side', () => {
+  for (let i = 0; i < 50; i++) {
+    const board = createInitialBoard();
+    for (const side of ['red', 'black'] as const) {
+      const sidePieces = board.flat().filter(p => p?.side === side);
+      const realKings = sidePieces.filter(p => p?.realType === 'king');
+      const originalKings = sidePieces.filter(p => p?.originalType === 'king');
+      assertEqual(realKings.length, 1);
+      assertEqual(originalKings.length, 1);
+      assertEqual(realKings[0]?.revealed, true);
+      assertEqual(sidePieces.filter(p => p?.originalType !== 'king' && p?.revealed).length, 0);
+    }
+  }
+});
+
+test('engine can still find check against a hidden real king', () => {
+  const board = emptyBoard();
+  place(board, 0, 4, piece('black', 'king', 'king', false));
+  place(board, 9, 4, piece('red', 'king', 'king', false));
+  place(board, 1, 4, piece('red', 'rook'));
+  assertEqual(isInCheck(board, 'black'), true);
+});
+
 test('hidden piece reveals after first legal move and then uses real type', () => {
   const board = withKings();
   place(board, 7, 1, piece('red', 'horse', 'rook', false));
@@ -144,4 +170,40 @@ test('checkmate requires being in check with no legal escape', () => {
   place(board, 0, 5, piece('red', 'rook'));
   assertEqual(isInCheck(board, 'black'), true);
   assertEqual(isCheckmate(board, 'black'), true);
+});
+
+test('move notation uses Tiantian Xiangqi file order and hidden prefix', () => {
+  const hiddenCannon = piece('red', 'cannon', 'rook', false);
+  assertEqual(moveText({
+    from: { row: 9, col: 7 },
+    to: { row: 2, col: 7 },
+    piece: hiddenCannon,
+    flipped: true,
+  }), '暗炮二進七');
+
+  const revealedCannon = piece('red', 'cannon', 'cannon', true);
+  assertEqual(moveText({
+    from: { row: 9, col: 7 },
+    to: { row: 2, col: 7 },
+    piece: revealedCannon,
+  }), '炮二進七');
+
+  const blackPawn = piece('black', 'pawn');
+  assertEqual(moveText({
+    from: { row: 3, col: 0 },
+    to: { row: 4, col: 0 },
+    piece: blackPawn,
+  }), '卒一進一');
+});
+
+test('AI scoring does not peek at hidden captured real type', () => {
+  const boardA = withKings();
+  const boardB = withKings();
+  place(boardA, 5, 0, piece('red', 'rook'));
+  place(boardB, 5, 0, piece('red', 'rook'));
+  place(boardA, 5, 1, piece('black', 'pawn', 'rook', false));
+  place(boardB, 5, 1, piece('black', 'pawn', 'pawn', false));
+  const stateA = { board: boardA, turn: 'red' as const, history: [], status: 'playing' as const };
+  const stateB = { board: boardB, turn: 'red' as const, history: [], status: 'playing' as const };
+  assertEqual(recommendMove(stateA).score, recommendMove(stateB).score);
 });
