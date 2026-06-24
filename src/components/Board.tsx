@@ -2,8 +2,7 @@ import type { Board as BoardType, Position } from '../types/chess';
 import { BOARD_COLS, BOARD_ROWS, BOTTOM_FILE_LABELS, TOP_FILE_LABELS, hasLegalPosition, samePosition, visualRowForBoardRow } from '../game/boardLayout';
 import { Square } from './Square';
 
-const riverOffset = 0.42;
-const visualY = (row: number) => row <= 4 ? row + 0.5 : row + 0.5 + riverOffset;
+const visualY = (row: number) => row + 0.5;
 const markerPositions = [
   [2, 1], [2, 7],
   [3, 0], [3, 2], [3, 4], [3, 6], [3, 8],
@@ -21,7 +20,7 @@ export function Board({ board, selected, legalMoves, onSquareClick }: {
           {TOP_FILE_LABELS.map(label => <span key={label}>{label}</span>)}
         </div>
         <div className="boardGrid">
-          <svg className="boardLines" viewBox="0 0 9 10.42" aria-hidden="true">
+          <svg className="boardLines" viewBox="0 0 9 10" aria-hidden="true">
             <rect className="outerLine" x="0.5" y={visualY(0)} width="8" height={visualY(9) - visualY(0)} />
             {Array.from({ length: BOARD_ROWS }, (_, row) => (
               <line key={`h-${row}`} x1="0.5" x2="8.5" y1={visualY(row)} y2={visualY(row)} />

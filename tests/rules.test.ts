@@ -432,8 +432,8 @@ test('board data remains 10 by 9 with 90 playable intersections', () => {
 test('river is a visual gap and does not add a board row', () => {
   assertEqual(visualRowForBoardRow(0), 0);
   assertEqual(visualRowForBoardRow(4), 4);
-  assertEqual(visualRowForBoardRow(5), 6);
-  assertEqual(visualRowForBoardRow(9), 10);
+  assertEqual(visualRowForBoardRow(5), 5);
+  assertEqual(visualRowForBoardRow(9), 9);
 });
 
 test('legal hint helper only marks coordinates returned by legal move generation', () => {

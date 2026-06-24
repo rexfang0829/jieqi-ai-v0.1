@@ -2,33 +2,32 @@
 
 ## 最新完成的工作
 
-本輪完成 Phase 1 的棋盤視覺改版，參考使用者提供的中國象棋棋盤規格。
+本輪完成 Phase 1 的楚河漢界規格修正，讓棋盤更貼近使用者提供的中國象棋參考圖。
 
 已完成：
 
-- 棋盤保留 9 路 x 10 交叉點。
-- 上方新增 1 到 9 路線標號。
-- 下方新增「九八七六五四三二一」路線標號。
-- 楚河漢界文字保持正向顯示。
-- 楚河漢界仍是視覺河界，不是可走格子。
-- 新增炮位 / 兵卒位的小刻痕標記。
-- 加強棋盤外框視覺。
+- 河界不再是額外拉開的距離。
+- 棋盤 10 條橫線改回等距視覺。
+- 楚河漢界是第 4 排與第 5 排交叉點之間那一格的斷線區。
+- 河界區域內沒有直線穿過。
+- 楚河漢界文字放在該格中，保持正向顯示。
 - 棋盤資料仍維持 `board[10][9]`。
+- 楚河漢界仍不是可走格子。
 - 規則引擎沒有修改。
 - AI 邏輯沒有修改。
 
 ## 修改了哪些檔案
 
 - `src/components/Board.tsx`
-  - 新增上方 / 下方路線標號。
-  - 新增外框與兵炮位刻痕 SVG。
+  - 移除額外 river offset。
+  - SVG viewBox 回到 10 條橫線等距規格。
 - `src/style.css`
-  - 新增路線標號、棋盤外框、刻痕樣式。
-  - 調整棋盤外觀更接近參考圖。
+  - 移除額外 `river-gap`。
+  - 河界文字改放在第 4、5 排之間的標準格距中。
 - `src/game/boardLayout.ts`
-  - 新增 `TOP_FILE_LABELS` 與 `BOTTOM_FILE_LABELS`。
+  - `visualRowForBoardRow` 改回資料 row 對應視覺 row，不新增額外 row。
 - `tests/rules.test.ts`
-  - 補測試確認路線標號數量與 9 路一致。
+  - 更新河界測試，確認 visual row 不新增額外 row。
 - `CODEX_STATUS.md`
   - 更新本輪狀態。
 - `NEXT_TASK.md`
@@ -69,4 +68,4 @@ npm.cmd run build
 
 ## 是否已經 push 到 GitHub
 
-是。本輪會以 commit message `refine board reference styling` push 到 GitHub。
+是。本輪會以 commit message `fix river board spacing` push 到 GitHub。

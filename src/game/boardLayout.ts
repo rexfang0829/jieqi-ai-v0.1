@@ -11,7 +11,7 @@ export function isBoardShape(board: Board): boolean {
 }
 
 export function visualRowForBoardRow(row: number): number {
-  return row <= 4 ? row : row + 1;
+  return row;
 }
 
 export function samePosition(a: Position | null, b: Position): boolean {
