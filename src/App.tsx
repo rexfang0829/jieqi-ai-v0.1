@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { GameState, Position } from './types/chess';
 import { Board } from './components/Board';
 import { MoveList } from './components/MoveList';
+import { CapturedPanel } from './components/CapturedPanel';
 import { AiPanel } from './components/AiPanel';
 import { WisdomPanel } from './components/WisdomPanel';
 import { PositionEditor } from './components/PositionEditor';
@@ -243,6 +244,7 @@ export default function App() {
             onCreatePiece={createSelectedPiece}
             onClearSquare={clearSelectedSquare}
           />
+          <CapturedPanel moves={state.history} />
           <MoveList moves={state.history} />
           <WisdomPanel />
         </aside>

@@ -1,7 +1,9 @@
 import { getAllLegalMoves, isCheckmate, isInCheck } from '../src/game/checkRules';
 import { recommendMove } from '../src/ai/simpleAi';
+import { SIMPLE_AI_NOTE, SIMPLE_AI_TITLE } from '../src/ai/simpleAiText';
 import { applyMove, newGame } from '../src/game/gameState';
 import { clearBoard, clearSquare, editSquare, revealHotkeyType, revealSelectedByHotkey, setTurn } from '../src/game/boardEditing';
+import { getCapturedPieces } from '../src/game/capturedPieces';
 import { BOARD_COLS, BOARD_POINT_COUNT, BOARD_ROWS, BOTTOM_FILE_LABELS, TOP_FILE_LABELS, hasLegalPosition, isBoardShape, visualRowForBoardRow } from '../src/game/boardLayout';
 import { createInitialBoard } from '../src/game/initialBoard';
 import { cancelLastMoveSync, syncLastMove } from '../src/game/lastMoveSync';
@@ -304,6 +306,57 @@ test('applyMove records whether captured piece was hidden or revealed', () => {
   const revealedNext = applyMove(revealedState, { row: 5, col: 0 }, { row: 5, col: 1 });
   assertEqual(revealedNext.history[0].captureKind, 'revealed');
   assertEqual(revealedNext.history[0].capturedWasHidden, false);
+});
+
+test('captured pieces helper groups captures by side and hidden state', () => {
+  const history = [
+    {
+      from: { row: 5, col: 0 },
+      to: { row: 5, col: 1 },
+      piece: piece('black', 'rook'),
+      captured: piece('red', 'cannon', 'cannon', true),
+      capturedWasHidden: false,
+      captureKind: 'revealed' as const,
+    },
+    {
+      from: { row: 4, col: 0 },
+      to: { row: 4, col: 1 },
+      piece: piece('black', 'rook'),
+      captured: piece('red', 'pawn', 'cannon', false),
+      capturedWasHidden: true,
+      captureKind: 'hidden' as const,
+    },
+    {
+      from: { row: 5, col: 8 },
+      to: { row: 5, col: 7 },
+      piece: piece('red', 'rook'),
+      captured: piece('black', 'cannon', 'cannon', true),
+      capturedWasHidden: false,
+      captureKind: 'revealed' as const,
+    },
+    {
+      from: { row: 4, col: 8 },
+      to: { row: 4, col: 7 },
+      piece: piece('red', 'rook'),
+      captured: piece('black', 'pawn', 'cannon', false),
+      capturedWasHidden: true,
+      captureKind: 'hidden' as const,
+    },
+  ];
+
+  const captured = getCapturedPieces(history);
+  assertEqual(captured.red.revealed[0].label, '\u70ae');
+  assertEqual(captured.red.hidden[0].label, `\u6697\u5b50\uff08\u7ffb\u51fa${'\u70ae'}\uff09`);
+  assertEqual(captured.black.revealed[0].label, '\u5305');
+  assertEqual(captured.black.hidden[0].label, `\u6697\u5b50\uff08\u7ffb\u51fa${'\u5305'}\uff09`);
+});
+
+test('ai panel text marks simple scoring and endgame text stays separate', () => {
+  assertEqual(SIMPLE_AI_TITLE.includes('\u7c21\u6613\u8a55\u5206'), true);
+  assertEqual(SIMPLE_AI_NOTE.includes('\u4e0d\u4ee3\u8868\u5b8c\u6574\u6700\u4f73\u624b'), true);
+  assertEqual(getEndgameFeedback('red_win')?.title, '\u7d55\u6bba');
+  assertEqual(getEndgameFeedback('black_win')?.title, '\u7d55\u6bba');
+  assertEqual(getEndgameFeedback('red_win')?.title === SIMPLE_AI_TITLE, false);
 });
 
 test('notation regression prevents black file numbers from being reversed', () => {

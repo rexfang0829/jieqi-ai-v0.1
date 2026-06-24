@@ -2,18 +2,22 @@
 
 ## 最新完成的工作
 
-2026-06-25 本輪只做「絕殺結束提示 UX 強化」：
+2026-06-25 本輪只做「被吃子資訊 UI 收斂 + AI 建議說明文字」：
 
-- 已加入絕殺視覺提示。
-- 已加入絕殺音效，使用 Web Audio API 產生短提示音。
-- 已修正結束時 AI 建議文案，`red_win` / `black_win` 不再顯示一般「沒有合法步」。
-- 已同步狀態文字：playing 顯示輪到哪方，red_win / black_win 顯示勝方與絕殺。
-- 已補測試：playing 不顯示絕殺、紅方勝 / 黑方勝顯示絕殺、結束文案不是一般無合法步、音效觸發不重複。
+- 已新增被吃子資訊區 `CapturedPanel`。
+- 已從 history 整理紅方被吃 / 黑方被吃。
+- 已區分明子被吃與暗子被吃。
+- 暗子被吃會顯示「暗子（翻出 X）」。
+- cannon 顯示仍依 side 區分：紅方「炮」、黑方「包」。
+- 已加入 AI 建議簡易評分標示。
+- AI 面板 playing 狀態顯示「AI 建議（簡易評分）」與簡短限制說明。
+- 已絕殺時仍優先顯示絕殺 / 本局結束，不顯示一般推薦文案。
 
 ## 本輪未改動
 
 - 沒有改規則引擎。
 - 沒有改 AI 搜尋。
+- 沒有改 Move 資料模型。
 - 沒有改 board 座標系。
 - 沒有做 Belief State。
 - 沒有做 Monte Carlo。
@@ -24,8 +28,9 @@
 
 - `src/App.tsx`
 - `src/components/AiPanel.tsx`
-- `src/game/endgameFeedback.ts`
-- `src/game/endgameSound.ts`
+- `src/components/CapturedPanel.tsx`
+- `src/ai/simpleAiText.ts`
+- `src/game/capturedPieces.ts`
 - `src/style.css`
 - `tests/rules.test.ts`
 - `CODEX_STATUS.md`
@@ -57,9 +62,9 @@ npm.cmd run build
 
 ## 目前還有哪些已知限制
 
-- 手機瀏覽器可能因自動播放限制不播放音效，但不會造成畫面錯誤。
-- AI 仍是規則型評分加一層安全檢查。
+- AI 仍是 simpleAi 的簡易評分，不是完整最佳手搜尋。
+- 尚未做 Threat Map。
 
 ## 是否已經 push 到 GitHub
 
-是。本輪會以 commit message `add checkmate endgame feedback` push 到 GitHub。
+是。本輪會以 commit message `add captured pieces panel and ai disclaimer` push 到 GitHub。

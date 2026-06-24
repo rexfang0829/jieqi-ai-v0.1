@@ -14,6 +14,16 @@ header button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-r
 .endgameBanner small{color:#ffe8becc}
 .aiEndgamePanel{border-color:#f1c36c;background:#4b2115}
 .aiEndgamePanel h3{color:#ffd36a;font-size:24px}
+.aiDisclaimer{margin-top:-2px;color:#ffe8beaa;font-size:13px;line-height:1.45}
+.capturedPanel{max-height:none}
+.capturedPanel h4{margin:10px 0 6px;color:#ffd36a}
+.capturedSide{border-top:1px solid #9b693555;padding-top:6px}
+.capturedSide:first-of-type{border-top:0;padding-top:0}
+.capturedGroup{display:grid;grid-template-columns:34px 1fr;gap:8px;align-items:start;margin:6px 0}
+.capturedGroup>span{font-weight:800;color:#ffe0a6}
+.capturedGroup small{color:#ffe8be99}
+.capturedPieces{display:flex;gap:6px;flex-wrap:wrap}
+.capturedPieces em{font-style:normal;background:#5a2c17;border:1px solid #b98545;border-radius:999px;padding:2px 8px;font-size:13px;line-height:1.6}
 .turnSelector{display:flex;gap:8px;align-items:center}
 .turnSelector select{width:auto;margin:0;padding:8px 28px 8px 10px}
 .layout{display:flex;gap:20px;align-items:flex-start}
@@ -66,5 +76,6 @@ li.revealedCapture{color:#ffe8be}
   .endgameBanner{width:100%;gap:8px;justify-content:center}
   .endgameBanner strong{font-size:22px}
   .endgameBanner span{font-size:16px}
+  .capturedPieces em{font-size:12px;padding:2px 7px}
   aside{width:100%}
 }
