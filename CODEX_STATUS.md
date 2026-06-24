@@ -2,25 +2,33 @@
 
 ## 最新完成的工作
 
-本輪完成 Phase 1 的棋盤視覺微調：縮窄楚河漢界的河界間距，讓中路吃子的距離感更接近天天象棋參考圖。
+本輪完成 Phase 1 的棋盤視覺改版，參考使用者提供的中國象棋棋盤規格。
 
 已完成：
 
-- 楚河漢界視覺空白變窄。
-- 棋子仍站在 9 x 10 交叉點。
+- 棋盤保留 9 路 x 10 交叉點。
+- 上方新增 1 到 9 路線標號。
+- 下方新增「九八七六五四三二一」路線標號。
+- 楚河漢界文字保持正向顯示。
+- 楚河漢界仍是視覺河界，不是可走格子。
+- 新增炮位 / 兵卒位的小刻痕標記。
+- 加強棋盤外框視覺。
 - 棋盤資料仍維持 `board[10][9]`。
-- 楚河漢界仍不是可走格子。
 - 規則引擎沒有修改。
 - AI 邏輯沒有修改。
 
 ## 修改了哪些檔案
 
 - `src/components/Board.tsx`
-  - 將 SVG 棋線的河界視覺比例從 0.75 調整為 0.42。
+  - 新增上方 / 下方路線標號。
+  - 新增外框與兵炮位刻痕 SVG。
 - `src/style.css`
-  - 將桌面河界間距從 48px 調整為 27px。
-  - 將手機河界間距從 32px 調整為 18px。
-  - 略微縮小楚河漢界文字與字距，避免文字擠壓棋子。
+  - 新增路線標號、棋盤外框、刻痕樣式。
+  - 調整棋盤外觀更接近參考圖。
+- `src/game/boardLayout.ts`
+  - 新增 `TOP_FILE_LABELS` 與 `BOTTOM_FILE_LABELS`。
+- `tests/rules.test.ts`
+  - 補測試確認路線標號數量與 9 路一致。
 - `CODEX_STATUS.md`
   - 更新本輪狀態。
 - `NEXT_TASK.md`
@@ -61,4 +69,4 @@ npm.cmd run build
 
 ## 是否已經 push 到 GitHub
 
-是。本輪會以 commit message `tighten river spacing` push 到 GitHub。
+是。本輪會以 commit message `refine board reference styling` push 到 GitHub。

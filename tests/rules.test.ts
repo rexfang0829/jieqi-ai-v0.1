@@ -2,7 +2,7 @@ import { getAllLegalMoves, isCheckmate, isInCheck } from '../src/game/checkRules
 import { recommendMove } from '../src/ai/simpleAi';
 import { applyMove, newGame } from '../src/game/gameState';
 import { clearBoard, clearSquare, editSquare, revealHotkeyType, revealSelectedByHotkey, setTurn } from '../src/game/boardEditing';
-import { BOARD_COLS, BOARD_POINT_COUNT, BOARD_ROWS, hasLegalPosition, isBoardShape, visualRowForBoardRow } from '../src/game/boardLayout';
+import { BOARD_COLS, BOARD_POINT_COUNT, BOARD_ROWS, BOTTOM_FILE_LABELS, TOP_FILE_LABELS, hasLegalPosition, isBoardShape, visualRowForBoardRow } from '../src/game/boardLayout';
 import { createInitialBoard } from '../src/game/initialBoard';
 import { moveText } from '../src/game/moveNotation';
 import { isBasicLegalMove, kingsFace } from '../src/game/moveRules';
@@ -423,6 +423,10 @@ test('board data remains 10 by 9 with 90 playable intersections', () => {
   assertEqual(BOARD_ROWS, 10);
   assertEqual(BOARD_COLS, 9);
   assertEqual(BOARD_POINT_COUNT, 90);
+  assertEqual(TOP_FILE_LABELS.length, BOARD_COLS);
+  assertEqual(BOTTOM_FILE_LABELS.length, BOARD_COLS);
+  assertEqual(TOP_FILE_LABELS.join(''), '123456789');
+  assertEqual(BOTTOM_FILE_LABELS.join(''), '九八七六五四三二一');
 });
 
 test('river is a visual gap and does not add a board row', () => {
