@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { GameState, Position } from './types/chess';
 import { Board } from './components/Board';
 import { MoveList } from './components/MoveList';
 import { AiPanel } from './components/AiPanel';
 import { WisdomPanel } from './components/WisdomPanel';
 import { PositionEditor } from './components/PositionEditor';
-import { clearBoard, clearSquare, editSquare, setTurn, type PieceDraft } from './game/boardEditing';
+import { clearBoard, clearSquare, editSquare, revealSelectedByHotkey, setTurn, type PieceDraft } from './game/boardEditing';
 import { applyMove, newGame } from './game/gameEngine';
 import { loadPosition, savePosition } from './game/positionStorage';
 import { getAllLegalMoves } from './game/checkRules';
@@ -112,6 +112,22 @@ export default function App() {
     setState(next);
   }
 
+  useEffect(() => {
+    function keydown(event: KeyboardEvent) {
+      const target = event.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) return;
+
+      const next = revealSelectedByHotkey(state, selected, event.key);
+      if (next === state) return;
+      event.preventDefault();
+      setPast(history => [...history, state]);
+      setState(next);
+    }
+
+    window.addEventListener('keydown', keydown);
+    return () => window.removeEventListener('keydown', keydown);
+  }, [state, selected]);
+
   return (
     <main>
       <header>
@@ -134,6 +150,7 @@ export default function App() {
         <Board board={state.board} selected={selected} legalMoves={legalMoves} onSquareClick={click} />
         <aside>
           <AiPanel state={state} />
+          <div className="panel hotkeyHint">翻子快捷鍵：1車 2馬 3象 4士 5炮 6兵</div>
           <PositionEditor
             selected={selected}
             piece={selected ? state.board[selected.row][selected.col] : null}

@@ -26,6 +26,7 @@ header button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-r
 aside{width:430px;display:flex;flex-direction:column;gap:12px}
 .panel{background:#3b2011;border:1px solid #9b6935;border-radius:12px;padding:14px;max-height:290px;overflow:auto}
 .panel h3{margin:0 0 8px}
+.hotkeyHint{font-size:14px;line-height:1.5}
 textarea{width:100%;height:120px;background:#f7e2bd;color:#2c160b;border-radius:8px;padding:10px}
 select{width:100%;margin:6px 0 10px;background:#f7e2bd;color:#2c160b;border:1px solid #9b6935;border-radius:8px;padding:8px}
 .editorPanel label{display:block;margin:8px 0}

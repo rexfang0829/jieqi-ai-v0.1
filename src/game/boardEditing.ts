@@ -66,3 +66,27 @@ export function setTurn(state: GameState, turn: Side): GameState {
     status: 'playing',
   };
 }
+
+export function revealHotkeyType(key: string): PieceType | null {
+  const mapping: Record<string, PieceType> = {
+    '1': 'rook',
+    '2': 'horse',
+    '3': 'elephant',
+    '4': 'advisor',
+    '5': 'cannon',
+    '6': 'pawn',
+  };
+
+  return mapping[key] ?? null;
+}
+
+export function revealSelectedByHotkey(state: GameState, selected: Position | null, key: string): GameState {
+  const realType = revealHotkeyType(key);
+  if (!selected || !realType) return state;
+  if (!state.board[selected.row][selected.col]) return state;
+
+  return editSquare(state, selected, {
+    realType,
+    revealed: true,
+  });
+}

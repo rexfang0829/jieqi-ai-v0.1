@@ -1,7 +1,7 @@
 import { getAllLegalMoves, isCheckmate, isInCheck } from '../src/game/checkRules';
 import { recommendMove } from '../src/ai/simpleAi';
 import { applyMove, newGame } from '../src/game/gameState';
-import { clearBoard, clearSquare, editSquare, setTurn } from '../src/game/boardEditing';
+import { clearBoard, clearSquare, editSquare, revealHotkeyType, revealSelectedByHotkey, setTurn } from '../src/game/boardEditing';
 import { createInitialBoard } from '../src/game/initialBoard';
 import { moveText } from '../src/game/moveNotation';
 import { isBasicLegalMove, kingsFace } from '../src/game/moveRules';
@@ -375,4 +375,43 @@ test('manual turn setting keeps board unchanged', () => {
   const next = setTurn(state, 'black');
   assertEqual(next.board[4][4]?.side, 'red');
   assertEqual(next.board[4][4]?.realType, 'horse');
+});
+
+test('reveal hotkeys map 1-6 to piece types', () => {
+  assertEqual(revealHotkeyType('1'), 'rook');
+  assertEqual(revealHotkeyType('2'), 'horse');
+  assertEqual(revealHotkeyType('3'), 'elephant');
+  assertEqual(revealHotkeyType('4'), 'advisor');
+  assertEqual(revealHotkeyType('5'), 'cannon');
+  assertEqual(revealHotkeyType('6'), 'pawn');
+});
+
+test('reveal hotkey sets real type and revealed state', () => {
+  const board = emptyBoard();
+  place(board, 4, 4, piece('red', 'pawn', 'pawn', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'black_win' as const };
+  const next = revealSelectedByHotkey(state, { row: 4, col: 4 }, '1');
+  assertEqual(next.board[4][4]?.realType, 'rook');
+  assertEqual(next.board[4][4]?.revealed, true);
+  assertEqual(next.status, 'playing');
+});
+
+test('reveal hotkey keeps original type, side, and other squares', () => {
+  const board = emptyBoard();
+  place(board, 4, 4, piece('black', 'cannon', 'pawn', false));
+  place(board, 4, 5, piece('red', 'horse', 'horse', false));
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const next = revealSelectedByHotkey(state, { row: 4, col: 4 }, '2');
+  assertEqual(next.board[4][4]?.originalType, 'cannon');
+  assertEqual(next.board[4][4]?.side, 'black');
+  assertEqual(next.board[4][5]?.realType, 'horse');
+  assertEqual(next.board[4][5]?.revealed, false);
+});
+
+test('reveal hotkey does nothing without selected or on empty square', () => {
+  const board = emptyBoard();
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  assertEqual(revealSelectedByHotkey(state, null, '1'), state);
+  assertEqual(revealSelectedByHotkey(state, { row: 4, col: 4 }, '1'), state);
+  assertEqual(revealSelectedByHotkey(state, { row: 4, col: 4 }, 'x'), state);
 });

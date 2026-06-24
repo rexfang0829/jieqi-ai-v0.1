@@ -2,33 +2,51 @@
 
 ## 最新完成的工作
 
-本輪完成 Phase 1 的「手動設定輪到哪方」最小版本。
+本輪完成 Phase 1 的「翻子快捷鍵」最小版本。
 
 已完成：
 
-- UI 新增「輪到」下拉選單。
-- 可手動切換 `turn` 為紅方或黑方。
-- 切換 turn 後 `status` 會回到 `playing`。
-- 切換 turn 後 `selected` 會清空，避免選取狀態錯亂。
-- 切換 turn 後 undo 歷史會清空，採用穩定簡單做法。
-- 切換 turn 後 board 不會被改動。
-- 切換 turn 後仍可繼續走棋、編輯局面、儲存局面、載入局面。
+- 選取棋子後可用鍵盤快捷鍵快速設定真實棋種並翻開：
+  - `1` = 車
+  - `2` = 馬
+  - `3` = 象 / 相
+  - `4` = 士 / 仕
+  - `5` = 炮
+  - `6` = 兵 / 卒
+- 快捷鍵只作用於目前 selected 的棋子。
+- 沒有 selected、selected 是空格、或按下非 1-6 時，不會改動局面。
+- 快捷鍵執行後：
+  - `realType` 會更新。
+  - `revealed` 會變成 `true`。
+  - `status` 會回到 `playing`。
+  - `originalType` 不會改變。
+  - `side` 不會改變。
+  - 其他格子不會改變。
+- UI 新增提示文字：「翻子快捷鍵：1車 2馬 3象 4士 5炮 6兵」。
 
 ## 修改了哪些檔案
 
 - `src/game/boardEditing.ts`
-  - 新增 `setTurn`，用於手動切換目前輪到哪方，並讓 `status` 回到 `playing`。
+  - 新增 `revealHotkeyType` 與 `revealSelectedByHotkey`。
 - `src/App.tsx`
-  - 新增「輪到」下拉選單。
-  - 切換 turn 時清空 `selected` 與 undo 歷史。
+  - 新增鍵盤 `keydown` 監聽。
+  - 接上選取棋子的翻子快捷鍵。
+  - 新增快捷鍵提示文字。
 - `src/style.css`
-  - 新增 turn selector 的簡單樣式。
+  - 新增快捷鍵提示樣式。
 - `tests/rules.test.ts`
   - 新增測試：
-    - 可以切換到紅方。
-    - 可以切換到黑方。
-    - 切換 turn 後 `status` 回到 `playing`。
-    - 切換 turn 後不破壞 board。
+    - `1` 對應 rook。
+    - `2` 對應 horse。
+    - `3` 對應 elephant。
+    - `4` 對應 advisor。
+    - `5` 對應 cannon。
+    - `6` 對應 pawn。
+    - 快捷鍵會讓 `revealed` 變 `true`。
+    - 快捷鍵不會改 `originalType`。
+    - 快捷鍵不會改 `side`。
+    - 快捷鍵不會改其他格子。
+    - 空格或沒有 selected 時不會造成錯誤。
 - `CODEX_STATUS.md`
   - 更新本輪狀態。
 - `NEXT_TASK.md`
@@ -59,7 +77,6 @@ npm.cmd run build
 - 目前只支援單一局面儲存，不支援多局面管理。
 - `history` 載入時會重設為空陣列。
 - 尚未完整實作雙方資訊不對稱。
-- 尚未建立翻子快捷鍵。
 - 尚未建立天天象棋手動同步流程。
 - 尚未做 Belief State。
 - 尚未做 Monte Carlo。
@@ -69,4 +86,4 @@ npm.cmd run build
 
 ## 是否已經 push 到 GitHub
 
-是。本輪會以 commit message `add manual turn selector` push 到 GitHub。
+是。本輪會以 commit message `add reveal hotkeys` push 到 GitHub。
