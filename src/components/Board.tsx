@@ -2,7 +2,7 @@ import type { Board as BoardType, Position } from '../types/chess';
 import { BOARD_COLS, BOARD_ROWS, hasLegalPosition, samePosition, visualRowForBoardRow } from '../game/boardLayout';
 import { Square } from './Square';
 
-const riverOffset = 0.75;
+const riverOffset = 0.42;
 const visualY = (row: number) => row <= 4 ? row + 0.5 : row + 0.5 + riverOffset;
 
 export function Board({ board, selected, legalMoves, onSquareClick }: {
@@ -11,7 +11,7 @@ export function Board({ board, selected, legalMoves, onSquareClick }: {
   return (
     <div className="boardWrap">
       <div className="boardGrid">
-        <svg className="boardLines" viewBox="0 0 9 10.75" aria-hidden="true">
+        <svg className="boardLines" viewBox="0 0 9 10.42" aria-hidden="true">
           {Array.from({ length: BOARD_ROWS }, (_, row) => (
             <line key={`h-${row}`} x1="0.5" x2="8.5" y1={visualY(row)} y2={visualY(row)} />
           ))}

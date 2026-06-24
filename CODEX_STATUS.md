@@ -2,52 +2,29 @@
 
 ## 最新完成的工作
 
-本輪完成兩件 Phase 1 / early AI 工作：
+本輪完成 Phase 1 的棋盤視覺微調：縮窄楚河漢界的河界間距，讓中路吃子的距離感更接近天天象棋參考圖。
 
-1. 修正棋盤 UI，從「格子中心」改成中國象棋「十字交叉點」棋盤。
-2. 改善 `simpleAi`，加入最小版本安全評估，避免推薦明顯送子的步。
+已完成：
 
-棋盤 UI 已完成：
-
-- 棋子視覺上站在線與線的交叉點。
+- 楚河漢界視覺空白變窄。
+- 棋子仍站在 9 x 10 交叉點。
 - 棋盤資料仍維持 `board[10][9]`。
-- 楚河漢界是第 4 排與第 5 排交叉點之間的視覺空白。
-- 楚河漢界不再是一排可走格子。
-- 合法步提示顯示在交叉點。
-- 合法吃子目標會高亮該交叉點上的棋子。
-- 象 / 相的合法提示仍只出現在田字位置。
-
-AI 安全評估已完成：
-
-- 每個候選走法會模擬走完後局面。
-- 會檢查對方下一手是否可吃回剛移動的棋子。
-- 若可被吃回，會依照該棋價值扣分。
-- 會估計對方下一手最大吃子收益並扣分。
-- 敵方暗子威脅只使用 `originalType`，不偷看未翻開的 `realType`。
-- 推薦理由會提示安全吃子、避免送子或已扣分。
+- 楚河漢界仍不是可走格子。
+- 規則引擎沒有修改。
+- AI 邏輯沒有修改。
 
 ## 修改了哪些檔案
 
 - `src/components/Board.tsx`
-  - 改成交叉點棋盤結構。
-  - 使用 SVG 畫 9 路直線、10 條橫線與九宮斜線。
-  - 楚河漢界改成非點擊的視覺空白。
-- `src/components/Square.tsx`
-  - 合法吃子目標新增高亮 class。
+  - 將 SVG 棋線的河界視覺比例從 0.75 調整為 0.42。
 - `src/style.css`
-  - 重寫棋盤、交叉點、河界、合法點與吃子高亮樣式。
-- `src/game/boardLayout.ts`
-  - 新增棋盤視覺座標 helper 與 10 x 9 shape 檢查。
-- `src/ai/simpleAi.ts`
-  - 新增一層安全評估與 opponent reply 估值。
-- `tests/rules.test.ts`
-  - 新增棋盤資料 / 河界 / 合法提示 / 象相提示測試。
-  - 新增 AI 避免立即被高價吃回測試。
-  - 新增 AI 評估敵方暗子威脅時不偷看 `realType` 測試。
+  - 將桌面河界間距從 48px 調整為 27px。
+  - 將手機河界間距從 32px 調整為 18px。
+  - 略微縮小楚河漢界文字與字距，避免文字擠壓棋子。
 - `CODEX_STATUS.md`
   - 更新本輪狀態。
 - `NEXT_TASK.md`
-  - 更新下一輪建議任務。
+  - 保留下一輪建議任務。
 
 ## npm test 是否通過
 
@@ -84,4 +61,4 @@ npm.cmd run build
 
 ## 是否已經 push 到 GitHub
 
-是。本輪會以 commit message `fix board intersection ui and improve ai safety scoring` push 到 GitHub。
+是。本輪會以 commit message `tighten river spacing` push 到 GitHub。
