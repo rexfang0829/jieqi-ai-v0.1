@@ -10,6 +10,8 @@ import { applyMove, newGame } from './game/gameEngine';
 import { cancelLastMoveSync, syncLastMove } from './game/lastMoveSync';
 import { loadPosition, savePosition } from './game/positionStorage';
 import { getAllLegalMoves } from './game/checkRules';
+import { getEndgameFeedback, shouldPlayEndgameSound, statusLabel } from './game/endgameFeedback';
+import { playEndgameSound } from './game/endgameSound';
 
 export default function App() {
   const [state, setState] = useState(() => newGame());
@@ -18,15 +20,18 @@ export default function App() {
   const [syncMode, setSyncMode] = useState(false);
   const [syncFrom, setSyncFrom] = useState<Position | null>(null);
   const [syncError, setSyncError] = useState('');
-  const legalMoves = useMemo(() => state.status === 'playing' && selected ? getAllLegalMoves(state.board, state.turn).filter(m => m.from.row === selected.row && m.from.col === selected.col).map(m => m.to) : [], [state, selected]);
+  const [lastSoundStatus, setLastSoundStatus] = useState(state.status);
 
-  const statusText = state.status === 'playing'
-    ? `輪到：${state.turn === 'red' ? '紅方' : '黑方'}`
-    : state.status === 'red_win'
-      ? '紅方勝'
-      : state.status === 'black_win'
-        ? '黑方勝'
-        : '和局';
+  const legalMoves = useMemo(
+    () => state.status === 'playing' && selected
+      ? getAllLegalMoves(state.board, state.turn)
+        .filter(m => m.from.row === selected.row && m.from.col === selected.col)
+        .map(m => m.to)
+      : [],
+    [state, selected],
+  );
+  const endgameFeedback = getEndgameFeedback(state.status);
+  const statusText = statusLabel(state.status, state.turn);
 
   function click(pos: Position) {
     if (syncMode) {
@@ -49,6 +54,7 @@ export default function App() {
       setSelected(null);
       return;
     }
+
     if (piece?.side === state.turn || !piece) setSelected(pos);
     else setSelected(pos);
   }
@@ -185,6 +191,15 @@ export default function App() {
     return () => window.removeEventListener('keydown', keydown);
   }, [state, selected]);
 
+  useEffect(() => {
+    if (shouldPlayEndgameSound(lastSoundStatus, state.status)) {
+      playEndgameSound();
+    }
+    if (lastSoundStatus !== state.status) {
+      setLastSoundStatus(state.status);
+    }
+  }, [lastSoundStatus, state.status]);
+
   return (
     <main>
       <header>
@@ -202,8 +217,15 @@ export default function App() {
             <option value="black">黑方</option>
           </select>
         </label>
-        <span>{statusText}</span>
+        <span className={endgameFeedback ? 'statusText endgameStatus' : 'statusText'}>{statusText}</span>
       </header>
+      {endgameFeedback && (
+        <div className={`endgameBanner ${endgameFeedback.winner}`}>
+          <strong>{endgameFeedback.title}</strong>
+          <span>{endgameFeedback.winnerText}</span>
+          <small>本局結束</small>
+        </div>
+      )}
       <div className="layout">
         <Board board={state.board} selected={selected} syncFrom={syncFrom} legalMoves={legalMoves} onSquareClick={click} />
         <aside>

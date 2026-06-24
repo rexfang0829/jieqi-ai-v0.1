@@ -2,36 +2,32 @@
 
 ## 最新完成的工作
 
-2026-06-25 本輪只做 Vercel 部署設定正式修正與手機版最新部署準備：
+2026-06-25 本輪只做「絕殺結束提示 UX 強化」：
 
-- 已固定 package versions，不再使用 `latest`。
-- 已將 React 固定為 `18.3.1`。
-- 已將 React DOM 固定為 `18.3.1`。
-- 已將 Vite 固定為 `5.4.11`。
-- 已將 `@vitejs/plugin-react` 固定為 `4.3.3`。
-- 已將 TypeScript 固定為 `5.6.3`。
-- 已修正 tsconfig build 問題，移除 TypeScript 5.6.3 不支援的 `ignoreDeprecations: "6.0"`。
-- 已重新產生 / 更新 `package-lock.json`。
-- Vercel 可回到標準 `npm run build`。
-- 已更新 `DEPLOYMENT.md` 與 `README_V0.1.md` 的部署說明。
+- 已加入絕殺視覺提示。
+- 已加入絕殺音效，使用 Web Audio API 產生短提示音。
+- 已修正結束時 AI 建議文案，`red_win` / `black_win` 不再顯示一般「沒有合法步」。
+- 已同步狀態文字：playing 顯示輪到哪方，red_win / black_win 顯示勝方與絕殺。
+- 已補測試：playing 不顯示絕殺、紅方勝 / 黑方勝顯示絕殺、結束文案不是一般無合法步、音效觸發不重複。
 
 ## 本輪未改動
 
-- 沒有重做士 / 象揭棋規則。
-- 沒有重做炮 / 包顯示。
-- 沒有重做暗子被吃 / 明子被吃。
-- 沒有重做黑方 board edge labels。
-- 沒有改 moveNotation。
-- 沒有改 `board[10][9]` 座標系。
-- 沒有改 AI 評分。
+- 沒有改規則引擎。
+- 沒有改 AI 搜尋。
+- 沒有改 board 座標系。
+- 沒有做 Belief State。
+- 沒有做 Monte Carlo。
+- 沒有做 OCR / 自動截圖辨識。
+- 沒有做 Ponder。
 
 ## 修改了哪些檔案
 
-- `package.json`
-- `package-lock.json`
-- `tsconfig.json`
-- `DEPLOYMENT.md`
-- `README_V0.1.md`
+- `src/App.tsx`
+- `src/components/AiPanel.tsx`
+- `src/game/endgameFeedback.ts`
+- `src/game/endgameSound.ts`
+- `src/style.css`
+- `tests/rules.test.ts`
 - `CODEX_STATUS.md`
 - `NEXT_TASK.md`
 
@@ -61,12 +57,9 @@ npm.cmd run build
 
 ## 目前還有哪些已知限制
 
-- 尚未做 Belief State。
-- 尚未做 Monte Carlo。
-- 尚未做 OCR / 自動截圖辨識。
-- 尚未做 Ponder。
+- 手機瀏覽器可能因自動播放限制不播放音效，但不會造成畫面錯誤。
 - AI 仍是規則型評分加一層安全檢查。
 
 ## 是否已經 push 到 GitHub
 
-是。本輪會以 commit message `stabilize vercel build configuration` push 到 GitHub。
+是。本輪會以 commit message `add checkmate endgame feedback` push 到 GitHub。

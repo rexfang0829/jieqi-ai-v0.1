@@ -1,8 +1,20 @@
 import type { GameState } from '../types/chess';
 import { recommendMove } from '../ai/simpleAi';
+import { getEndgameFeedback } from '../game/endgameFeedback';
 import { moveText } from '../game/moveNotation';
 
 export function AiPanel({ state }: { state: GameState }) {
+  const endgame = getEndgameFeedback(state.status);
+  if (endgame) {
+    return (
+      <div className="panel aiEndgamePanel">
+        <h3>{endgame.title}</h3>
+        <p>{endgame.body}</p>
+        <p>{endgame.winnerText}</p>
+      </div>
+    );
+  }
+
   const r = recommendMove(state);
   return (
     <div className="panel">

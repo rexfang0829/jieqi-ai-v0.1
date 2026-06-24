@@ -5,6 +5,7 @@ import { clearBoard, clearSquare, editSquare, revealHotkeyType, revealSelectedBy
 import { BOARD_COLS, BOARD_POINT_COUNT, BOARD_ROWS, BOTTOM_FILE_LABELS, TOP_FILE_LABELS, hasLegalPosition, isBoardShape, visualRowForBoardRow } from '../src/game/boardLayout';
 import { createInitialBoard } from '../src/game/initialBoard';
 import { cancelLastMoveSync, syncLastMove } from '../src/game/lastMoveSync';
+import { getEndgameFeedback, shouldPlayEndgameSound, statusLabel } from '../src/game/endgameFeedback';
 import { moveText } from '../src/game/moveNotation';
 import { isBasicLegalMove, kingsFace } from '../src/game/moveRules';
 import { realPieceName } from '../src/game/pieceText';
@@ -372,6 +373,41 @@ test('non-playing status prevents further moves', () => {
 
 test('new game starts with playing status', () => {
   assertEqual(newGame().status, 'playing');
+});
+
+test('endgame feedback is hidden while game is playing', () => {
+  assertEqual(getEndgameFeedback('playing'), null);
+  assertEqual(statusLabel('playing', 'red'), '輪到紅方');
+  assertEqual(statusLabel('playing', 'black'), '輪到黑方');
+});
+
+test('red win status shows checkmate endgame feedback', () => {
+  const feedback = getEndgameFeedback('red_win');
+  assertOk(feedback);
+  assertEqual(feedback.title, '絕殺');
+  assertEqual(feedback.winnerText, '紅方勝');
+  assertEqual(feedback.body.includes('紅方絕殺'), true);
+  assertEqual(feedback.body.includes('沒有合法步'), false);
+  assertEqual(statusLabel('red_win', 'black'), '紅方勝，絕殺');
+});
+
+test('black win status shows checkmate endgame feedback', () => {
+  const feedback = getEndgameFeedback('black_win');
+  assertOk(feedback);
+  assertEqual(feedback.title, '絕殺');
+  assertEqual(feedback.winnerText, '黑方勝');
+  assertEqual(feedback.body.includes('黑方絕殺'), true);
+  assertEqual(feedback.body.includes('沒有合法步'), false);
+  assertEqual(statusLabel('black_win', 'red'), '黑方勝，絕殺');
+});
+
+test('endgame sound trigger only fires once per status change into a win', () => {
+  assertEqual(shouldPlayEndgameSound('playing', 'playing'), false);
+  assertEqual(shouldPlayEndgameSound('playing', 'red_win'), true);
+  assertEqual(shouldPlayEndgameSound('red_win', 'red_win'), false);
+  assertEqual(shouldPlayEndgameSound('red_win', 'playing'), false);
+  assertEqual(shouldPlayEndgameSound('playing', 'black_win'), true);
+  assertEqual(shouldPlayEndgameSound('black_win', 'black_win'), false);
 });
 
 test('editor can add a piece to an empty square', () => {
