@@ -5,6 +5,7 @@ import { clearBoard, clearSquare, editSquare } from '../src/game/boardEditing';
 import { createInitialBoard } from '../src/game/initialBoard';
 import { moveText } from '../src/game/moveNotation';
 import { isBasicLegalMove, kingsFace } from '../src/game/moveRules';
+import { fromSavedPosition, loadPosition, POSITION_STORAGE_KEY, savePosition, toSavedPosition } from '../src/game/positionStorage';
 import type { Board, Piece, PieceType, Side } from '../src/types/chess';
 
 function assertEqual(actual: unknown, expected: unknown) {
@@ -57,6 +58,18 @@ function hasMove(board: Board, side: Side, from: [number, number], to: [number, 
 function test(name: string, fn: () => void) {
   fn();
   console.log(`ok - ${name}`);
+}
+
+function fakeStorage(initial?: Record<string, string>) {
+  const data = new Map(Object.entries(initial ?? {}));
+  return {
+    getItem(key: string) {
+      return data.get(key) ?? null;
+    },
+    setItem(key: string, value: string) {
+      data.set(key, value);
+    },
+  };
 }
 
 test('horse leg blocks horse movement', () => {
@@ -288,4 +301,51 @@ test('editing resets finished status back to playing', () => {
   assertEqual(editSquare(wonState, { row: 4, col: 4 }, { side: 'black' }).status, 'playing');
   assertEqual(clearSquare(wonState, { row: 4, col: 4 }).status, 'playing');
   assertEqual(clearBoard(wonState).status, 'playing');
+});
+
+test('position storage converts GameState to saved format', () => {
+  const board = emptyBoard();
+  place(board, 4, 4, piece('black', 'horse', 'rook', false));
+  const state = { board, turn: 'black' as const, history: [{ from: { row: 1, col: 1 }, to: { row: 2, col: 1 }, piece: piece('red', 'pawn') }], status: 'black_win' as const };
+  const saved = toSavedPosition(state);
+  assertEqual(saved.board[4][4]?.side, 'black');
+  assertEqual(saved.turn, 'black');
+  assertEqual(saved.status, 'black_win');
+  assertEqual('history' in saved, false);
+});
+
+test('position storage restores GameState with empty history', () => {
+  const board = emptyBoard();
+  place(board, 4, 4, piece('red', 'cannon', 'rook', true));
+  const restored = fromSavedPosition({ board, turn: 'red', status: 'playing' });
+  assertEqual(restored.board[4][4]?.realType, 'rook');
+  assertEqual(restored.turn, 'red');
+  assertEqual(restored.status, 'playing');
+  assertEqual(restored.history.length, 0);
+});
+
+test('position storage saves and loads status, turn, and board', () => {
+  const board = emptyBoard();
+  place(board, 4, 4, piece('black', 'pawn', 'horse', false));
+  const state = { board, turn: 'black' as const, history: [], status: 'red_win' as const };
+  const storage = fakeStorage();
+  assertEqual(savePosition(storage, state), true);
+  const loaded = loadPosition(storage);
+  assertOk(loaded);
+  assertEqual(loaded.board[4][4]?.side, 'black');
+  assertEqual(loaded.board[4][4]?.realType, 'horse');
+  assertEqual(loaded.turn, 'black');
+  assertEqual(loaded.status, 'red_win');
+  assertEqual(loaded.history.length, 0);
+});
+
+test('position storage returns null when localStorage is missing or empty', () => {
+  assertEqual(savePosition(undefined, newGame()), false);
+  assertEqual(loadPosition(undefined), null);
+  assertEqual(loadPosition(fakeStorage()), null);
+});
+
+test('position storage ignores broken JSON and invalid saved data', () => {
+  assertEqual(loadPosition(fakeStorage({ [POSITION_STORAGE_KEY]: '{not json' })), null);
+  assertEqual(loadPosition(fakeStorage({ [POSITION_STORAGE_KEY]: JSON.stringify({ board: [], turn: 'red', status: 'playing' }) })), null);
 });

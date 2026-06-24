@@ -7,6 +7,7 @@ import { WisdomPanel } from './components/WisdomPanel';
 import { PositionEditor } from './components/PositionEditor';
 import { clearBoard, clearSquare, editSquare, type PieceDraft } from './game/boardEditing';
 import { applyMove, newGame } from './game/gameEngine';
+import { loadPosition, savePosition } from './game/positionStorage';
 import { getAllLegalMoves } from './game/checkRules';
 
 export default function App() {
@@ -55,6 +56,22 @@ export default function App() {
     setSelected(null);
   }
 
+  function storage() {
+    return typeof window === 'undefined' ? undefined : window.localStorage;
+  }
+
+  function saveCurrentPosition() {
+    savePosition(storage(), state);
+  }
+
+  function loadSavedPosition() {
+    const saved = loadPosition(storage());
+    if (!saved) return;
+    setState(saved);
+    setPast([]);
+    setSelected(null);
+  }
+
   function undo() {
     setPast(history => {
       if (!history.length) return history;
@@ -95,6 +112,8 @@ export default function App() {
         <h1>大盤揭棋 AI v0.1</h1>
         <button onClick={resetToInitial}>恢復初始局面</button>
         <button onClick={clearCurrentBoard}>清空棋盤</button>
+        <button onClick={saveCurrentPosition}>儲存目前局面</button>
+        <button onClick={loadSavedPosition}>載入已儲存局面</button>
         <button onClick={undo} disabled={!past.length}>回上一步</button>
         <span>{statusText}</span>
       </header>
