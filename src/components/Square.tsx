@@ -25,9 +25,9 @@ export function pieceName(piece: Piece): string {
   return names[piece.side][piece.realType];
 }
 
-export function Square({ piece, selected, legal, onClick }: { piece: Piece | null; selected: boolean; legal: boolean; onClick: () => void }) {
+export function Square({ piece, selected, syncOrigin = false, legal, onClick }: { piece: Piece | null; selected: boolean; syncOrigin?: boolean; legal: boolean; onClick: () => void }) {
   return (
-    <button className={`square ${selected ? 'selected' : ''} ${legal ? 'legal' : ''} ${legal && piece ? 'captureTarget' : ''}`} onClick={onClick}>
+    <button className={`square ${selected ? 'selected' : ''} ${syncOrigin ? 'syncOrigin' : ''} ${legal ? 'legal' : ''} ${legal && piece ? 'captureTarget' : ''}`} onClick={onClick}>
       {piece && (
         <div className={`piece ${piece.side} ${piece.revealed ? 'revealed' : 'hidden'}`}>
           {piece.revealed ? pieceName(piece) : ''}

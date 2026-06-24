@@ -2,36 +2,55 @@
 
 ## 最新完成的工作
 
-本輪完成 Phase 1 的楚河漢界規格修正，讓棋盤更貼近使用者提供的中國象棋參考圖。
+本輪完成 Phase 1 的「手動同步上一手」最小版本。
 
 已完成：
 
-- 河界不再是額外拉開的距離。
-- 棋盤 10 條橫線改回等距視覺。
-- 楚河漢界是第 4 排與第 5 排交叉點之間那一格的斷線區。
-- 河界區域內沒有直線穿過。
-- 楚河漢界文字放在該格中，保持正向顯示。
-- 棋盤資料仍維持 `board[10][9]`。
-- 楚河漢界仍不是可走格子。
-- 規則引擎沒有修改。
-- AI 邏輯沒有修改。
+- UI 新增「同步上一手」按鈕。
+- 開啟後進入 sync mode。
+- sync mode 下第一次點棋盤交叉點 = 起點。
+- sync mode 下第二次點棋盤交叉點 = 終點。
+- 第二次點完後，系統使用現有 `applyMove` / 規則流程嘗試套用。
+- 合法同步步會正常：
+  - 移動棋子
+  - 吃子
+  - 翻子
+  - 換手
+  - 更新 history
+  - 更新 status
+- 成功後退出 sync mode，清空 sync 起點與 selected。
+- 非法同步步不改變 board / turn / status / history。
+- 非法時顯示「這一步不合法，未套用」。
+- 起點選取後會有藍色高亮。
+- 可用「取消同步」離開 sync mode，取消不改變局面。
 
 ## 修改了哪些檔案
 
+- `src/game/lastMoveSync.ts`
+  - 新增 `syncLastMove`，包裝現有 `applyMove` 套用 from/to。
+  - 新增 `cancelLastMoveSync`，作為取消同步的資料層 no-op。
+- `src/App.tsx`
+  - 新增 sync mode 狀態、按鈕、提示文字、起點/終點點選流程。
+  - 成功同步後清空 selected 並退出 sync mode。
+  - 非法同步時保留 sync mode 並顯示錯誤。
 - `src/components/Board.tsx`
-  - 移除額外 river offset。
-  - SVG viewBox 回到 10 條橫線等距規格。
+  - 支援 `syncFrom` 起點標示。
+- `src/components/Square.tsx`
+  - 新增 sync 起點 class。
 - `src/style.css`
-  - 移除額外 `river-gap`。
-  - 河界文字改放在第 4、5 排之間的標準格距中。
-- `src/game/boardLayout.ts`
-  - `visualRowForBoardRow` 改回資料 row 對應視覺 row，不新增額外 row。
+  - 新增 sync 起點高亮與同步提示樣式。
 - `tests/rules.test.ts`
-  - 更新河界測試，確認 visual row 不新增額外 row。
+  - 新增同步上一手測試：
+    - 合法 from/to 可以套用。
+    - 成功後 turn 正確切換。
+    - 成功後 history 增加。
+    - 非法同步不改變局面。
+    - 非法同步不增加 history。
+    - 取消同步不改變 board / turn / status。
 - `CODEX_STATUS.md`
   - 更新本輪狀態。
 - `NEXT_TASK.md`
-  - 保留下一輪建議任務。
+  - 更新下一輪建議任務。
 
 ## npm test 是否通過
 
@@ -55,11 +74,11 @@ npm.cmd run build
 
 ## 目前還有哪些已知限制
 
+- 手動同步只支援使用者點起點 / 終點，不做 OCR 或自動截圖。
 - AI 只有一層安全評估，不是完整搜尋。
 - 目前只支援單一局面儲存，不支援多局面管理。
 - `history` 載入時會重設為空陣列。
 - 尚未完整實作雙方資訊不對稱。
-- 尚未建立天天象棋手動同步流程。
 - 尚未做 Belief State。
 - 尚未做 Monte Carlo。
 - 尚未做 OCR。
@@ -68,4 +87,4 @@ npm.cmd run build
 
 ## 是否已經 push 到 GitHub
 
-是。本輪會以 commit message `fix river board spacing` push 到 GitHub。
+是。本輪會以 commit message `add manual last move sync` push 到 GitHub。

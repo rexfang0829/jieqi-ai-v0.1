@@ -4,6 +4,7 @@ import { applyMove, newGame } from '../src/game/gameState';
 import { clearBoard, clearSquare, editSquare, revealHotkeyType, revealSelectedByHotkey, setTurn } from '../src/game/boardEditing';
 import { BOARD_COLS, BOARD_POINT_COUNT, BOARD_ROWS, BOTTOM_FILE_LABELS, TOP_FILE_LABELS, hasLegalPosition, isBoardShape, visualRowForBoardRow } from '../src/game/boardLayout';
 import { createInitialBoard } from '../src/game/initialBoard';
+import { cancelLastMoveSync, syncLastMove } from '../src/game/lastMoveSync';
 import { moveText } from '../src/game/moveNotation';
 import { isBasicLegalMove, kingsFace } from '../src/game/moveRules';
 import { fromSavedPosition, loadPosition, POSITION_STORAGE_KEY, savePosition, toSavedPosition } from '../src/game/positionStorage';
@@ -488,4 +489,46 @@ test('AI threat scoring for hidden enemies uses original type, not real type', (
   const stateA = { board: boardA, turn: 'red' as const, history: [], status: 'playing' as const };
   const stateB = { board: boardB, turn: 'red' as const, history: [], status: 'playing' as const };
   assertEqual(recommendMove(stateA).score, recommendMove(stateB).score);
+});
+
+test('last move sync applies a legal from-to move', () => {
+  const board = withKings();
+  place(board, 6, 0, piece('red', 'pawn'));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const result = syncLastMove(state, { row: 6, col: 0 }, { row: 5, col: 0 });
+  assertEqual(result.applied, true);
+  assertEqual(result.state.board[6][0], null);
+  assertEqual(result.state.board[5][0]?.side, 'red');
+});
+
+test('last move sync switches turn and records history after success', () => {
+  const board = withKings();
+  place(board, 6, 0, piece('red', 'pawn'));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const result = syncLastMove(state, { row: 6, col: 0 }, { row: 5, col: 0 });
+  assertEqual(result.state.turn, 'black');
+  assertEqual(result.state.history.length, 1);
+});
+
+test('last move sync keeps state unchanged for an illegal move', () => {
+  const board = withKings();
+  place(board, 6, 0, piece('red', 'pawn'));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const result = syncLastMove(state, { row: 6, col: 0 }, { row: 6, col: 1 });
+  assertEqual(result.applied, false);
+  assertEqual(result.state, state);
+  assertEqual(state.history.length, 0);
+  assertEqual(state.board[6][0]?.side, 'red');
+  assertEqual(state.board[6][1], null);
+});
+
+test('cancel last move sync does not change board, turn, or status', () => {
+  const board = withKings();
+  place(board, 6, 0, piece('red', 'pawn'));
+  const state = { board, turn: 'red' as const, history: [], status: 'red_win' as const };
+  const next = cancelLastMoveSync(state);
+  assertEqual(next, state);
+  assertEqual(next.board[6][0]?.side, 'red');
+  assertEqual(next.turn, 'red');
+  assertEqual(next.status, 'red_win');
 });

@@ -7,6 +7,7 @@ import { WisdomPanel } from './components/WisdomPanel';
 import { PositionEditor } from './components/PositionEditor';
 import { clearBoard, clearSquare, editSquare, revealSelectedByHotkey, setTurn, type PieceDraft } from './game/boardEditing';
 import { applyMove, newGame } from './game/gameEngine';
+import { cancelLastMoveSync, syncLastMove } from './game/lastMoveSync';
 import { loadPosition, savePosition } from './game/positionStorage';
 import { getAllLegalMoves } from './game/checkRules';
 
@@ -14,6 +15,9 @@ export default function App() {
   const [state, setState] = useState(() => newGame());
   const [past, setPast] = useState<GameState[]>([]);
   const [selected, setSelected] = useState<Position | null>(null);
+  const [syncMode, setSyncMode] = useState(false);
+  const [syncFrom, setSyncFrom] = useState<Position | null>(null);
+  const [syncError, setSyncError] = useState('');
   const legalMoves = useMemo(() => state.status === 'playing' && selected ? getAllLegalMoves(state.board, state.turn).filter(m => m.from.row === selected.row && m.from.col === selected.col).map(m => m.to) : [], [state, selected]);
 
   const statusText = state.status === 'playing'
@@ -25,6 +29,11 @@ export default function App() {
         : '和局';
 
   function click(pos: Position) {
+    if (syncMode) {
+      syncClick(pos);
+      return;
+    }
+
     if (state.status !== 'playing') {
       setSelected(pos);
       return;
@@ -48,12 +57,14 @@ export default function App() {
     setState(newGame());
     setPast([]);
     setSelected(null);
+    cancelSync();
   }
 
   function clearCurrentBoard() {
     setPast(history => [...history, state]);
     setState(clearBoard(state));
     setSelected(null);
+    cancelSync();
   }
 
   function storage() {
@@ -70,12 +81,14 @@ export default function App() {
     setState(saved);
     setPast([]);
     setSelected(null);
+    cancelSync();
   }
 
   function changeTurn(turn: GameState['turn']) {
     setState(s => setTurn(s, turn));
     setPast([]);
     setSelected(null);
+    cancelSync();
   }
 
   function undo() {
@@ -112,6 +125,50 @@ export default function App() {
     setState(next);
   }
 
+  function toggleSyncMode() {
+    setSyncMode(active => {
+      if (active) {
+        setSyncFrom(null);
+        setSyncError('');
+        return false;
+      }
+      setSelected(null);
+      setSyncFrom(null);
+      setSyncError('');
+      return true;
+    });
+  }
+
+  function cancelSync() {
+    setSyncMode(false);
+    setSyncFrom(null);
+    setSyncError('');
+  }
+
+  function syncClick(pos: Position) {
+    setSelected(null);
+    setSyncError('');
+
+    if (!syncFrom) {
+      setSyncFrom(pos);
+      return;
+    }
+
+    const result = syncLastMove(state, syncFrom, pos);
+    if (result.applied) {
+      setPast(history => [...history, state]);
+      setState(result.state);
+      setSyncMode(false);
+      setSyncFrom(null);
+      setSyncError('');
+      return;
+    }
+
+    cancelLastMoveSync(state);
+    setSyncFrom(null);
+    setSyncError('這一步不合法，未套用');
+  }
+
   useEffect(() => {
     function keydown(event: KeyboardEvent) {
       const target = event.target;
@@ -137,6 +194,7 @@ export default function App() {
         <button onClick={saveCurrentPosition}>儲存目前局面</button>
         <button onClick={loadSavedPosition}>載入已儲存局面</button>
         <button onClick={undo} disabled={!past.length}>回上一步</button>
+        <button onClick={toggleSyncMode}>{syncMode ? '取消同步' : '同步上一手'}</button>
         <label className="turnSelector">
           輪到
           <select value={state.turn} onChange={(e: { target: { value: string } }) => changeTurn(e.target.value as GameState['turn'])}>
@@ -147,9 +205,14 @@ export default function App() {
         <span>{statusText}</span>
       </header>
       <div className="layout">
-        <Board board={state.board} selected={selected} legalMoves={legalMoves} onSquareClick={click} />
+        <Board board={state.board} selected={selected} syncFrom={syncFrom} legalMoves={legalMoves} onSquareClick={click} />
         <aside>
           <AiPanel state={state} />
+          {syncMode && (
+            <div className={`panel syncPanel ${syncError ? 'syncError' : ''}`}>
+              {syncError || (syncFrom ? '同步上一手：請點終點' : '同步上一手：請點起點')}
+            </div>
+          )}
           <div className="panel hotkeyHint">翻子快捷鍵：1車 2馬 3象 4士 5炮 6兵</div>
           <PositionEditor
             selected={selected}

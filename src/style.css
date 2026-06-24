@@ -27,6 +27,7 @@ header button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-r
 .square.legal::after{content:'';width:14px;height:14px;border-radius:50%;background:#f7f2d8;box-shadow:0 0 0 3px #2f7d32cc,0 2px 5px #0008;position:absolute}
 .square.captureTarget::after{content:'';width:56px;height:56px;border-radius:50%;background:transparent;border:4px solid #fff7bc;box-shadow:0 0 0 3px #2f7d32cc,0 0 12px #fff5;position:absolute}
 .square.selected{box-shadow:0 0 0 4px #ffe08aaa;background:#ffe08a22}
+.square.syncOrigin{box-shadow:0 0 0 4px #56b7ffcc;background:#56b7ff22}
 .piece{width:50px;height:50px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;background:#f4d093;border:3px solid #6b3216;box-shadow:inset 0 0 0 3px #e8b86f,0 3px 5px #0007}
 .piece.red{color:#b30000}
 .piece.black{color:#111}
@@ -36,6 +37,8 @@ aside{width:430px;display:flex;flex-direction:column;gap:12px}
 .panel{background:#3b2011;border:1px solid #9b6935;border-radius:12px;padding:14px;max-height:290px;overflow:auto}
 .panel h3{margin:0 0 8px}
 .hotkeyHint{font-size:14px;line-height:1.5}
+.syncPanel{font-size:15px;line-height:1.5;border-color:#58a6ff;color:#dff0ff}
+.syncPanel.syncError{border-color:#ffb35c;color:#ffe0b8}
 textarea{width:100%;height:120px;background:#f7e2bd;color:#2c160b;border-radius:8px;padding:10px}
 select{width:100%;margin:6px 0 10px;background:#f7e2bd;color:#2c160b;border:1px solid #9b6935;border-radius:8px;padding:8px}
 .editorPanel label{display:block;margin:8px 0}
