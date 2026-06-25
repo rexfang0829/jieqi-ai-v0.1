@@ -17,19 +17,21 @@ import { getEndgameFeedback, shouldPlayEndgameSound, statusLabel } from './game/
 import { playEndgameSound } from './game/endgameSound';
 import { editorPieceTypeNames } from './game/pieceText';
 import { playBoardSoundFeedback } from './game/soundEffects';
+import { recommendMove } from './ai/simpleAi';
 import {
   createGameRecord, deleteGameRecord, loadGameRecords, resultText,
   saveGameRecord, type GameRecord,
 } from './game/gameRecord';
 
 type CorrectionAnchor = { x: number; y: number };
-type AppMode = 'home' | 'play' | 'records' | 'ai-master' | 'editor';
+type AppMode = 'home' | 'play' | 'records' | 'ai-master' | 'ai-vs-ai' | 'editor';
 type RecordsPage = 'library' | 'recent' | 'favorites' | 'masters' | 'playback';
 
 const modeCards: { mode: Exclude<AppMode, 'home'>; title: string; body: string }[] = [
   { mode: 'play',      title: '一般揭棋模式',      body: '棋盤對弈主介面：翻子、落子、吃子、將軍、絕殺一氣呵成，支援長按修正暗子。' },
   { mode: 'records',   title: '打譜模式',           body: '棋譜庫管理與回放：儲存對局、逐步回放、檢視棋譜。' },
   { mode: 'ai-master', title: '輔助盤面模式',       body: '輸入盤面讓 AI 找出最佳解，分析最強後續着法。' },
+  { mode: 'ai-vs-ai',  title: 'AI VS AI 模式',        body: '讓紅黑雙方都由 AI 自動對弈，可單步 / 自動播放，並儲存棋譜。' },
   { mode: 'editor',    title: '局面編輯 / 測試模式', body: '清空棋盤、手動擺子、換手方、儲存與載入局面。' },
 ];
 
@@ -74,6 +76,14 @@ export default function App() {
   const [playQuickMsg, setPlayQuickMsg] = useState('');
   const [aiMasterNote, setAiMasterNote] = useState<string | null>(null);
   const [analyzeVersion, setAnalyzeVersion] = useState(0);
+
+  /* ── AI VS AI 模式 ── */
+  const [aiVsAiState, setAiVsAiState] = useState<GameState>(() => newGame());
+  const [aiVsAiInitial, setAiVsAiInitial] = useState<GameState | null>(null);
+  const [aiVsAiAutoPlay, setAiVsAiAutoPlay] = useState(false);
+  const [aiVsAiMsg, setAiVsAiMsg] = useState('');
+  const aiVsAiIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const aiVsAiStateRef = useRef<GameState>(aiVsAiState);
 
   /* ── 棋譜模式子頁狀態 ── */
   const [recordsPage, setRecordsPage] = useState<RecordsPage>('library');
@@ -368,6 +378,37 @@ export default function App() {
     setMode('ai-master');  // 直接切換，不走 enterMode（避免清掉 aiMasterNote）
   }
 
+  /* ── AI VS AI 模式 函式 ── */
+  function startAiVsAiGame() {
+    const initial = newGame();
+    setAiVsAiState(initial);
+    setAiVsAiInitial(initial);
+    setAiVsAiAutoPlay(false);
+    setAiVsAiMsg('');
+  }
+
+  function aiVsAiStep() {
+    const current = aiVsAiStateRef.current;
+    if (current.status !== 'playing') return;
+    if (current.history.length >= 300) { setAiVsAiMsg('已達手數上限（300 手）'); return; }
+    const r = recommendMove(current);
+    if (!r.move) { setAiVsAiMsg('AI 無合法步，對局結束'); return; }
+    const next = applyMove(current, r.move.from, r.move.to);
+    setAiVsAiState(next);
+    playBoardSoundFeedback({ captured: !!r.move.captured, check: false });
+  }
+
+  function saveAiVsAiRecord() {
+    const initial = aiVsAiInitial;
+    if (!initial) { setAiVsAiMsg('請先開始一局 AI 對局'); return; }
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const title = `AI VS AI ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const record = { ...createGameRecord({ title, moves: aiVsAiStateRef.current.history, finalStatus: aiVsAiStateRef.current.status }), initialState: initial };
+    const ok = saveGameRecord(storage(), record);
+    setAiVsAiMsg(ok ? '棋譜已儲存至打譜模式' : '儲存失敗');
+  }
+
   /* ── Effects ── */
   useEffect(() => {
     function keydown(event: KeyboardEvent) {
@@ -422,6 +463,48 @@ export default function App() {
     /* 絕殺步：額外播放 endgame 音效（含「絕殺」語音） */
     if (isEndgame) playEndgameSound();
   }, [playbackStep, playbackRecord, playbackState, mode]);
+
+  /* ── AI VS AI：同步 state ref ── */
+  useEffect(() => { aiVsAiStateRef.current = aiVsAiState; }, [aiVsAiState]);
+
+  /* ── AI VS AI：自動播放 interval ── */
+  useEffect(() => {
+    if (!aiVsAiAutoPlay) {
+      if (aiVsAiIntervalRef.current) { clearInterval(aiVsAiIntervalRef.current); aiVsAiIntervalRef.current = null; }
+      return;
+    }
+    aiVsAiIntervalRef.current = setInterval(() => {
+      const current = aiVsAiStateRef.current;
+      if (current.history.length >= 300) {
+        setAiVsAiAutoPlay(false);
+        setAiVsAiMsg('已達手數上限（300 手）');
+        return;
+      }
+      if (current.status !== 'playing') {
+        setAiVsAiAutoPlay(false);
+        return;
+      }
+      const r = recommendMove(current);
+      if (!r.move) { setAiVsAiAutoPlay(false); setAiVsAiMsg('AI 無合法步，對局結束'); return; }
+      setAiVsAiState(applyMove(current, r.move.from, r.move.to));
+    }, 700);
+    return () => { if (aiVsAiIntervalRef.current) { clearInterval(aiVsAiIntervalRef.current); aiVsAiIntervalRef.current = null; } };
+  }, [aiVsAiAutoPlay]);
+
+  /* ── AI VS AI：離開模式時清除 interval ── */
+  useEffect(() => {
+    if (mode !== 'ai-vs-ai') {
+      if (aiVsAiIntervalRef.current) { clearInterval(aiVsAiIntervalRef.current); aiVsAiIntervalRef.current = null; }
+      setAiVsAiAutoPlay(false);
+    }
+  }, [mode]);
+
+  /* ── AI VS AI：對局結束時停止並顯示結果 ── */
+  useEffect(() => {
+    if (!aiVsAiInitial || aiVsAiState.history.length === 0) return;
+    if (aiVsAiState.status === 'red_win') { setAiVsAiAutoPlay(false); setAiVsAiMsg('紅方勝！'); }
+    else if (aiVsAiState.status === 'black_win') { setAiVsAiAutoPlay(false); setAiVsAiMsg('黑方勝！'); }
+  }, [aiVsAiState.status]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── 共用 UI 片段 ── */
   function renderHeader(title: string) {
@@ -513,6 +596,64 @@ export default function App() {
         </div>
         <AiPanel version={analyzeVersion} state={state} />
         <WisdomPanel />
+      </main>
+    );
+  }
+
+  /* ══════════════════════════════════════════
+     AI VS AI 模式
+  ══════════════════════════════════════════ */
+  if (mode === 'ai-vs-ai') {
+    const avaMoveCount = aiVsAiState.history.length;
+    const avaIsPlaying = aiVsAiState.status === 'playing';
+    const avaTurnText = aiVsAiState.turn === 'red' ? '紅方' : '黑方';
+    const avaStatusText = !aiVsAiInitial
+      ? '按「新開 AI 對局」開始'
+      : aiVsAiState.status === 'red_win' ? '紅方勝'
+      : aiVsAiState.status === 'black_win' ? '黑方勝'
+      : `第 ${avaMoveCount + 1} 手｜輪到${avaTurnText}`;
+    return (
+      <main>
+        <header>
+          <button className="homeButton" onClick={goHome}>回首頁</button>
+          <h1>AI VS AI 模式</h1>
+          <span className="statusText">{avaStatusText}</span>
+        </header>
+        {aiVsAiMsg && (
+          <p style={{textAlign:'center',color:'#86efac',fontSize:13,margin:'4px 0 6px'}}>{aiVsAiMsg}</p>
+        )}
+        {aiVsAiInitial ? (
+          <Board
+            board={aiVsAiState.board}
+            selected={null}
+            legalMoves={[]}
+            moves={aiVsAiState.history}
+            onSquareClick={() => {}}
+          />
+        ) : (
+          <p style={{textAlign:'center',color:'#94a3b8',margin:'32px 0',fontSize:15}}>
+            點擊「新開 AI 對局」讓 AI 開始自動對弈
+          </p>
+        )}
+        <div className="toolbar" style={{marginTop:8,flexWrap:'wrap',gap:6}}>
+          <button onClick={startAiVsAiGame}>新開 AI 對局</button>
+          {aiVsAiInitial && avaIsPlaying && (
+            <button onClick={aiVsAiStep} disabled={aiVsAiAutoPlay}>AI 走一步</button>
+          )}
+          {aiVsAiInitial && avaIsPlaying && (
+            <button onClick={() => setAiVsAiAutoPlay(v => !v)}>
+              {aiVsAiAutoPlay ? '暫停' : '自動播放'}
+            </button>
+          )}
+          {aiVsAiInitial && (
+            <button onClick={saveAiVsAiRecord}>儲存棋譜</button>
+          )}
+        </div>
+        {aiVsAiInitial && (
+          <p style={{textAlign:'center',color:'#64748b',fontSize:12,marginTop:6}}>
+            共 {avaMoveCount} 手｜上限 300 手
+          </p>
+        )}
       </main>
     );
   }

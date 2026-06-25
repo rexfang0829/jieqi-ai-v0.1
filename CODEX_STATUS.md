@@ -385,3 +385,33 @@ npm.cmd run build
 **輔助盤面現有操作**：看目前盤面 / 點選走棋 / 長按修正棋種 / 1~6 快捷鍵修正 / 回到上一步 / 回到初始局面 / 重新分析 / 清除來源提示 / 查看 AI 建議（建議步 + 分數 + 原因）/ 心得記錄。
 
 **測試**：`npm test` 80 項全通過。`npx tsc` 零錯誤。
+
+---
+
+### 2026-06-25 AI VS AI 模式 MVP（Claude）
+
+**修改檔案**：僅 `src/App.tsx`
+
+**新增內容**：
+
+1. **`AppMode`** 加入 `'ai-vs-ai'`；首頁 modeCards 加入入口卡片。
+2. **import** `recommendMove` from `./ai/simpleAi`。
+3. **State 變數**：`aiVsAiState`、`aiVsAiInitial`、`aiVsAiAutoPlay`、`aiVsAiMsg`、`aiVsAiIntervalRef`（interval ref）、`aiVsAiStateRef`（最新 state ref，供 interval closure 讀取）。
+4. **函式**：
+   - `startAiVsAiGame()`：`newGame()` → 同時存入 `aiVsAiInitial`（保留暗子真實配置），清除 autoPlay / msg。
+   - `aiVsAiStep()`：從 ref 讀取最新 state → `recommendMove()` → `applyMove(from, to)` → `setAiVsAiState`；>= 300 手自動停止。
+   - `saveAiVsAiRecord()`：`createGameRecord({ title, moves, finalStatus })` + `{ initialState: aiVsAiInitial }` → `saveGameRecord`。
+5. **useEffects**：
+   - state ref 同步：`aiVsAiStateRef.current = aiVsAiState`（確保 interval closure 讀到最新）。
+   - 自動播放：`aiVsAiAutoPlay` 為 true 時啟動 700ms interval；false / cleanup 時 clearInterval。
+   - 離開模式：`mode !== 'ai-vs-ai'` 時 clearInterval + `setAiVsAiAutoPlay(false)`。
+   - 對局結束：`status` 變為 red/black_win → 停止自動播放並顯示勝負訊息。
+6. **Render block**（ai-master 與 records 之間）：Header（自訂，顯示回合 / 第幾手）→ 訊息列 → Board（read-only）→ 操作列（新開 / AI 走一步 / 自動播放‧暫停 / 儲存棋譜）→ 手數計數器。
+
+**選步方式**：沿用 `recommendMove(state)`（一層對手回應安全評分），不重寫 AI。
+
+**自動播放**：每 700ms 從 `aiVsAiStateRef.current` 讀取最新局面 → `recommendMove` → `applyMove` → `setAiVsAiState`；超過 300 手 / 無合法步 / 對局結束時自動停止。
+
+**棋譜儲存**：title 預設為「AI VS AI yyyy-mm-dd hh:mm」；`initialState = aiVsAiInitial`（保留暗子配置）；`moves = state.history`；儲存至打譜模式的 localStorage，不污染一般對局。
+
+**測試**：`npm test` 80 項全通過。`npx tsc` 零錯誤。
