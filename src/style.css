@@ -156,3 +156,63 @@ li.revealedCapture{color:#ffe8be}
   .recordActions button,.recordItem button,.editorPanel button{min-height:46px}
   textarea{height:96px}
 }
+
+/* ── 棋譜庫首頁 ─────────────────────────── */
+.recordLibrary{display:flex;flex-direction:column;gap:0;max-width:560px;border:1px solid #9b6935;border-radius:12px;overflow:hidden;background:#3b2011}
+.recordLibCard{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;background:#3b2011;border:none;border-bottom:1px solid #9b693555;color:#ffe8be;text-align:left;cursor:pointer;gap:12px}
+.recordLibCard:last-child{border-bottom:0}
+.recordLibCard:hover,.recordLibCard:active{background:#4e2c16}
+.recordLibCard strong{font-size:18px}
+.recordLibCard em{font-style:normal;font-size:14px;color:#ffe8beaa}
+.recordLibBadge{background:#8e2f1f;color:#ffe8be;border-radius:999px;padding:2px 10px;font-size:13px;font-weight:700;min-width:32px;text-align:center}
+.recordLibArrow{color:#d7a55a;font-size:18px;flex-shrink:0}
+
+/* ── 棋譜列表頁 ─────────────────────────── */
+.recordsListPage{display:flex;flex-direction:column;gap:12px;max-width:640px}
+.recordsSubHeader{display:flex;align-items:center;gap:12px;margin-bottom:4px}
+.recordsSubHeader h2{margin:0;font-size:20px;flex:1}
+.recordsSubHeader button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-radius:8px;padding:8px 14px;min-height:40px}
+.recordsSearchWrap{position:relative}
+.recordsSearchWrap input{margin:0;padding-left:32px}
+.recordsSearchIcon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#9b6935;pointer-events:none;font-size:15px}
+.recordsSaveBox{background:#2d180e;border:1px solid #9b6935;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.recordsSaveBox label{font-size:14px;color:#ffe8becc}
+.recordsSaveBox input{margin:0}
+.recordsSaveBox button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-radius:8px;padding:8px 14px;min-height:40px}
+.recordsSaveMsg{color:#ffd36a;font-size:13px;margin:0}
+.recordsItems{display:flex;flex-direction:column;gap:6px}
+.recordsItem{background:#4b2515;border:1px solid #9b693577;border-radius:10px;padding:12px 14px;display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:start;cursor:pointer;text-align:left;color:#ffe8be;border-left-width:0}
+.recordsItem:hover,.recordsItem:active{background:#5e3020}
+.recordsItemTitle{font-size:16px;font-weight:700;grid-column:1}
+.recordsItemDate{font-size:12px;color:#ffe8beaa;grid-column:2;text-align:right;white-space:nowrap}
+.recordsItemMeta{font-size:13px;color:#ffe8becc;grid-column:1}
+.recordsItemResult{font-size:13px;font-weight:700;grid-column:2;text-align:right}
+.recordsItemResult.red{color:#f87171}
+.recordsItemResult.black{color:#a3c4f0}
+.recordsItemResult.playing{color:#ffe8beaa}
+.recordsEmpty{color:#ffe8beaa;font-size:14px;padding:12px 0}
+.recordsDeleteBtn{background:#641b16;color:#ffe2d5;border:1px solid #e08764;border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;align-self:start}
+
+/* ── 棋譜回放頁 ─────────────────────────── */
+.playbackPage{display:flex;flex-direction:column;gap:10px;max-width:760px}
+.playbackMeta{background:#2d180e;border:1px solid #9b6935;border-radius:10px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px}
+.playbackMeta strong{font-size:15px}
+.playbackMeta em{font-style:normal;font-size:13px;color:#ffe8beaa}
+.playbackStep{font-size:14px;color:#ffd36a;font-weight:700;white-space:nowrap}
+.playbackControls{display:flex;gap:10px;align-items:center}
+.playbackControls button{flex:1;background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-radius:8px;padding:12px 10px;font-size:16px;font-weight:700;min-height:48px}
+.playbackControls button:disabled{opacity:.35;cursor:not-allowed}
+.playbackAnalyzeBtn{background:#1e3a5f;color:#dff0ff;border:1px solid #58a6ff;border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer;min-height:44px}
+.playbackMoveScroll{display:flex;gap:6px;overflow-x:auto;padding:4px 0 8px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+.playbackMoveChip{flex-shrink:0;padding:5px 9px;border-radius:6px;background:#4b2515;border:1px solid #9b693577;color:#ffe8becc;font-size:12px;cursor:pointer;scroll-snap-align:start;white-space:nowrap;min-height:32px}
+.playbackMoveChip.active{background:#c07830;border-color:#ffd36a;color:#fff7e6;font-weight:700}
+.playbackMoveChip:hover{background:#5e3020}
+
+/* 回放頁桌機：board + move list 並排 */
+@media(min-width:1101px){
+  .playbackPage{flex-direction:row;align-items:flex-start;gap:16px;max-width:none}
+  .playbackMain{flex:0 0 auto}
+  .playbackSide{flex:1;display:flex;flex-direction:column;gap:10px}
+  .playbackMoveScroll{flex-direction:column;overflow-x:unset;overflow-y:auto;max-height:580px;padding:0}
+  .playbackMoveChip{white-space:normal;text-align:left}
+}
