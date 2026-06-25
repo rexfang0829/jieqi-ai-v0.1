@@ -6,6 +6,19 @@ h1{margin:0;font-size:28px}
 button{cursor:pointer}
 button:disabled{cursor:not-allowed;opacity:.5}
 header button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-radius:8px;padding:9px 14px}
+.homeScreen{min-height:100vh;display:flex;flex-direction:column;gap:22px;justify-content:center;max-width:920px;margin:0 auto}
+.homeHero{display:grid;gap:10px}
+.homeHero h1{font-size:38px}
+.homeHero p{margin:0;color:#ffe8becc;font-size:18px;line-height:1.6}
+.modeGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.modeCard{min-height:132px;text-align:left;background:#6b2b18;color:#ffe8be;border:1px solid #d7a55a;border-radius:8px;padding:18px;display:grid;gap:10px;align-content:start;box-shadow:0 8px 18px #0005}
+.modeCard strong{font-size:22px}
+.modeCard span{font-size:15px;line-height:1.5;color:#ffe8becc}
+.homeButton{background:#5a2a18}
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 14px}
+.toolbar button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-radius:8px;padding:9px 14px}
+.modeLayout{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;max-width:760px}
+.emptyModePanel{max-width:620px;max-height:none}
 .statusText{font-weight:700}
 .endgameStatus{color:#ffd36a}
 .endgameBanner{margin:0 0 16px;padding:12px 18px;border:1px solid #f1c36c;border-radius:10px;background:linear-gradient(90deg,#6b1e12,#3b2011);box-shadow:0 8px 18px #0006;display:flex;gap:14px;align-items:center;max-width:640px}
@@ -26,10 +39,10 @@ header button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-r
 .capturedPieces em{font-style:normal;background:#5a2c17;border:1px solid #b98545;border-radius:999px;padding:2px 8px;font-size:13px;line-height:1.6}
 .compactCapturedPanel{max-height:150px;font-size:13px}
 .compactCapturedPanel p{margin:8px 0;display:grid;gap:3px;line-height:1.45}
-.capturedBoardOverlay{position:absolute;inset:0;z-index:3;pointer-events:none}
-.capturedBoardStack{position:absolute;left:8px;display:flex;gap:5px;flex-wrap:wrap;width:96px;align-content:flex-start}
-.capturedTopLeft{top:8px}
-.capturedBottomLeft{bottom:8px}
+/* Captured overlay: side column outside the board */
+.capturedBoardOverlay{display:flex;flex-direction:column;justify-content:flex-start;padding:8px 0;width:78px;flex-shrink:0;align-self:stretch;pointer-events:none}
+.capturedBoardStack{display:flex;gap:4px;flex-wrap:wrap;align-content:flex-start;width:78px}
+.capturedBottomLeft{margin-top:auto}
 .capturedMiniPiece{width:25px;height:25px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#f4d093;border:2px solid #6b3216;box-shadow:inset 0 0 0 2px #e8b86f,0 2px 4px #0007;font-size:15px;font-weight:900;line-height:1}
 .capturedMiniPiece.red{color:#b30000}
 .capturedMiniPiece.black{color:#111}
@@ -37,13 +50,16 @@ header button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-r
 .turnSelector{display:flex;gap:8px;align-items:center}
 .turnSelector select{width:auto;margin:0;padding:8px 28px 8px 10px}
 .layout{display:flex;gap:20px;align-items:flex-start}
+/* boardRow: flex row containing captured overlay + boardShell */
+.boardRow{display:flex;gap:6px;align-items:flex-start}
 .boardWrap{background:#b86d32;padding:14px 22px 18px;border:8px solid #5b2d13;border-radius:10px;box-shadow:0 10px 30px #0008}
 .boardShell{display:grid;grid-template-rows:auto auto auto;gap:8px}
-.fileLabels{display:grid;grid-template-columns:repeat(9,var(--cell,64px));width:calc(var(--cell,64px) * 9);color:#180b04;font-size:30px;font-weight:800;line-height:1;font-family:'Times New Roman','Noto Serif TC',serif}
+/* +6px to width/height compensates for border:3px inside box-sizing:border-box */
+.fileLabels{display:grid;grid-template-columns:repeat(9,var(--cell,64px));width:calc(var(--cell,64px) * 9 + 6px);color:#180b04;font-size:30px;font-weight:800;line-height:1;font-family:'Times New Roman','Noto Serif TC',serif}
 .fileLabels span{display:flex;align-items:center;justify-content:center}
 .topFileLabels{transform:none}
 .bottomFileLabels{font-family:'Noto Serif TC','Microsoft JhengHei',serif}
-.boardGrid{--cell:64px;position:relative;width:calc(var(--cell) * 9);height:calc(var(--cell) * 10);background:#d99a55;border:3px solid #5b2d13}
+.boardGrid{--cell:64px;position:relative;width:calc(var(--cell) * 9 + 6px);height:calc(var(--cell) * 10 + 6px);background:#d99a55;border:3px solid #5b2d13}
 .boardLines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .boardLines line{stroke:#6e3a17;stroke-width:.035;stroke-linecap:square}
 .boardLines .outerLine{fill:none;stroke:#2f1709;stroke-width:.055}
@@ -56,7 +72,8 @@ header button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-r
 .square.captureTarget::after{content:'';width:56px;height:56px;border-radius:50%;background:transparent;border:4px solid #fff7bc;box-shadow:0 0 0 3px #2f7d32cc,0 0 12px #fff5;position:absolute}
 .square.selected{box-shadow:0 0 0 4px #ffe08aaa;background:#ffe08a22}
 .square.syncOrigin{box-shadow:0 0 0 4px #56b7ffcc;background:#56b7ff22}
-.piece{width:50px;height:50px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;background:#f4d093;border:3px solid #6b3216;box-shadow:inset 0 0 0 3px #e8b86f,0 3px 5px #0007}
+/* aspect-ratio:1/1 enforces perfect circle; symmetric shadow removes oval illusion */
+.piece{width:50px;height:50px;aspect-ratio:1/1;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;line-height:1;background:#f4d093;border:3px solid #6b3216;box-shadow:inset 0 0 0 3px #e8b86f,0 2px 6px #0007}
 .piece.red{color:#b30000}
 .piece.black{color:#111}
 .piece.hidden{background:radial-gradient(circle,#8b3d1d 0 55%,#5b2410 56%);border-color:#efc27b}
@@ -83,9 +100,19 @@ li.hiddenCapture{color:#ffd36a;font-weight:700}
 li.hiddenCapture::after{content:'  暗子資訊';font-size:12px;color:#ffefbd}
 li.revealedCapture{color:#ffe8be}
 @media(max-width:1100px){
+  main{padding:12px}
+  header{gap:10px}
+  header h1{font-size:22px}
+  .homeScreen{justify-content:flex-start;padding-top:28px}
+  .homeHero h1{font-size:30px}
+  .homeHero p{font-size:16px}
+  .modeGrid{grid-template-columns:1fr}
+  .modeCard{min-height:116px;padding:16px}
+  .modeCard strong{font-size:20px}
+  .toolbar button,.homeButton,header button{min-height:44px}
   .layout{flex-direction:column}
   .boardGrid{--cell:42px}
-  .fileLabels{grid-template-columns:repeat(9,42px);width:calc(42px * 9);font-size:22px}
+  .fileLabels{grid-template-columns:repeat(9,42px);width:calc(42px * 9 + 6px);font-size:22px}
   .square{width:40px;height:40px}
   .piece{width:34px;height:34px;font-size:21px}
   .riverText{font-size:19px;letter-spacing:6px}
@@ -93,8 +120,8 @@ li.revealedCapture{color:#ffe8be}
   .endgameBanner strong{font-size:22px}
   .endgameBanner span{font-size:16px}
   .capturedPieces em{font-size:12px;padding:2px 7px}
-  .capturedBoardStack{left:5px;gap:3px;width:68px}
-  .capturedMiniPiece{width:18px;height:18px;font-size:11px;border-width:1px;box-shadow:inset 0 0 0 1px #e8b86f,0 1px 3px #0007}
+  /* hide side overlay on mobile — CapturedPanel below board covers it */
+  .capturedBoardOverlay{display:none}
   .correctionButtons{grid-template-columns:repeat(2,1fr)}
   .correctionButtons button,.correctionPanel>button{min-height:48px}
   aside{width:100%}

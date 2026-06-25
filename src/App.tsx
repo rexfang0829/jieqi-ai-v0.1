@@ -18,8 +18,17 @@ import { editorPieceTypeNames } from './game/pieceText';
 import { playCaptureSound, playCheckSound, playMoveSound, shouldPlayMoveSound } from './game/soundEffects';
 
 type CorrectionAnchor = { x: number; y: number };
+type AppMode = 'home' | 'play' | 'records' | 'ai-vs-ai' | 'editor';
+
+const modeCards: { mode: Exclude<AppMode, 'home'>; title: string; body: string }[] = [
+  { mode: 'play', title: '接棋對弈模式', body: '手機實戰同步天天象棋盤面，保留棋盤、AI 建議、同步上一手、長按修正與被吃子資訊。' },
+  { mode: 'records', title: '打譜模式', body: '管理棋譜儲存、載入、複製文字與匯出 JSON。' },
+  { mode: 'ai-vs-ai', title: 'AI VS AI 模式', body: '先保留入口，之後再做 AI 自戰。' },
+  { mode: 'editor', title: '局面編輯 / 測試模式', body: '清空棋盤、手動擺子、換手方、儲存與載入局面。' },
+];
 
 export default function App() {
+  const [mode, setMode] = useState<AppMode>('home');
   const [state, setState] = useState(() => newGame());
   const [past, setPast] = useState<GameState[]>([]);
   const [selected, setSelected] = useState<Position | null>(null);
@@ -44,6 +53,20 @@ export default function App() {
   const correctionPanelStyle = correctionAnchor
     ? { left: `${correctionAnchor.x}px`, top: `${correctionAnchor.y}px` }
     : undefined;
+
+  function goHome() {
+    setMode('home');
+    setSelected(null);
+    closeCorrection();
+    cancelSync();
+  }
+
+  function enterMode(nextMode: Exclude<AppMode, 'home'>) {
+    setMode(nextMode);
+    setSelected(null);
+    closeCorrection();
+    cancelSync();
+  }
 
   function closeCorrection() {
     setCorrectionPos(null);
@@ -320,33 +343,134 @@ export default function App() {
     }
   }, [lastSoundStatus, state.status]);
 
-  return (
-    <main>
+  function renderHeader(title: string) {
+    return (
       <header>
-        <h1>大盤揭棋 AI v0.1</h1>
-        <button onClick={resetToInitial}>恢復初始局面</button>
-        <button onClick={clearCurrentBoard}>清空棋盤</button>
-        <button onClick={saveCurrentPosition}>儲存目前局面</button>
-        <button onClick={loadSavedPosition}>載入已儲存局面</button>
-        <button onClick={undo} disabled={!past.length}>回到上一步</button>
-        <button onClick={toggleSyncMode}>{syncMode ? '取消同步' : '同步上一手'}</button>
-        <label className="turnSelector">
-          輪到
-          <select value={state.turn} onChange={(e: { target: { value: string } }) => changeTurn(e.target.value as GameState['turn'])}>
-            <option value="red">紅方</option>
-            <option value="black">黑方</option>
-          </select>
-        </label>
+        <button className="homeButton" onClick={goHome}>回首頁</button>
+        <h1>{title}</h1>
         <span className={endgameFeedback ? 'statusText endgameStatus' : 'statusText'}>{statusText}</span>
       </header>
-      {endgameFeedback && (
-        <div className={`endgameBanner ${endgameFeedback.winner}`}>
-          <strong>{endgameFeedback.title}</strong>
-          <span>{endgameFeedback.winnerText}</span>
-          <small>本局結束</small>
+    );
+  }
+
+  function renderCorrectionPanel() {
+    if (!correctionPos) return null;
+    return (
+      <div className="panel correctionPanel" style={correctionPanelStyle}>
+        <h3>修正棋種</h3>
+        <p>長按棋子後，可手動修正翻開後的真實棋種。</p>
+        <div className="correctionButtons">
+          {(['rook', 'horse', 'elephant', 'advisor', 'cannon', 'pawn'] as PieceType[]).map(type => (
+            <button key={type} onClick={() => applyCorrection(type)}>{editorPieceTypeNames[type]}</button>
+          ))}
         </div>
-      )}
-      <div className="layout">
+        {editorError && <p className="editorError">{editorError}</p>}
+        <button onClick={closeCorrection}>取消</button>
+      </div>
+    );
+  }
+
+  function renderEndgameBanner() {
+    if (!endgameFeedback) return null;
+    return (
+      <div className={`endgameBanner ${endgameFeedback.winner}`}>
+        <strong>{endgameFeedback.title}</strong>
+        <span>{endgameFeedback.winnerText}</span>
+        <small>本局結束</small>
+      </div>
+    );
+  }
+
+  if (mode === 'home') {
+    return (
+      <main className="homeScreen">
+        <section className="homeHero">
+          <h1>大盤揭棋 AI v0.1</h1>
+          <p>選擇目前要使用的模式。實戰接棋、棋譜管理、AI 自戰入口與局面測試分開顯示。</p>
+        </section>
+        <section className="modeGrid">
+          {modeCards.map(card => (
+            <button className="modeCard" key={card.mode} onClick={() => enterMode(card.mode)}>
+              <strong>{card.title}</strong>
+              <span>{card.body}</span>
+            </button>
+          ))}
+        </section>
+      </main>
+    );
+  }
+
+  if (mode === 'ai-vs-ai') {
+    return (
+      <main>
+        {renderHeader('AI VS AI 模式')}
+        <section className="panel emptyModePanel">
+          <h2>AI VS AI 尚未啟用</h2>
+          <p>本階段只建立入口，暫時不做 AI 自戰。</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (mode === 'records') {
+    return (
+      <main>
+        {renderHeader('打譜模式')}
+        <div className="modeLayout recordsMode">
+          <GameRecordPanel state={state} />
+          <MoveList moves={state.history} />
+        </div>
+      </main>
+    );
+  }
+
+  if (mode === 'editor') {
+    return (
+      <main>
+        {renderHeader('局面編輯 / 測試模式')}
+        {renderEndgameBanner()}
+        <div className="toolbar">
+          <button onClick={resetToInitial}>恢復初始局面</button>
+          <button onClick={clearCurrentBoard}>清空棋盤</button>
+          <button onClick={saveCurrentPosition}>儲存目前局面</button>
+          <button onClick={loadSavedPosition}>載入已儲存局面</button>
+          <button onClick={undo} disabled={!past.length}>回到上一步</button>
+          <label className="turnSelector">
+            輪到
+            <select value={state.turn} onChange={(event: { target: { value: string } }) => changeTurn(event.target.value as GameState['turn'])}>
+              <option value="red">紅方</option>
+              <option value="black">黑方</option>
+            </select>
+          </label>
+        </div>
+        <div className="layout editorMode">
+          <Board board={state.board} selected={selected} syncFrom={syncFrom} legalMoves={legalMoves} moves={state.history} onSquareClick={click} onSquareLongPress={openCorrection} />
+          <aside>
+            <div className="panel hotkeyHint">翻子快捷鍵：1車 2馬 3象 4士 5炮 6兵</div>
+            {renderCorrectionPanel()}
+            <PositionEditor
+              selected={selected}
+              piece={selected ? state.board[selected.row][selected.col] : null}
+              onUpdatePiece={editSelectedPiece}
+              onCreatePiece={createSelectedPiece}
+              onClearSquare={clearSelectedSquare}
+              error={!correctionPos ? editorError : ''}
+            />
+          </aside>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main>
+      {renderHeader('接棋對弈模式')}
+      {renderEndgameBanner()}
+      <div className="toolbar">
+        <button onClick={toggleSyncMode}>{syncMode ? '取消同步' : '同步上一手'}</button>
+        <button onClick={undo} disabled={!past.length}>回到上一步</button>
+      </div>
+      <div className="layout playMode">
         <Board board={state.board} selected={selected} syncFrom={syncFrom} legalMoves={legalMoves} moves={state.history} onSquareClick={click} onSquareLongPress={openCorrection} />
         <aside>
           <AiPanel state={state} />
@@ -356,28 +480,7 @@ export default function App() {
             </div>
           )}
           <div className="panel hotkeyHint">翻子快捷鍵：1車 2馬 3象 4士 5炮 6兵</div>
-          {correctionPos && (
-            <div className="panel correctionPanel" style={correctionPanelStyle}>
-              <h3>修正棋種</h3>
-              <p>長按棋子後，可手動修正翻開後的真實棋種。</p>
-              <div className="correctionButtons">
-                {(['rook', 'horse', 'elephant', 'advisor', 'cannon', 'pawn'] as PieceType[]).map(type => (
-                  <button key={type} onClick={() => applyCorrection(type)}>{editorPieceTypeNames[type]}</button>
-                ))}
-              </div>
-              {editorError && <p className="editorError">{editorError}</p>}
-              <button onClick={closeCorrection}>取消</button>
-            </div>
-          )}
-          <PositionEditor
-            selected={selected}
-            piece={selected ? state.board[selected.row][selected.col] : null}
-            onUpdatePiece={editSelectedPiece}
-            onCreatePiece={createSelectedPiece}
-            onClearSquare={clearSelectedSquare}
-            error={!correctionPos ? editorError : ''}
-          />
-          <GameRecordPanel state={state} />
+          {renderCorrectionPanel()}
           <CapturedPanel moves={state.history} />
           <MoveList moves={state.history} />
           <WisdomPanel />
