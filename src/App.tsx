@@ -493,6 +493,16 @@ export default function App() {
         {aiMasterNote && (
           <p style={{textAlign:'center',color:'#86efac',fontSize:13,margin:'4px 0 8px'}}>{aiMasterNote}</p>
         )}
+        {renderEndgameBanner()}
+        {renderCorrectionPanel()}
+        <Board
+          board={state.board}
+          selected={selected}
+          legalMoves={legalMoves}
+          moves={state.history}
+          onSquareClick={click}
+          onSquareLongPress={openCorrection}
+        />
         <AiPanel state={state} />
         <WisdomPanel />
       </main>

@@ -338,3 +338,24 @@ npm.cmd run build
 **測試**：`npm test` 80 項全通過。  
 **TypeScript**：`npx tsc` 零錯誤。  
 **建置**：沙盒 rollup 限制，Vercel 正常。
+
+---
+
+### 2026-06-25 輔助盤面模式顯示分析盤面（Claude）
+
+**問題**：ai-master 模式只有 AiPanel + WisdomPanel，沒有棋盤，使用者無法確認「分析目前局面」是否真的載入回放那一步。
+
+**修改**（僅 `src/App.tsx`，ai-master render block）：
+
+加入棋盤渲染，順序改為：
+1. `renderHeader('輔助盤面模式')`
+2. `aiMasterNote` 來源提示（綠色文字）
+3. `renderEndgameBanner()`
+4. `renderCorrectionPanel()`（支援長按修正棋種）
+5. **`Board`**（新增）— `board={state.board}`、`selected`、`legalMoves`、`moves`、`onSquareClick={click}`、`onSquareLongPress={openCorrection}`
+6. `AiPanel state={state}`
+7. `WisdomPanel`
+
+**分析目前局面流程**：`analyzePlayback()` deep clone `playbackState` → `setState` → `setMode('ai-master')`。切到 ai-master 後，`state` 即為回放第 N 步局面，Board 直接顯示該盤面，AiPanel 基於此給建議。
+
+**測試**：`npm test` 80 項全通過。`npx tsc` 零錯誤。沙盒 rollup 限制，Vercel 正常。
