@@ -11,11 +11,11 @@ import { clearBoard, clearSquare, correctSelectedRealType, editSquare, editSquar
 import { applyMove, newGame } from './game/gameEngine';
 import { cancelLastMoveSync, syncLastMove } from './game/lastMoveSync';
 import { loadPosition, savePosition } from './game/positionStorage';
-import { getAllLegalMoves } from './game/checkRules';
+import { getAllLegalMoves, isInCheck } from './game/checkRules';
 import { getEndgameFeedback, shouldPlayEndgameSound, statusLabel } from './game/endgameFeedback';
 import { playEndgameSound } from './game/endgameSound';
 import { editorPieceTypeNames } from './game/pieceText';
-import { playMoveSound, shouldPlayMoveSound } from './game/soundEffects';
+import { playCaptureSound, playCheckSound, playMoveSound, shouldPlayMoveSound } from './game/soundEffects';
 
 type CorrectionAnchor = { x: number; y: number };
 
@@ -64,6 +64,16 @@ export default function App() {
     return { x, y };
   }
 
+  function pickMoveSound(next: GameState, hasCaptured: boolean) {
+    if (isInCheck(next.board, next.turn)) {
+      playCheckSound();
+    } else if (hasCaptured) {
+      playCaptureSound();
+    } else {
+      playMoveSound();
+    }
+  }
+
   function click(pos: Position) {
     if (syncMode) {
       syncClick(pos);
@@ -82,7 +92,10 @@ export default function App() {
       if (next !== state) {
         setPast(history => [...history, state]);
         setState(next);
-        if (shouldPlayMoveSound(state, next)) playMoveSound();
+        if (shouldPlayMoveSound(state, next) && next.status === 'playing') {
+          const lastMove = next.history[next.history.length - 1];
+          pickMoveSound(next, !!lastMove?.captured);
+        }
       }
       setSelected(null);
       return;
@@ -244,7 +257,10 @@ export default function App() {
     if (result.applied) {
       setPast(history => [...history, state]);
       setState(result.state);
-      if (shouldPlayMoveSound(state, result.state)) playMoveSound();
+      if (shouldPlayMoveSound(state, result.state) && result.state.status === 'playing') {
+        const lastMove = result.state.history[result.state.history.length - 1];
+        pickMoveSound(result.state, !!lastMove?.captured);
+      }
       setSyncMode(false);
       setSyncFrom(null);
       setSyncError('');

@@ -14,7 +14,7 @@ import { isBasicLegalMove, kingsFace } from '../src/game/moveRules';
 import { realPieceName } from '../src/game/pieceText';
 import { remainingRealPieces } from '../src/game/pieceInventory';
 import { fromSavedPosition, loadPosition, POSITION_STORAGE_KEY, savePosition, toSavedPosition } from '../src/game/positionStorage';
-import { shouldPlayMoveSound } from '../src/game/soundEffects';
+import { shouldPlayMoveSound, playMoveSound, playCaptureSound, playCheckSound } from '../src/game/soundEffects';
 import type { Board, Piece, PieceType, Side } from '../src/types/chess';
 
 function assertEqual(actual: unknown, expected: unknown) {
@@ -986,7 +986,64 @@ test('cancel last move sync does not change board, turn, or status', () => {
   const state = { board, turn: 'red' as const, history: [], status: 'red_win' as const };
   const next = cancelLastMoveSync(state);
   assertEqual(next, state);
-  assertEqual(next.board[6][0]?.side, 'red');
   assertEqual(next.turn, 'red');
+  assertEqual(next.status, 'red_win');
+});
+
+function mockWin(): Window {
+  return {
+    setTimeout: (fn: () => void, _ms: number) => { fn(); return 0; },
+    clearTimeout: () => undefined,
+    speechSynthesis: undefined,
+    SpeechSynthesisUtterance: undefined,
+  } as unknown as Window;
+}
+
+test('playMoveSound does not throw when AudioContext is unavailable', () => {
+  let threw = false;
+  try { playMoveSound(mockWin()); } catch { threw = true; }
+  assertEqual(threw, false);
+});
+
+test('playCaptureSound does not throw when AudioContext is unavailable', () => {
+  let threw = false;
+  try { playCaptureSound(mockWin()); } catch { threw = true; }
+  assertEqual(threw, false);
+});
+
+test('playCheckSound does not throw when AudioContext is unavailable', () => {
+  let threw = false;
+  try { playCheckSound(mockWin()); } catch { threw = true; }
+  assertEqual(threw, false);
+});
+
+test('capture move has a captured piece in history', () => {
+  const board = withKings();
+  place(board, 6, 0, piece('red', 'pawn'));
+  place(board, 5, 0, piece('black', 'pawn'));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const next = applyMove(state, { row: 6, col: 0 }, { row: 5, col: 0 });
+  assertOk(next !== state);
+  const lastMove = next.history[next.history.length - 1];
+  assertOk(lastMove.captured);
+});
+
+test('normal move has no captured piece in history', () => {
+  const board = withKings();
+  place(board, 6, 0, piece('red', 'pawn'));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const next = applyMove(state, { row: 6, col: 0 }, { row: 5, col: 0 });
+  assertOk(next !== state);
+  const lastMove = next.history[next.history.length - 1];
+  assertEqual(lastMove.captured, null);
+});
+
+test('checkmate move sets status to win', () => {
+  const board = emptyBoard();
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 2, 4, piece('red', 'rook'));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const next = applyMove(state, { row: 2, col: 4 }, { row: 0, col: 4 });
   assertEqual(next.status, 'red_win');
 });
