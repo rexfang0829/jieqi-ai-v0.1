@@ -4,7 +4,7 @@ import { SIMPLE_AI_NOTE, SIMPLE_AI_TITLE } from '../ai/simpleAiText';
 import { getEndgameFeedback } from '../game/endgameFeedback';
 import { moveText } from '../game/moveNotation';
 
-export function AiPanel({ state }: { state: GameState }) {
+export function AiPanel({ state, version: _version }: { state: GameState; version?: number }) {
   const endgame = getEndgameFeedback(state.status);
   if (endgame) {
     return (
@@ -28,7 +28,7 @@ export function AiPanel({ state }: { state: GameState }) {
           <p>{r.reason}</p>
         </>
       ) : (
-        <p>{r.reason}</p>
+        <p>目前沒有可建議的合法步</p>
       )}
     </div>
   );

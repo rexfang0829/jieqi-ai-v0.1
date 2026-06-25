@@ -73,6 +73,7 @@ export default function App() {
   const [playQuickTitle, setPlayQuickTitle] = useState('未命名棋譜');
   const [playQuickMsg, setPlayQuickMsg] = useState('');
   const [aiMasterNote, setAiMasterNote] = useState<string | null>(null);
+  const [analyzeVersion, setAnalyzeVersion] = useState(0);
 
   /* ── 棋譜模式子頁狀態 ── */
   const [recordsPage, setRecordsPage] = useState<RecordsPage>('library');
@@ -490,9 +491,10 @@ export default function App() {
     return (
       <main>
         {renderHeader('輔助盤面模式')}
-        {aiMasterNote && (
-          <p style={{textAlign:'center',color:'#86efac',fontSize:13,margin:'4px 0 8px'}}>{aiMasterNote}</p>
-        )}
+        {aiMasterNote
+          ? <p style={{textAlign:'center',color:'#86efac',fontSize:13,margin:'4px 0 6px'}}>{aiMasterNote}</p>
+          : <p style={{textAlign:'center',color:'#94a3b8',fontSize:13,margin:'4px 0 6px'}}>目前盤面</p>
+        }
         {renderEndgameBanner()}
         {renderCorrectionPanel()}
         <Board
@@ -503,7 +505,13 @@ export default function App() {
           onSquareClick={click}
           onSquareLongPress={openCorrection}
         />
-        <AiPanel state={state} />
+        <div className="toolbar" style={{marginTop:6,flexWrap:'wrap',gap:6}}>
+          <button onClick={undo} disabled={!past.length}>回到上一步</button>
+          <button onClick={() => { setState(newGame()); setPast([]); setSelected(null); closeCorrection(); setAiMasterNote(null); }}>回到初始局面</button>
+          <button onClick={() => setAnalyzeVersion(v => v + 1)}>重新分析</button>
+          {aiMasterNote && <button onClick={() => setAiMasterNote(null)}>清除提示</button>}
+        </div>
+        <AiPanel version={analyzeVersion} state={state} />
         <WisdomPanel />
       </main>
     );

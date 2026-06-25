@@ -359,3 +359,29 @@ npm.cmd run build
 **分析目前局面流程**：`analyzePlayback()` deep clone `playbackState` → `setState` → `setMode('ai-master')`。切到 ai-master 後，`state` 即為回放第 N 步局面，Board 直接顯示該盤面，AiPanel 基於此給建議。
 
 **測試**：`npm test` 80 項全通過。`npx tsc` 零錯誤。沙盒 rollup 限制，Vercel 正常。
+
+---
+
+### 2026-06-25 輔助盤面模式 MVP 收斂（Claude）
+
+**修改檔案**：`src/App.tsx`、`src/components/AiPanel.tsx`
+
+**App.tsx 變更**：
+1. 新增 `analyzeVersion` state（`useState(0)`）。
+2. ai-master render 版面重整：
+   - 有 `aiMasterNote` → 顯示綠色來源提示；無 → 顯示灰色「目前盤面」。
+   - 棋盤（Board）完整顯示，支援點選、長按修正棋種、1~6 快捷鍵。
+   - 棋盤下方操作列：
+     - **回到上一步**（disabled 當 past 為空）
+     - **回到初始局面**（newGame + 清除 past / selected / aiMasterNote）
+     - **重新分析**（`analyzeVersion + 1`，讓 AiPanel 接收新 version prop 觸發重新計算）
+     - **清除提示**（只在有 aiMasterNote 時顯示）
+   - AiPanel 接收 `version={analyzeVersion}`，WisdomPanel 維持在最底。
+
+**AiPanel.tsx 變更**：
+1. 新增可選 `version?: number` prop（prefixed `_version` 避免 unused 警告），供 App 傳入觸發 re-render。
+2. 無合法步時顯示「目前沒有可建議的合法步」（原本只顯示 `r.reason`，語氣較模糊）。
+
+**輔助盤面現有操作**：看目前盤面 / 點選走棋 / 長按修正棋種 / 1~6 快捷鍵修正 / 回到上一步 / 回到初始局面 / 重新分析 / 清除來源提示 / 查看 AI 建議（建議步 + 分數 + 原因）/ 心得記錄。
+
+**測試**：`npm test` 80 項全通過。`npx tsc` 零錯誤。
