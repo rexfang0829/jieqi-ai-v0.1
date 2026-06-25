@@ -13,6 +13,10 @@ function palace(side: Side, p: Position) {
   return rows.includes(p.row) && p.col >= 3 && p.col <= 5;
 }
 
+function palaceCenter(side: Side): Position {
+  return side === 'red' ? { row: 8, col: 4 } : { row: 1, col: 4 };
+}
+
 function crossedRiver(side: Side, row: number) {
   return side === 'red' ? row <= 4 : row >= 5;
 }
@@ -61,7 +65,13 @@ export function isBasicLegalMove(board: Board, from: Position, to: Position): bo
     return !board[eye.row][eye.col];
   }
 
-  if (type === 'advisor') return adr === 1 && adc === 1;
+  if (type === 'advisor') {
+    if (!piece.revealed) {
+      const center = palaceCenter(piece.side);
+      return adr === 1 && adc === 1 && palace(piece.side, from) && same(to, center);
+    }
+    return adr === 1 && adc === 1;
+  }
 
   if (type === 'king') return ((adr === 1 && adc === 0) || (adr === 0 && adc === 1)) && palace(piece.side, to);
 

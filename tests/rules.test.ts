@@ -136,15 +136,29 @@ test('jieqi elephant can cross river but still needs field move and clear eye', 
   assertEqual(isBasicLegalMove(board, { row: 5, col: 2 }, { row: 3, col: 4 }), false);
 });
 
-test('hidden and revealed advisors use jieqi advisor movement', () => {
+test('hidden advisor first move must enter palace center', () => {
   const board = withKings();
-  place(board, 4, 4, piece('red', 'advisor', 'rook', false));
-  assertEqual(isBasicLegalMove(board, { row: 4, col: 4 }, { row: 3, col: 3 }), true);
-  assertEqual(isBasicLegalMove(board, { row: 4, col: 4 }, { row: 2, col: 2 }), false);
+  place(board, 9, 3, piece('red', 'advisor', 'rook', false));
+  assertEqual(isBasicLegalMove(board, { row: 9, col: 3 }, { row: 8, col: 4 }), true);
+  assertEqual(isBasicLegalMove(board, { row: 9, col: 3 }, { row: 8, col: 2 }), false);
+  assertEqual(isBasicLegalMove(board, { row: 9, col: 3 }, { row: 10, col: 4 }), false);
 
-  board[4][4] = piece('red', 'rook', 'advisor', true);
+  board[9][3] = null;
+  place(board, 4, 4, piece('red', 'advisor', 'rook', false));
+  assertEqual(isBasicLegalMove(board, { row: 4, col: 4 }, { row: 3, col: 3 }), false);
+
+  place(board, 0, 3, piece('black', 'advisor', 'rook', false));
+  assertEqual(isBasicLegalMove(board, { row: 0, col: 3 }, { row: 1, col: 4 }), true);
+  assertEqual(isBasicLegalMove(board, { row: 0, col: 3 }, { row: 1, col: 2 }), false);
+});
+
+test('revealed advisor can leave palace while king remains palace bound', () => {
+  const board = withKings();
+  place(board, 4, 4, piece('red', 'rook', 'advisor', true));
   assertEqual(isBasicLegalMove(board, { row: 4, col: 4 }, { row: 3, col: 3 }), true);
   assertEqual(isBasicLegalMove(board, { row: 4, col: 4 }, { row: 4, col: 3 }), false);
+  assertEqual(isBasicLegalMove(board, { row: 9, col: 4 }, { row: 8, col: 4 }), true);
+  assertEqual(isBasicLegalMove(board, { row: 9, col: 4 }, { row: 9, col: 6 }), false);
 });
 
 test('hidden and revealed elephants use jieqi elephant movement', () => {
@@ -415,6 +429,22 @@ test('checkmate after a move updates status to red_win', () => {
   const next = applyMove(state, { row: 1, col: 3 }, { row: 1, col: 4 });
   assertEqual(next.status, 'red_win');
   assertEqual(next.turn, 'black');
+});
+
+test('manual revealed advisor changed to cannon can deliver double cannon mate', () => {
+  const board = emptyBoard();
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 2, 4, piece('red', 'advisor', 'cannon', true));
+  place(board, 0, 3, piece('red', 'rook'));
+  place(board, 0, 5, piece('red', 'rook'));
+  place(board, 1, 8, piece('red', 'rook'));
+  place(board, 1, 0, piece('red', 'rook'));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const next = applyMove(state, { row: 1, col: 0 }, { row: 1, col: 4 });
+  assertEqual(isInCheck(next.board, 'black'), true);
+  assertEqual(isCheckmate(next.board, 'black'), true);
+  assertEqual(next.status, 'red_win');
 });
 
 test('non-playing status prevents further moves', () => {
