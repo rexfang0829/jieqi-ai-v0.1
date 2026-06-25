@@ -96,3 +96,30 @@ export function playEndgameSound(win: Window = window): void {
     // speechSynthesis unavailable
   }
 }
+
+/**
+ * Play timeout result announcement.
+ * Does NOT play the "絕殺" speech — instead announces time-out result.
+ */
+export function playTimeoutSound(side: 'red' | 'black', win: Window = window): void {
+  try {
+    if (typeof win.speechSynthesis === 'undefined') return;
+    const UtteranceClass = (win as unknown as Record<string, unknown>)['SpeechSynthesisUtterance'] as
+      | (new (t: string) => SpeechSynthesisUtterance)
+      | undefined;
+    if (!UtteranceClass) return;
+    win.speechSynthesis.cancel();
+    const text = side === 'red' ? '紅方時間到，黑方勝' : '黑方時間到，紅方勝';
+    const utter = new UtteranceClass(text);
+    utter.lang = 'zh-TW';
+    utter.pitch = 0.8;
+    utter.rate = 0.85;
+    utter.volume = 0.7;
+    const voices = win.speechSynthesis.getVoices();
+    const zhVoice = voices.find(v => v.lang.startsWith('zh'));
+    if (zhVoice) utter.voice = zhVoice;
+    win.speechSynthesis.speak(utter);
+  } catch {
+    // speechSynthesis unavailable
+  }
+}

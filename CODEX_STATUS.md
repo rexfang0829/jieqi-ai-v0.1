@@ -1,9 +1,25 @@
+## 最新完成的工作
+
+### 2026-06-26 正式對局自動儲存 + 收藏定位調整 + 10 分鐘對弈鐘 MVP（Claude）
+
+**功能**：
+
+1. **10 分鐘對弈鐘**：進入「一般揭棋模式」或點「新局」時，紅黑各 10:00 倒計時，輪到誰走棋才扣時；時間到觸發逾時，顯示橙紫色 banner，語音播報，棋局終止。
+
+2. **自動存檔**：每走一手及對局結束自動儲存棋譜（含 initialState），同一局覆蓋更新；逾時時存 endReason: 'timeout'，timeoutSide 標記。
+
+3. **收藏定位**：棋譜庫首頁顯示真實收藏數；最近對局每筆新增收藏星號按鈕；收藏頁顯示真實收藏列表。
+
+4. **回放逾時音效**：回放到結束步若 endReason === 'timeout' 則播 playTimeoutSound，否則播 playEndgameSound。
+
+**修改**：僅 src/App.tsx。
+**測試**：npm test 80 項全通過；npx tsc --noEmit 無錯。
+
 # Shared AI Status（Claude / Codex / ChatGPT 共用）
 
 > 此文件由 Claude、Codex、ChatGPT 共同維護，記錄每輪 AI 完成的工作。  
 > 任何 AI 完成工作後都應更新此文件，並以日期 + 工具名稱標記。
 
-## 最新完成的工作
 
 ### 2026-06-25 一般揭棋模式棋譜管理簡化（Claude）
 
@@ -308,140 +324,4 @@ npm.cmd run build
    - `JSON.parse(JSON.stringify(playbackState))` 深複製，避免 reference 污染。
    - `setState(snapshot)`、`setPast([])`、`setSelected(null)`、`closeCorrection()`、`cancelSync()`。
    - `setAiMasterNote(\`已載入棋譜第 ${playbackStep} 手局面\`)`。
-   - `setMode('ai-master')`（直接切換，不走 enterMode 避免清掉提示）。
-5. **`src/App.tsx`** – ai-master 渲染：`renderHeader` 下方顯示 `aiMasterNote` 綠色提示文字。
-6. **`src/game/gameRecord.ts`** – `fmtLocalDate()` 同樣改為 `toLocaleDateString()` + fallback；`recordToText` 使用此函式。
-
-**避免 reference 污染**：使用 `JSON.parse(JSON.stringify(playbackState))` 做深複製，確保 ai-master 的 state 與 playback 的 useMemo 互相獨立。
-
-**測試**：`npm test` 80 項全通過。  
-**TypeScript**：`npx tsc` 零錯誤。  
-**建置**：沙盒 rollup 限制，Vercel 正常。
-
----
-
-### 2026-06-25 回放局面帶入輔助盤面分析 + 時間顯示修正（Claude）
-
-**修改**：
-
-1. **`src/App.tsx`** – `analyzePlayback()` 完整實作：
-   - 優先用 `structuredClone(playbackState)`，不支援時 fallback `JSON.parse(JSON.stringify(...))`，確保深複製無 reference 污染。
-   - `setState(snapshot)` 將回放局面帶入 ai-master state。
-   - `setPast([])`、`setSelected(null)`、`closeCorrection()`、`cancelSync()` 清理殘留狀態。
-   - `setAiMasterNote(\`已載入「${title}」第 ${playbackStep} 手局面\`)` 顯示來源提示。
-   - `setMode('ai-master')` 直接切換（不走 `enterMode`，避免 `setAiMasterNote(null)` 清掉剛設的提示）。
-
-2. **`src/game/gameRecord.ts`** – `fmtLocalDate()` 從 `toLocaleDateString()` 改為 `toLocaleString()`，`recordToText()` 匯出文字包含完整日期時間。
-
-**`analyzePlayback` 是否真的帶入**：是。按下「分析目前局面」後，`playbackState`（由 `initialState` + applyMove 推演至第 N 步的局面）被深複製並 `setState` 進去，輔助盤面顯示的棋盤與回放當下完全相同，`AiPanel` 基於這個盤面給建議。
-
-**測試**：`npm test` 80 項全通過。  
-**TypeScript**：`npx tsc` 零錯誤。  
-**建置**：沙盒 rollup 限制，Vercel 正常。
-
----
-
-### 2026-06-25 輔助盤面模式顯示分析盤面（Claude）
-
-**問題**：ai-master 模式只有 AiPanel + WisdomPanel，沒有棋盤，使用者無法確認「分析目前局面」是否真的載入回放那一步。
-
-**修改**（僅 `src/App.tsx`，ai-master render block）：
-
-加入棋盤渲染，順序改為：
-1. `renderHeader('輔助盤面模式')`
-2. `aiMasterNote` 來源提示（綠色文字）
-3. `renderEndgameBanner()`
-4. `renderCorrectionPanel()`（支援長按修正棋種）
-5. **`Board`**（新增）— `board={state.board}`、`selected`、`legalMoves`、`moves`、`onSquareClick={click}`、`onSquareLongPress={openCorrection}`
-6. `AiPanel state={state}`
-7. `WisdomPanel`
-
-**分析目前局面流程**：`analyzePlayback()` deep clone `playbackState` → `setState` → `setMode('ai-master')`。切到 ai-master 後，`state` 即為回放第 N 步局面，Board 直接顯示該盤面，AiPanel 基於此給建議。
-
-**測試**：`npm test` 80 項全通過。`npx tsc` 零錯誤。沙盒 rollup 限制，Vercel 正常。
-
----
-
-### 2026-06-25 輔助盤面模式 MVP 收斂（Claude）
-
-**修改檔案**：`src/App.tsx`、`src/components/AiPanel.tsx`
-
-**App.tsx 變更**：
-1. 新增 `analyzeVersion` state（`useState(0)`）。
-2. ai-master render 版面重整：
-   - 有 `aiMasterNote` → 顯示綠色來源提示；無 → 顯示灰色「目前盤面」。
-   - 棋盤（Board）完整顯示，支援點選、長按修正棋種、1~6 快捷鍵。
-   - 棋盤下方操作列：
-     - **回到上一步**（disabled 當 past 為空）
-     - **回到初始局面**（newGame + 清除 past / selected / aiMasterNote）
-     - **重新分析**（`analyzeVersion + 1`，讓 AiPanel 接收新 version prop 觸發重新計算）
-     - **清除提示**（只在有 aiMasterNote 時顯示）
-   - AiPanel 接收 `version={analyzeVersion}`，WisdomPanel 維持在最底。
-
-**AiPanel.tsx 變更**：
-1. 新增可選 `version?: number` prop（prefixed `_version` 避免 unused 警告），供 App 傳入觸發 re-render。
-2. 無合法步時顯示「目前沒有可建議的合法步」（原本只顯示 `r.reason`，語氣較模糊）。
-
-**輔助盤面現有操作**：看目前盤面 / 點選走棋 / 長按修正棋種 / 1~6 快捷鍵修正 / 回到上一步 / 回到初始局面 / 重新分析 / 清除來源提示 / 查看 AI 建議（建議步 + 分數 + 原因）/ 心得記錄。
-
-**測試**：`npm test` 80 項全通過。`npx tsc` 零錯誤。
-
----
-
-### 2026-06-25 AI VS AI 模式 MVP（Claude）
-
-**修改檔案**：僅 `src/App.tsx`
-
-**新增內容**：
-
-1. **`AppMode`** 加入 `'ai-vs-ai'`；首頁 modeCards 加入入口卡片。
-2. **import** `recommendMove` from `./ai/simpleAi`。
-3. **State 變數**：`aiVsAiState`、`aiVsAiInitial`、`aiVsAiAutoPlay`、`aiVsAiMsg`、`aiVsAiIntervalRef`（interval ref）、`aiVsAiStateRef`（最新 state ref，供 interval closure 讀取）。
-4. **函式**：
-   - `startAiVsAiGame()`：`newGame()` → 同時存入 `aiVsAiInitial`（保留暗子真實配置），清除 autoPlay / msg。
-   - `aiVsAiStep()`：從 ref 讀取最新 state → `recommendMove()` → `applyMove(from, to)` → `setAiVsAiState`；>= 300 手自動停止。
-   - `saveAiVsAiRecord()`：`createGameRecord({ title, moves, finalStatus })` + `{ initialState: aiVsAiInitial }` → `saveGameRecord`。
-5. **useEffects**：
-   - state ref 同步：`aiVsAiStateRef.current = aiVsAiState`（確保 interval closure 讀到最新）。
-   - 自動播放：`aiVsAiAutoPlay` 為 true 時啟動 700ms interval；false / cleanup 時 clearInterval。
-   - 離開模式：`mode !== 'ai-vs-ai'` 時 clearInterval + `setAiVsAiAutoPlay(false)`。
-   - 對局結束：`status` 變為 red/black_win → 停止自動播放並顯示勝負訊息。
-6. **Render block**（ai-master 與 records 之間）：Header（自訂，顯示回合 / 第幾手）→ 訊息列 → Board（read-only）→ 操作列（新開 / AI 走一步 / 自動播放‧暫停 / 儲存棋譜）→ 手數計數器。
-
-**選步方式**：沿用 `recommendMove(state)`（一層對手回應安全評分），不重寫 AI。
-
-**自動播放**：每 700ms 從 `aiVsAiStateRef.current` 讀取最新局面 → `recommendMove` → `applyMove` → `setAiVsAiState`；超過 300 手 / 無合法步 / 對局結束時自動停止。
-
-**棋譜儲存**：title 預設為「AI VS AI yyyy-mm-dd hh:mm」；`initialState = aiVsAiInitial`（保留暗子配置）；`moves = state.history`；儲存至打譜模式的 localStorage，不污染一般對局。
-
-**測試**：`npm test` 80 項全通過。`npx tsc` 零錯誤。
-
----
-
-### 2026-06-25 棋譜玩家名稱欄位（Claude）
-
-**修改檔案**：`src/game/gameRecord.ts`、`src/App.tsx`
-
-**gameRecord.ts**：
-- `GameRecord` 加 `redPlayer?: string`、`blackPlayer?: string`。
-- `createGameRecord` input 接受同名欄位，trim 後空字串存為 `undefined`。
-- `recordToText()` 在局名 / 時間後補「紅方：xxx」、「黑方：xxx」兩行。
-- 舊棋譜無此欄位不受影響（`?? '紅方'` fallback）。
-
-**App.tsx**：
-- 新增 `saveRedPlayer`（預設 '紅方'）、`saveBlackPlayer`（預設 '黑方'）state。
-- 打譜模式「最近對局」儲存區塊新增兩個 input（紅方名稱 / 黑方名稱），儲存時寫入。
-- `saveCurrentGame()` 傳入 `saveRedPlayer` / `saveBlackPlayer`。
-- `savePlayQuick()`（一般揭棋快速儲存）固定寫入 `'紅方'` / `'黑方'`。
-- `saveAiVsAiRecord()` 固定寫入 `'AI 紅方'` / `'AI 黑方'`。
-- 棋譜列表卡片：標題下方多一行「紅方 vs 黑方」（或實際名稱），無名稱 fallback `?? '紅方'`。
-- 棋譜回放頁：標題下方多一行玩家名稱，格式同上。
-
-**寫入玩家名稱的入口**：
-| 入口 | 紅方 | 黑方 |
-|---|---|---|
-| 打譜模式「儲存目前對局」 | 使用者輸入（預設 '紅方'） | 使用者輸入（預設 '黑方'） |
-| 一般揭棋模式快速儲存 | '紅方'（固定） | '黑方'（固定） |
-| AI VS AI 儲存棋譜 | 'AI 紅方'（固定） | 'AI 黑方'（固定） |
-
-**測試**：`npm test` 80 項全通過。`npx tsc` 零錯誤。
+   - `setMode('ai-master')`（�

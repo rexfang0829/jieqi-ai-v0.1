@@ -16,6 +16,9 @@ export type GameRecord = {
   note?: string;
   redPlayer?: string;
   blackPlayer?: string;
+  favorited?: boolean;
+  endReason?: 'checkmate' | 'timeout';
+  timeoutSide?: 'red' | 'black';
   /**
    * The true initial GameState at game start (before move 1), including all
    * hidden-piece realType values. Playback starts from this state and applies
@@ -69,6 +72,8 @@ export function createGameRecord(input: {
   updatedAt?: string;
   redPlayer?: string;
   blackPlayer?: string;
+  endReason?: 'checkmate' | 'timeout';
+  timeoutSide?: 'red' | 'black';
 }): GameRecord {
   const now = nowIso();
   return {
@@ -83,6 +88,8 @@ export function createGameRecord(input: {
     note: input.note,
     redPlayer: input.redPlayer?.trim() || undefined,
     blackPlayer: input.blackPlayer?.trim() || undefined,
+    endReason: input.endReason,
+    timeoutSide: input.timeoutSide,
   };
 }
 
@@ -98,7 +105,7 @@ export function recordToText(record: GameRecord): string {
     `時間：${fmtLocalDate(record.createdAt)}`,
     `紅方：${record.redPlayer ?? '紅方'}`,
     `黑方：${record.blackPlayer ?? '黑方'}`,
-    `結果：${resultText(record.finalStatus)}`,
+    `結果：${resultText(record.finalStatus)}${record.endReason === 'timeout' ? `（${record.timeoutSide === 'red' ? '紅方' : '黑方'}時間到）` : ''}`,
     '',
     ...record.moves.map((move, index) => `${index + 1}. ${moveText(move)}`),
   ];
@@ -135,6 +142,20 @@ export function saveGameRecord(storage: RecordStorage | undefined, record: GameR
     const index = records.findIndex(item => item.id === record.id);
     if (index >= 0) records[index] = nextRecord;
     else records.unshift(nextRecord);
+    storage.setItem(GAME_RECORD_STORAGE_KEY, JSON.stringify({ ...emptyList(), records }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function toggleFavoriteRecord(storage: RecordStorage | undefined, id: string): boolean {
+  if (!storage) return false;
+  try {
+    const records = loadGameRecords(storage);
+    const index = records.findIndex(r => r.id === id);
+    if (index < 0) return false;
+    records[index] = { ...records[index], favorited: !records[index].favorited, updatedAt: new Date().toISOString() };
     storage.setItem(GAME_RECORD_STORAGE_KEY, JSON.stringify({ ...emptyList(), records }));
     return true;
   } catch {

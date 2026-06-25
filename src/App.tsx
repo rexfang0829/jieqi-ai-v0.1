@@ -14,13 +14,13 @@ import { cancelLastMoveSync, syncLastMove } from './game/lastMoveSync';
 import { loadPosition, savePosition } from './game/positionStorage';
 import { getAllLegalMoves, isInCheck } from './game/checkRules';
 import { getEndgameFeedback, shouldPlayEndgameSound, statusLabel } from './game/endgameFeedback';
-import { playEndgameSound } from './game/endgameSound';
+import { playEndgameSound, playTimeoutSound } from './game/endgameSound';
 import { editorPieceTypeNames } from './game/pieceText';
 import { playBoardSoundFeedback } from './game/soundEffects';
 import { recommendMove } from './ai/simpleAi';
 import {
   createGameRecord, deleteGameRecord, loadGameRecords, resultText,
-  saveGameRecord, type GameRecord,
+  saveGameRecord, toggleFavoriteRecord, type GameRecord,
 } from './game/gameRecord';
 
 type CorrectionAnchor = { x: number; y: number };
@@ -55,6 +55,13 @@ function resultClass(status: GameRecord['finalStatus']): string {
   return 'playing';
 }
 
+function fmtMs(ms: number): string {
+  const totalSec = Math.max(0, Math.ceil(ms / 1000));
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+}
+
 export default function App() {
   /* ── 共用遊戲狀態 ── */
   const [mode, setMode] = useState<AppMode>('home');
@@ -76,6 +83,17 @@ export default function App() {
   const [playQuickMsg, setPlayQuickMsg] = useState('');
   const [aiMasterNote, setAiMasterNote] = useState<string | null>(null);
   const [analyzeVersion, setAnalyzeVersion] = useState(0);
+
+  /* ── 一般揭棋模式：自動存檔 + 計時 ── */
+  const PLAY_INIT_MS = 10 * 60 * 1000;
+  const [playAutoSaveInitial, setPlayAutoSaveInitial] = useState<GameState | null>(null);
+  const playAutoSaveIdRef = useRef<string | null>(null);
+  const playCreatedAtRef = useRef<string | null>(null);
+  const [playTimeoutSide, setPlayTimeoutSide] = useState<'red' | 'black' | null>(null);
+  const [playAutoSaveMsg, setPlayAutoSaveMsg] = useState('');
+  const [redTimeMs, setRedTimeMs] = useState(PLAY_INIT_MS);
+  const [blackTimeMs, setBlackTimeMs] = useState(PLAY_INIT_MS);
+  const playTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   /* ── AI VS AI 模式 ── */
   const [aiVsAiState, setAiVsAiState] = useState<GameState>(() => newGame());
@@ -178,6 +196,17 @@ export default function App() {
       setRecordSearch('');
       setSaveMsg('');
       setRecordsList(loadGameRecords(storage()));
+    }
+    if (nextMode === 'play') {
+      const initial = newGame();
+      setState(initial); setPast([]); setSelected(null);
+      setPlayAutoSaveInitial(initial);
+      playAutoSaveIdRef.current = null;
+      playCreatedAtRef.current = new Date().toISOString();
+      setPlayTimeoutSide(null);
+      setPlayAutoSaveMsg('');
+      setRedTimeMs(PLAY_INIT_MS);
+      setBlackTimeMs(PLAY_INIT_MS);
     }
   }
 
@@ -380,6 +409,25 @@ export default function App() {
     setMode('ai-master');  // 直接切換，不走 enterMode（避免清掉 aiMasterNote）
   }
 
+  /* ── 一般揭棋模式：新局 + 收藏 ── */
+  function startNewPlayGame() {
+    const initial = newGame();
+    setState(initial); setPast([]); setSelected(null);
+    closeCorrection(); cancelSync();
+    setPlayAutoSaveInitial(initial);
+    playAutoSaveIdRef.current = null;
+    playCreatedAtRef.current = new Date().toISOString();
+    setPlayTimeoutSide(null);
+    setPlayAutoSaveMsg('');
+    setRedTimeMs(PLAY_INIT_MS);
+    setBlackTimeMs(PLAY_INIT_MS);
+  }
+
+  function toggleFavorite(id: string) {
+    toggleFavoriteRecord(storage(), id);
+    setRecordsList(loadGameRecords(storage()));
+  }
+
   /* ── AI VS AI 模式 函式 ── */
   function startAiVsAiGame() {
     const initial = newGame();
@@ -462,8 +510,14 @@ export default function App() {
       /* 只有非絕殺的將軍才叫「將軍」；絕殺時 endgameSound 會說「絕殺」 */
       check: !isEndgame && isInCheck(playbackState.board, playbackState.turn),
     });
-    /* 絕殺步：額外播放 endgame 音效（含「絕殺」語音） */
-    if (isEndgame) playEndgameSound();
+    /* 絕殺步：額外播放 endgame / timeout 音效 */
+    if (isEndgame) {
+      if (playbackRecord?.endReason === 'timeout' && playbackRecord.timeoutSide) {
+        playTimeoutSound(playbackRecord.timeoutSide);
+      } else {
+        playEndgameSound();
+      }
+    }
   }, [playbackStep, playbackRecord, playbackState, mode]);
 
   /* ── AI VS AI：同步 state ref ── */
@@ -507,6 +561,108 @@ export default function App() {
     if (aiVsAiState.status === 'red_win') { setAiVsAiAutoPlay(false); setAiVsAiMsg('紅方勝！'); }
     else if (aiVsAiState.status === 'black_win') { setAiVsAiAutoPlay(false); setAiVsAiMsg('黑方勝！'); }
   }, [aiVsAiState.status]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Play mode：自動存檔（每手 + 結束時） ── */
+  useEffect(() => {
+    if (mode !== 'play' || !playAutoSaveInitial || playTimeoutSide !== null) return;
+    if (state.history.length === 0) return;
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const title = `對局 ${dateStr}`;
+    const endReason: 'checkmate' | undefined =
+      state.status === 'red_win' || state.status === 'black_win' ? 'checkmate' : undefined;
+    const base = createGameRecord({
+      id: playAutoSaveIdRef.current ?? undefined,
+      title,
+      moves: state.history,
+      finalStatus: state.status,
+      redPlayer: '紅方',
+      blackPlayer: '黑方',
+      endReason,
+    });
+    const record = { ...base, initialState: playAutoSaveInitial };
+    const ok = saveGameRecord(storage(), record);
+    if (ok) {
+      playAutoSaveIdRef.current = base.id;
+      if (!playCreatedAtRef.current) playCreatedAtRef.current = base.createdAt;
+      setPlayAutoSaveMsg('自動儲存');
+    }
+  }, [state.history.length, state.status]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Play mode：計時（100ms tick） ── */
+  useEffect(() => {
+    if (mode !== 'play' || !playAutoSaveInitial || playTimeoutSide !== null) {
+      if (playTimerRef.current) { clearInterval(playTimerRef.current); playTimerRef.current = null; }
+      return;
+    }
+    if (state.status !== 'playing') {
+      if (playTimerRef.current) { clearInterval(playTimerRef.current); playTimerRef.current = null; }
+      return;
+    }
+    playTimerRef.current = setInterval(() => {
+      if (state.turn === 'red') setRedTimeMs(t => Math.max(0, t - 100));
+      else setBlackTimeMs(t => Math.max(0, t - 100));
+    }, 100);
+    return () => { if (playTimerRef.current) { clearInterval(playTimerRef.current); playTimerRef.current = null; } };
+  }, [mode, playAutoSaveInitial, playTimeoutSide, state.status, state.turn]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Play mode：逾時判定 ── */
+  useEffect(() => {
+    if (mode !== 'play' || !playAutoSaveInitial || playTimeoutSide !== null) return;
+    if (state.status !== 'playing') return;
+    if (redTimeMs <= 0) {
+      setPlayTimeoutSide('red');
+      playTimeoutSound('red');
+      /* 儲存逾時記錄 */
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const title = `對局 ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      const base = createGameRecord({
+        id: playAutoSaveIdRef.current ?? undefined,
+        title,
+        moves: state.history,
+        finalStatus: 'black_win',
+        redPlayer: '紅方',
+        blackPlayer: '黑方',
+        endReason: 'timeout',
+        timeoutSide: 'red',
+      });
+      saveGameRecord(storage(), { ...base, initialState: playAutoSaveInitial });
+      if (!playAutoSaveIdRef.current) playAutoSaveIdRef.current = base.id;
+    }
+  }, [redTimeMs]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (mode !== 'play' || !playAutoSaveInitial || playTimeoutSide !== null) return;
+    if (state.status !== 'playing') return;
+    if (blackTimeMs <= 0) {
+      setPlayTimeoutSide('black');
+      playTimeoutSound('black');
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const title = `對局 ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      const base = createGameRecord({
+        id: playAutoSaveIdRef.current ?? undefined,
+        title,
+        moves: state.history,
+        finalStatus: 'red_win',
+        redPlayer: '紅方',
+        blackPlayer: '黑方',
+        endReason: 'timeout',
+        timeoutSide: 'black',
+      });
+      saveGameRecord(storage(), { ...base, initialState: playAutoSaveInitial });
+      if (!playAutoSaveIdRef.current) playAutoSaveIdRef.current = base.id;
+    }
+  }, [blackTimeMs]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Play mode：離開時清除計時器 ── */
+  useEffect(() => {
+    if (mode !== 'play') {
+      if (playTimerRef.current) { clearInterval(playTimerRef.current); playTimerRef.current = null; }
+    }
+  }, [mode]);
 
   /* ── 共用 UI 片段 ── */
   function renderHeader(title: string) {
@@ -685,13 +841,13 @@ export default function App() {
                 <span className="recordLibArrow">›</span>
               </div>
             </button>
-            <button className="recordLibCard" onClick={() => setRecordsPage('favorites')}>
+            <button className="recordLibCard" onClick={() => { setRecordsList(loadGameRecords(storage())); setRecordsPage('favorites'); }}>
               <div>
                 <strong>我的收藏</strong>
                 <br /><em>標記收藏的棋譜</em>
               </div>
               <div style={{display:'flex',alignItems:'center',gap:8}}>
-                <span className="recordLibBadge">0</span>
+                <span className="recordLibBadge">{recordsList.filter(r => r.favorited).length}</span>
                 <span className="recordLibArrow">›</span>
               </div>
             </button>
@@ -707,18 +863,60 @@ export default function App() {
       );
     }
 
-    /* ── 我的收藏 / 大師棋譜（空狀態） ── */
-    if (recordsPage === 'favorites' || recordsPage === 'masters') {
-      const title = recordsPage === 'favorites' ? '我的收藏' : '大師棋譜';
-      const msg   = recordsPage === 'favorites' ? '尚無收藏棋譜。' : '大師棋譜即將上線，敬請期待。';
+    /* ── 大師棋譜（空狀態） ── */
+    if (recordsPage === 'masters') {
       return (
         <main>
           <header>
             <button className="homeButton" onClick={() => setRecordsPage('library')}>返回</button>
-            <h1>{title}</h1>
+            <h1>大師棋譜</h1>
           </header>
           <div className="panel emptyModePanel">
-            <p>{msg}</p>
+            <p>大師棋譜即將上線，敬請期待。</p>
+          </div>
+        </main>
+      );
+    }
+
+    /* ── 我的收藏 ── */
+    if (recordsPage === 'favorites') {
+      const favRecords = recordsList.filter(r => r.favorited);
+      return (
+        <main>
+          <header>
+            <button className="homeButton" onClick={() => setRecordsPage('library')}>返回</button>
+            <h1>我的收藏</h1>
+          </header>
+          <div className="recordsListPage">
+            {favRecords.length === 0 ? (
+              <div className="panel emptyModePanel"><p>尚無收藏棋譜。在最近對局中點擊 ☆ 可加入收藏。</p></div>
+            ) : (
+              <div className="recordsItems">
+                {favRecords.map(record => (
+                  <div key={record.id} style={{position:'relative'}}>
+                    <button className="recordsItem" onClick={() => openPlayback(record)}>
+                      <span className="recordsItemTitle">{record.title}</span>
+                      <span className="recordsItemMeta" style={{color:'#94a3b8',fontSize:12}}>{record.redPlayer ?? '紅方'} vs {record.blackPlayer ?? '黑方'}</span>
+                      <span className="recordsItemDate">{fmtDate(record.createdAt)}</span>
+                      <span className="recordsItemMeta">{record.moveCount} 手</span>
+                      <span className={`recordsItemResult ${resultClass(record.finalStatus)}`}>
+                        {resultText(record.finalStatus)}
+                      </span>
+                    </button>
+                    <button
+                      className="recordsStarBtn"
+                      style={{position:'absolute',right:8,top:8,fontSize:16,background:'none',border:'none',cursor:'pointer',color:'#fbbf24'}}
+                      onClick={(e: { stopPropagation: () => void }) => { e.stopPropagation(); toggleFavorite(record.id); }}
+                    >★</button>
+                    <button
+                      className="recordsDeleteBtn"
+                      style={{position:'absolute',right:8,bottom:8}}
+                      onClick={() => deleteRecord(record.id)}
+                    >刪除</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </main>
       );
@@ -788,6 +986,11 @@ export default function App() {
                       {resultText(record.finalStatus)}
                     </span>
                   </button>
+                  <button
+                    className="recordsStarBtn"
+                    style={{position:'absolute',right:48,bottom:8,fontSize:16,background:'none',border:'none',cursor:'pointer',color: record.favorited ? '#fbbf24' : '#64748b'}}
+                    onClick={(e: { stopPropagation: () => void }) => { e.stopPropagation(); toggleFavorite(record.id); }}
+                  >{record.favorited ? '★' : '☆'}</button>
                   <button
                     className="recordsDeleteBtn"
                     style={{position:'absolute',right:8,bottom:8}}
@@ -918,39 +1121,55 @@ export default function App() {
   /* ══════════════════════════════════════════
      一般揭棋模式（預設）
   ══════════════════════════════════════════ */
+  const redTimeFmt = fmtMs(redTimeMs);
+  const blackTimeFmt = fmtMs(blackTimeMs);
+  const playIsTimeout = playTimeoutSide !== null;
+  const playGameStarted = !!playAutoSaveInitial;
+
   return (
     <main>
       {renderHeader('一般揭棋模式')}
-      {renderEndgameBanner()}
-      <div className="toolbar">
-        <button onClick={toggleSyncMode}>{syncMode ? '取消同步' : '同步上一手'}</button>
-        <button onClick={undo} disabled={!past.length}>回到上一步</button>
-        <button onClick={() => { setPlayQuickTitle('未命名棋譜'); setPlayQuickMsg(''); setPlayQuickSave(true); }}>儲存棋譜</button>
-      </div>
-      {playQuickSave && (
-        <div style={{display:'flex',gap:8,alignItems:'center',padding:'6px 12px 8px',background:'var(--panel-bg,#1e293b)',borderBottom:'1px solid #334155'}}>
-          <input
-            value={playQuickTitle}
-            onChange={(e: { target: { value: string } }) => setPlayQuickTitle(e.target.value)}
-            placeholder="棋譜名稱"
-            style={{flex:1,minWidth:0,padding:'4px 8px',borderRadius:4,border:'1px solid #475569',background:'#0f172a',color:'inherit',fontSize:14}}
-            onKeyDown={(e: { key: string }) => { if (e.key === 'Enter') savePlayQuick(); if (e.key === 'Escape') setPlayQuickSave(false); }}
-            autoFocus
-          />
-          <button onClick={savePlayQuick} style={{whiteSpace:'nowrap'}}>確認</button>
-          <button onClick={() => setPlayQuickSave(false)} style={{whiteSpace:'nowrap'}}>取消</button>
+
+      {/* 計時器列 */}
+      {playGameStarted && (
+        <div style={{display:'flex',justifyContent:'space-between',padding:'4px 12px',background:'var(--panel-bg,#1e293b)',borderBottom:'1px solid #334155',fontSize:15,fontFamily:'monospace'}}>
+          <span style={{color: redTimeMs <= 30000 ? '#f87171' : '#fca5a5'}}>
+            紅方 {redTimeFmt}
+          </span>
+          {playIsTimeout && (
+            <span style={{color:'#fcd34d',fontSize:13,alignSelf:'center'}}>
+              {playTimeoutSide === 'red' ? '紅方時間到，黑方勝' : '黑方時間到，紅方勝'}
+            </span>
+          )}
+          {playAutoSaveMsg && !playIsTimeout && (
+            <span style={{color:'#86efac',fontSize:11,alignSelf:'center'}}>{playAutoSaveMsg}</span>
+          )}
+          <span style={{color: blackTimeMs <= 30000 ? '#60a5fa' : '#93c5fd'}}>
+            黑方 {blackTimeFmt}
+          </span>
         </div>
       )}
-      {playQuickMsg && (
-        <p style={{textAlign:'center',color:'#86efac',margin:'4px 0 6px',fontSize:13}}>{playQuickMsg}</p>
+
+      {renderEndgameBanner()}
+      {playIsTimeout && (
+        <div className="endgameBanner" style={{background:'#7c3aed'}}>
+          <strong>時間到</strong>
+          <span>{playTimeoutSide === 'red' ? '黑方勝（紅方超時）' : '紅方勝（黑方超時）'}</span>
+          <small>本局結束</small>
+        </div>
       )}
+      <div className="toolbar">
+        <button onClick={startNewPlayGame}>新局</button>
+        <button onClick={toggleSyncMode} disabled={playIsTimeout}>{syncMode ? '取消同步' : '同步上一手'}</button>
+        <button onClick={undo} disabled={!past.length || playIsTimeout}>回到上一步</button>
+      </div>
       {syncMode && (
         <div className={`panel syncPanel ${syncError ? 'syncError' : ''}`} style={{marginBottom:'12px'}}>
           {syncError || (syncFrom ? '同步上一手：請點終點' : '同步上一手：請點起點')}
         </div>
       )}
       {/* 正式對局：不傳 onSquareLongPress，禁止長按修正棋種 */}
-      <Board board={state.board} selected={selected} syncFrom={syncFrom} legalMoves={legalMoves} moves={state.history} onSquareClick={click} />
+      <Board board={state.board} selected={selected} syncFrom={syncFrom} legalMoves={legalMoves} moves={state.history} onSquareClick={playIsTimeout ? () => {} : click} />
     </main>
   );
 }
