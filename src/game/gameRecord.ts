@@ -14,6 +14,8 @@ export type GameRecord = {
   finalStatus: Extract<GameStatus, 'playing' | 'red_win' | 'black_win'>;
   moveCount: number;
   note?: string;
+  redPlayer?: string;
+  blackPlayer?: string;
   /**
    * The true initial GameState at game start (before move 1), including all
    * hidden-piece realType values. Playback starts from this state and applies
@@ -65,6 +67,8 @@ export function createGameRecord(input: {
   id?: string;
   createdAt?: string;
   updatedAt?: string;
+  redPlayer?: string;
+  blackPlayer?: string;
 }): GameRecord {
   const now = nowIso();
   return {
@@ -77,6 +81,8 @@ export function createGameRecord(input: {
     finalStatus: safeStatus(input.finalStatus),
     moveCount: input.moves.length,
     note: input.note,
+    redPlayer: input.redPlayer?.trim() || undefined,
+    blackPlayer: input.blackPlayer?.trim() || undefined,
   };
 }
 
@@ -90,6 +96,8 @@ export function recordToText(record: GameRecord): string {
   const lines = [
     `局名：${record.title}`,
     `時間：${fmtLocalDate(record.createdAt)}`,
+    `紅方：${record.redPlayer ?? '紅方'}`,
+    `黑方：${record.blackPlayer ?? '黑方'}`,
     `結果：${resultText(record.finalStatus)}`,
     '',
     ...record.moves.map((move, index) => `${index + 1}. ${moveText(move)}`),

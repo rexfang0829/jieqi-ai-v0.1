@@ -91,6 +91,8 @@ export default function App() {
   const [recordSearch, setRecordSearch] = useState('');
   const [saveTitle, setSaveTitle] = useState('未命名棋譜');
   const [saveMsg, setSaveMsg] = useState('');
+  const [saveRedPlayer, setSaveRedPlayer] = useState('紅方');
+  const [saveBlackPlayer, setSaveBlackPlayer] = useState('黑方');
   const [playbackRecord, setPlaybackRecord] = useState<GameRecord | null>(null);
   const [playbackStep, setPlaybackStep] = useState(0);
 
@@ -323,7 +325,7 @@ export default function App() {
     /* 只存 initialState（開局完整暗子配置），不存每步 snapshots，節省 localStorage */
     const initialState = past.length > 0 ? past[0] : state;
     const record = {
-      ...createGameRecord({ title: saveTitle, moves: state.history, finalStatus: state.status }),
+      ...createGameRecord({ title: saveTitle, moves: state.history, finalStatus: state.status, redPlayer: saveRedPlayer, blackPlayer: saveBlackPlayer }),
       initialState,
     };
     const ok = saveGameRecord(storage(), record);
@@ -335,7 +337,7 @@ export default function App() {
   function savePlayQuick() {
     const initialState = past.length > 0 ? past[0] : state;
     const record = {
-      ...createGameRecord({ title: playQuickTitle.trim() || '未命名棋譜', moves: state.history, finalStatus: state.status }),
+      ...createGameRecord({ title: playQuickTitle.trim() || '未命名棋譜', moves: state.history, finalStatus: state.status, redPlayer: '紅方', blackPlayer: '黑方' }),
       initialState,
     };
     const ok = saveGameRecord(storage(), record);
@@ -404,7 +406,7 @@ export default function App() {
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
     const title = `AI VS AI ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-    const record = { ...createGameRecord({ title, moves: aiVsAiStateRef.current.history, finalStatus: aiVsAiStateRef.current.status }), initialState: initial };
+    const record = { ...createGameRecord({ title, moves: aiVsAiStateRef.current.history, finalStatus: aiVsAiStateRef.current.status, redPlayer: 'AI 紅方', blackPlayer: 'AI 黑方' }), initialState: initial };
     const ok = saveGameRecord(storage(), record);
     setAiVsAiMsg(ok ? '棋譜已儲存至打譜模式' : '儲存失敗');
   }
@@ -740,6 +742,20 @@ export default function App() {
                 onChange={(e: { target: { value: string } }) => setSaveTitle(e.target.value)}
                 placeholder="棋譜名稱"
               />
+              <div style={{display:'flex',gap:6,marginTop:4}}>
+                <input
+                  value={saveRedPlayer}
+                  onChange={(e: { target: { value: string } }) => setSaveRedPlayer(e.target.value)}
+                  placeholder="紅方名稱"
+                  style={{flex:1}}
+                />
+                <input
+                  value={saveBlackPlayer}
+                  onChange={(e: { target: { value: string } }) => setSaveBlackPlayer(e.target.value)}
+                  placeholder="黑方名稱"
+                  style={{flex:1}}
+                />
+              </div>
               <button onClick={saveCurrentGame}>儲存</button>
               {saveMsg && <p className="recordsSaveMsg">{saveMsg}</p>}
             </div>
@@ -765,6 +781,7 @@ export default function App() {
                 <div key={record.id} style={{position:'relative'}}>
                   <button className="recordsItem" onClick={() => openPlayback(record)}>
                     <span className="recordsItemTitle">{record.title}</span>
+                    <span className="recordsItemMeta" style={{color:'#94a3b8',fontSize:12}}>{record.redPlayer ?? '紅方'} vs {record.blackPlayer ?? '黑方'}</span>
                     <span className="recordsItemDate">{fmtDate(record.createdAt)}</span>
                     <span className="recordsItemMeta">{record.moveCount} 手</span>
                     <span className={`recordsItemResult ${resultClass(record.finalStatus)}`}>
@@ -804,6 +821,8 @@ export default function App() {
               <div className="playbackMeta" style={{marginBottom:10}}>
                 <div>
                   <strong>{playbackRecord.title}</strong>
+                  <br />
+                  <span style={{fontSize:13,color:'#94a3b8'}}>{playbackRecord.redPlayer ?? '紅方'} vs {playbackRecord.blackPlayer ?? '黑方'}</span>
                   <br />
                   <em>{resultText(playbackRecord.finalStatus)}</em>
                   <br />

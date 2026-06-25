@@ -415,3 +415,33 @@ npm.cmd run build
 **棋譜儲存**：title 預設為「AI VS AI yyyy-mm-dd hh:mm」；`initialState = aiVsAiInitial`（保留暗子配置）；`moves = state.history`；儲存至打譜模式的 localStorage，不污染一般對局。
 
 **測試**：`npm test` 80 項全通過。`npx tsc` 零錯誤。
+
+---
+
+### 2026-06-25 棋譜玩家名稱欄位（Claude）
+
+**修改檔案**：`src/game/gameRecord.ts`、`src/App.tsx`
+
+**gameRecord.ts**：
+- `GameRecord` 加 `redPlayer?: string`、`blackPlayer?: string`。
+- `createGameRecord` input 接受同名欄位，trim 後空字串存為 `undefined`。
+- `recordToText()` 在局名 / 時間後補「紅方：xxx」、「黑方：xxx」兩行。
+- 舊棋譜無此欄位不受影響（`?? '紅方'` fallback）。
+
+**App.tsx**：
+- 新增 `saveRedPlayer`（預設 '紅方'）、`saveBlackPlayer`（預設 '黑方'）state。
+- 打譜模式「最近對局」儲存區塊新增兩個 input（紅方名稱 / 黑方名稱），儲存時寫入。
+- `saveCurrentGame()` 傳入 `saveRedPlayer` / `saveBlackPlayer`。
+- `savePlayQuick()`（一般揭棋快速儲存）固定寫入 `'紅方'` / `'黑方'`。
+- `saveAiVsAiRecord()` 固定寫入 `'AI 紅方'` / `'AI 黑方'`。
+- 棋譜列表卡片：標題下方多一行「紅方 vs 黑方」（或實際名稱），無名稱 fallback `?? '紅方'`。
+- 棋譜回放頁：標題下方多一行玩家名稱，格式同上。
+
+**寫入玩家名稱的入口**：
+| 入口 | 紅方 | 黑方 |
+|---|---|---|
+| 打譜模式「儲存目前對局」 | 使用者輸入（預設 '紅方'） | 使用者輸入（預設 '黑方'） |
+| 一般揭棋模式快速儲存 | '紅方'（固定） | '黑方'（固定） |
+| AI VS AI 儲存棋譜 | 'AI 紅方'（固定） | 'AI 黑方'（固定） |
+
+**測試**：`npm test` 80 項全通過。`npx tsc` 零錯誤。
