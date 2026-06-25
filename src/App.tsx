@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GameState, PieceType, Position } from './types/chess';
 import { Board } from './components/Board';
 import { MoveList } from './components/MoveList';
@@ -17,7 +17,7 @@ import { getAllLegalMoves, isInCheck } from './game/checkRules';
 import { getEndgameFeedback, shouldPlayEndgameSound, statusLabel } from './game/endgameFeedback';
 import { playEndgameSound } from './game/endgameSound';
 import { editorPieceTypeNames } from './game/pieceText';
-import { playCaptureSound, playCheckSound, playMoveSound, shouldPlayMoveSound } from './game/soundEffects';
+import { playBoardSoundFeedback } from './game/soundEffects';
 import {
   createGameRecord, deleteGameRecord, loadGameRecords, resultText,
   saveGameRecord, type GameRecord,
@@ -58,6 +58,7 @@ export default function App() {
   const [syncFrom, setSyncFrom] = useState<Position | null>(null);
   const [syncError, setSyncError] = useState('');
   const [lastSoundStatus, setLastSoundStatus] = useState(state.status);
+  const playbackSoundStepRef = useRef<number>(-1);  // 追蹤上一次播音的 step，避免 mount 時誤播
   const [editorError, setEditorError] = useState('');
   const [correctionPos, setCorrectionPos] = useState<Position | null>(null);
   const [correctionAnchor, setCorrectionAnchor] = useState<CorrectionAnchor | null>(null);
@@ -166,12 +167,6 @@ export default function App() {
     return { x, y };
   }
 
-  function pickMoveSound(next: GameState, hasCaptured: boolean) {
-    if (isInCheck(next.board, next.turn)) playCheckSound();
-    else if (hasCaptured) playCaptureSound();
-    else playMoveSound();
-  }
-
   function click(pos: Position) {
     if (syncMode) { syncClick(pos); return; }
     closeCorrection();
@@ -183,10 +178,11 @@ export default function App() {
       if (next !== state) {
         setPast(h => [...h, state]);
         setState(next);
-        if (shouldPlayMoveSound(state, next) && next.status === 'playing') {
-          const lastMove = next.history[next.history.length - 1];
-          pickMoveSound(next, !!lastMove?.captured);
-        }
+        const lastMove = next.history[next.history.length - 1];
+        playBoardSoundFeedback({
+          captured: !!lastMove?.captured,
+          check: isInCheck(next.board, next.turn),
+        });
       }
       setSelected(null);
       return;
@@ -282,10 +278,11 @@ export default function App() {
     const result = syncLastMove(state, syncFrom, pos);
     if (result.applied) {
       setPast(h => [...h, state]); setState(result.state);
-      if (shouldPlayMoveSound(state, result.state) && result.state.status === 'playing') {
-        const lastMove = result.state.history[result.state.history.length - 1];
-        pickMoveSound(result.state, !!lastMove?.captured);
-      }
+      const lastMove = result.state.history[result.state.history.length - 1];
+      playBoardSoundFeedback({
+        captured: !!lastMove?.captured,
+        check: isInCheck(result.state.board, result.state.turn),
+      });
       setSyncMode(false); setSyncFrom(null); setSyncError(''); return;
     }
     cancelLastMoveSync(state); setSyncFrom(null); setSyncError('這一步不合法，未套用');
@@ -372,6 +369,20 @@ export default function App() {
     if (shouldPlayEndgameSound(lastSoundStatus, state.status)) playEndgameSound();
     if (lastSoundStatus !== state.status) setLastSoundStatus(state.status);
   }, [lastSoundStatus, state.status]);
+
+  /* 回放步數音效：step 變化時播一次，跳到第 0 步不播，不在回放模式時不播 */
+  useEffect(() => {
+    const prev = playbackSoundStepRef.current;
+    playbackSoundStepRef.current = playbackStep;
+    if (prev < 0 || playbackStep === 0 || !playbackRecord || mode !== 'records') return;
+    const moveIdx = playbackStep - 1;
+    if (moveIdx >= playbackRecord.moves.length) return;
+    const move = playbackRecord.moves[moveIdx];
+    playBoardSoundFeedback({
+      captured: !!move.captured,
+      check: isInCheck(playbackState.board, playbackState.turn),
+    });
+  }, [playbackStep, playbackRecord, playbackState, mode]);
 
   /* ── 共用 UI 片段 ── */
   function renderHeader(title: string) {

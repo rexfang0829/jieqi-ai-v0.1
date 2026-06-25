@@ -5,6 +5,44 @@
 
 ## 最新完成的工作
 
+### 2026-06-25 全 App 棋盤音效規則統一（Claude）
+
+**目標**：所有走子 / 同步 / 回放步數變化統一使用相同音效規則，語音可疊加不互斥。
+
+**音量常數**（集中在 `soundEffects.ts` 頂部，方便微調）：
+- `BOARD_SOUND_VOLUME = 0.80`：噪音爆發（落子聲）峰值增益乘數
+- `VOICE_SOUND_VOLUME = 0.70`：語音合成音量
+
+**新音效規則**：
+1. 有走子 / 步數變化 → 播放落子聲（900 Hz 噪音爆發）
+2. 有吃子 → 額外佇列語音「吃」
+3. 有將軍 → 額外佇列語音「將軍」
+4. 絕殺 / 對局結束 → 由現有 endgame `useEffect` 播放，不重複
+5. 語音佇列（`queueSpeech`）不取消已播語音，吃 + 將軍可以連續播
+
+**修改檔案**：
+
+1. **`src/game/soundEffects.ts`**（完整改寫）：
+   - 加 `BOARD_SOUND_VOLUME`、`VOICE_SOUND_VOLUME` 常數
+   - 加 `queueSpeech()`：不取消當前語音，直接佇列
+   - `speakNow()` 保留（供舊 `playCheckSound` 和 endgameSound 使用）
+   - 加 `playBoardSoundFeedback({ captured, check, win? })`：統一 helper
+   - 保留 `playMoveSound`、`playCaptureSound`、`playCheckSound`、`shouldPlayMoveSound`（測試相容）
+   - 舊噪音爆發參數全部乘以音量常數
+
+2. **`src/App.tsx`**：
+   - 加 `useRef` import
+   - 換 soundEffects import 為 `playBoardSoundFeedback`（移除 4 個舊 import）
+   - 移除 `pickMoveSound()` helper
+   - `click()`：移除 `shouldPlayMoveSound + next.status==='playing'` 條件，改用 `playBoardSoundFeedback`；終局走子也播落子聲（絕殺語音由 endgame effect 負責）
+   - `syncClick()`：同步，移除舊條件改用 helper
+   - 加 `playbackSoundStepRef`（`useRef<number>(-1)`）
+   - 加 playback 音效 `useEffect`：step 變化時播一次目標步音效；step=0 不播；不在 records 模式不播；跳多步只播目標步（不播中間每步）
+
+**測試**：`npm test` 80 項全通過。
+
+---
+
 ### 2026-06-25 手機版被吃子 overlay 對齊修正（Claude）
 
 **問題根因**：桌機版在 `.capturedOverlayLeft` / `.capturedOverlayRight` 設定的 `justify-content`
