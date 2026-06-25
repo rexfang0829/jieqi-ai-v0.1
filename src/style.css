@@ -40,7 +40,7 @@ header button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-r
 .capturedPieces em{font-style:normal;background:#5a2c17;border:1px solid #b98545;border-radius:999px;padding:2px 8px;font-size:13px;line-height:1.6}
 .compactCapturedPanel{max-height:150px;font-size:13px}
 .compactCapturedPanel p{margin:8px 0;display:grid;gap:3px;line-height:1.45}
-/* Captured overlay: side column outside the board */
+/* capturedBoardOverlay: side column (desktop) or row below board (mobile) */
 .capturedBoardOverlay{display:flex;flex-direction:column;justify-content:flex-start;padding:8px 0;width:78px;flex-shrink:0;align-self:stretch;pointer-events:none}
 .capturedBoardStack{display:flex;gap:4px;flex-wrap:wrap;align-content:flex-start;width:78px}
 .capturedBottomLeft{margin-top:auto}
@@ -51,16 +51,17 @@ header button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-r
 .turnSelector{display:flex;gap:8px;align-items:center}
 .turnSelector select{width:auto;margin:0;padding:8px 28px 8px 10px}
 .layout{display:flex;gap:20px;align-items:flex-start}
-/* boardRow: flex row containing captured overlay + boardShell */
-.boardRow{display:flex;gap:6px;align-items:flex-start}
+/* boardRow: --cell lives on boardShell so fileLabels and boardGrid both inherit it */
+.boardRow{display:flex;gap:8px;align-items:flex-start}
 .boardWrap{background:#b86d32;padding:14px 22px 18px;border:8px solid #5b2d13;border-radius:10px;box-shadow:0 10px 30px #0008}
-.boardShell{display:grid;grid-template-rows:auto auto auto;gap:8px}
-/* +6px to width/height compensates for border:3px inside box-sizing:border-box */
-.fileLabels{display:grid;grid-template-columns:repeat(9,var(--cell,64px));width:calc(var(--cell,64px) * 9 + 6px);color:#180b04;font-size:30px;font-weight:800;line-height:1;font-family:'Times New Roman','Noto Serif TC',serif}
+/* --cell defined on boardShell so all descendants (fileLabels + boardGrid + pointLayer) share it */
+.boardShell{--cell:64px;display:grid;grid-template-rows:auto auto auto;gap:8px}
+/* +6px compensates for border:3px * 2 inside box-sizing:border-box */
+.fileLabels{display:grid;grid-template-columns:repeat(9,var(--cell));width:calc(var(--cell) * 9 + 6px);color:#180b04;font-size:30px;font-weight:800;line-height:1;font-family:'Times New Roman','Noto Serif TC',serif}
 .fileLabels span{display:flex;align-items:center;justify-content:center}
 .topFileLabels{transform:none}
 .bottomFileLabels{font-family:'Noto Serif TC','Microsoft JhengHei',serif}
-.boardGrid{--cell:64px;position:relative;width:calc(var(--cell) * 9 + 6px);height:calc(var(--cell) * 10 + 6px);background:#d99a55;border:3px solid #5b2d13}
+.boardGrid{position:relative;width:calc(var(--cell) * 9 + 6px);height:calc(var(--cell) * 10 + 6px);background:#d99a55;border:3px solid #5b2d13}
 .boardLines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .boardLines line{stroke:#6e3a17;stroke-width:.035;stroke-linecap:square}
 .boardLines .outerLine{fill:none;stroke:#2f1709;stroke-width:.055}
@@ -68,17 +69,18 @@ header button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-r
 .riverText{position:absolute;left:0;right:0;top:calc(var(--cell) * 4.5);height:var(--cell);display:grid;grid-template-columns:1fr 1fr;align-items:center;justify-items:center;color:#6b250c;font-size:28px;font-weight:bold;letter-spacing:14px;text-shadow:0 1px #ffc77d;pointer-events:none}
 .pointLayer{position:absolute;inset:0;display:grid;grid-template-columns:repeat(9,var(--cell));grid-template-rows:repeat(10,var(--cell))}
 .pointWrap{position:relative;display:flex;align-items:center;justify-content:center}
-.square{width:58px;height:58px;border:0;border-radius:50%;background:transparent;display:flex;align-items:center;justify-content:center;position:relative;z-index:2}
+.square{width:calc(var(--cell) * .88);height:calc(var(--cell) * .88);border:0;border-radius:50%;background:transparent;display:flex;align-items:center;justify-content:center;position:relative;z-index:2}
 .square.legal::after{content:'';width:14px;height:14px;border-radius:50%;background:#f7f2d8;box-shadow:0 0 0 3px #2f7d32cc,0 2px 5px #0008;position:absolute}
-.square.captureTarget::after{content:'';width:56px;height:56px;border-radius:50%;background:transparent;border:4px solid #fff7bc;box-shadow:0 0 0 3px #2f7d32cc,0 0 12px #fff5;position:absolute}
+.square.captureTarget::after{content:'';width:calc(var(--cell) * .84);height:calc(var(--cell) * .84);border-radius:50%;background:transparent;border:4px solid #fff7bc;box-shadow:0 0 0 3px #2f7d32cc,0 0 12px #fff5;position:absolute}
 .square.selected{box-shadow:0 0 0 4px #ffe08aaa;background:#ffe08a22}
 .square.syncOrigin{box-shadow:0 0 0 4px #56b7ffcc;background:#56b7ff22}
-/* aspect-ratio:1/1 enforces perfect circle; symmetric shadow removes oval illusion */
-.piece{width:50px;height:50px;aspect-ratio:1/1;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;line-height:1;background:#f4d093;border:3px solid #6b3216;box-shadow:inset 0 0 0 3px #e8b86f,0 2px 6px #0007}
+/* Revealed pieces: cream-coloured circles with Chinese characters */
+.piece{width:calc(var(--cell) * .76);height:calc(var(--cell) * .76);aspect-ratio:1/1;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:calc(var(--cell) * .46);font-weight:800;line-height:1;background:#f4d093;border:3px solid #6b3216;box-shadow:inset 0 0 0 3px #e8b86f,0 2px 6px #0007}
 .piece.red{color:#b30000}
 .piece.black{color:#111}
-.piece.hidden{background:radial-gradient(circle,#8b3d1d 0 55%,#5b2410 56%);border-color:#efc27b}
-.piece.hidden::before{content:'';width:31px;height:31px;border-radius:50%;border:3px solid #efc27b;box-shadow:inset 0 0 0 2px #5b2410}
+/* Hidden pieces: clean lacquered wood back — no inner ring, just gradient */
+.piece.hidden{background:radial-gradient(circle at 38% 32%, #e0904a 5%, #aa3e14 42%, #6a2008 78%, #3c0f04);border-color:#c87840;box-shadow:inset 0 0 0 3px #a84520,0 2px 6px #0007}
+.piece.hidden::before{display:none}
 aside{width:430px;display:flex;flex-direction:column;gap:12px}
 .panel{background:#3b2011;border:1px solid #9b6935;border-radius:12px;padding:14px;max-height:290px;overflow:auto}
 .panel h3{margin:0 0 8px}
@@ -114,17 +116,19 @@ li.revealedCapture{color:#ffe8be}
   .toolbar button,.homeButton,header button{min-height:44px}
   .layout{flex-direction:column;gap:14px}
   .boardWrap{max-width:100%;overflow-x:auto;padding:8px 10px 12px;border-width:5px;border-radius:8px}
-  .boardGrid{--cell:min(42px,calc((100vw - 58px) / 9))}
-  .fileLabels{grid-template-columns:repeat(9,var(--cell));width:calc(var(--cell) * 9 + 6px);font-size:22px}
-  .square{width:calc(var(--cell) * .94);height:calc(var(--cell) * .94)}
-  .piece{width:calc(var(--cell) * .8);height:calc(var(--cell) * .8);font-size:calc(var(--cell) * .5)}
-  .riverText{font-size:19px;letter-spacing:6px}
+  /* --cell on boardShell scales the whole board including fileLabels */
+  .boardShell{--cell:min(42px,calc((100vw - 58px) / 9))}
+  /* boardRow becomes column: board on top, captured row below */
+  .boardRow{flex-direction:column;gap:6px;align-items:flex-start}
+  /* show captured pieces as a horizontal row below the board */
+  .capturedBoardOverlay{display:flex;flex-direction:column;width:100%;padding:4px 0;gap:4px;align-self:auto}
+  .capturedBoardStack{width:auto;flex-wrap:wrap;flex-direction:row;gap:4px}
+  .capturedBottomLeft{margin-top:0}
+  .capturedMiniPiece{width:20px;height:20px;font-size:12px;border-width:1px;box-shadow:inset 0 0 0 1px #e8b86f,0 1px 3px #0007}
   .endgameBanner{width:100%;gap:8px;justify-content:center}
   .endgameBanner strong{font-size:22px}
   .endgameBanner span{font-size:16px}
   .capturedPieces em{font-size:12px;padding:2px 7px}
-  /* hide side overlay on mobile — CapturedPanel below board covers it */
-  .capturedBoardOverlay{display:none}
   .panel{width:100%;max-height:none}
   .aiPanel,.capturedPanel,.recordPanel,.editorPanel{max-height:none}
   .correctionPanel{width:min(280px,calc(100vw - 24px))}
