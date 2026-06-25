@@ -86,7 +86,7 @@ function queueSpeech(win: Window, text: string, pitch: number, rate: number): vo
     const voices = win.speechSynthesis.getVoices();
     const zhVoice = voices.find(v => v.lang.startsWith('zh'));
     if (zhVoice) utter.voice = zhVoice;
-    win.speechSynthesis.speak(utter);  // queues; does NOT cancel current
+    win.speechSynthesis.speak(utter);
   } catch {
     // speechSynthesis unavailable
   }
@@ -128,22 +128,18 @@ export interface BoardSoundFeedback {
 
 /**
  * Unified sound feedback for any board move or playback step change.
- *
- * Rules:
- *   - Always plays the 落子聲 noise burst.
- *   - Queues "吃" voice if captured.
- *   - Queues "將軍" voice if in check.
- *   - Voices stack (not mutually exclusive).
- *   - Endgame sound is handled separately by the endgame useEffect in App.tsx.
+ * Always plays the move noise burst (peakGain = 1.0 * BOARD_SOUND_VOLUME).
+ * Queues "eat" voice if captured, "check" voice if in check.
+ * Endgame sound is handled separately by the caller or endgame useEffect.
  */
 export function playBoardSoundFeedback({ captured, check, win = window }: BoardSoundFeedback): void {
-  // 落子聲 — always
+  // Move noise burst — always, full volume
   getResumedContext().then(ctx => {
     if (!ctx) return;
-    try { noiseBurst(ctx, 900, 8, 0.35 * BOARD_SOUND_VOLUME, 0.07); } catch { /* blocked */ }
+    try { noiseBurst(ctx, 900, 8, 1.0 * BOARD_SOUND_VOLUME, 0.08); } catch { /* blocked */ }
   }).catch(() => undefined);
 
-  // 語音疊加 — queue so both can play back-to-back
+  // Voice stacking — queue, no cancel
   if (captured) queueSpeech(win, '吃', 0.9, 0.9);
   if (check)    queueSpeech(win, '將軍', 0.7, 0.85);
 }
@@ -157,14 +153,14 @@ export function shouldPlayMoveSound(previous: GameState, next: GameState): boole
 export function playMoveSound(): void {
   getResumedContext().then(ctx => {
     if (!ctx) return;
-    try { noiseBurst(ctx, 900, 8, 0.35 * BOARD_SOUND_VOLUME, 0.07); } catch { /* blocked */ }
+    try { noiseBurst(ctx, 900, 8, 1.0 * BOARD_SOUND_VOLUME, 0.08); } catch { /* blocked */ }
   }).catch(() => undefined);
 }
 
 export function playCaptureSound(): void {
   getResumedContext().then(ctx => {
     if (!ctx) return;
-    try { noiseBurst(ctx, 700, 6, 0.55 * BOARD_SOUND_VOLUME, 0.10); } catch { /* blocked */ }
+    try { noiseBurst(ctx, 700, 6, 1.0 * BOARD_SOUND_VOLUME, 0.10); } catch { /* blocked */ }
   }).catch(() => undefined);
 }
 

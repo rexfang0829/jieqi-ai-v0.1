@@ -5,6 +5,23 @@
 
 ## 最新完成的工作
 
+### 2026-06-25 落子聲拉滿 + 回放絕殺音效修正（Claude）
+
+**soundEffects.ts peakGain 調整**：
+- 落子聲（`playBoardSoundFeedback` + `playMoveSound`）：`0.35` → `1.0 * BOARD_SOUND_VOLUME`（0.80），decayTime `0.07` → `0.08`
+- 吃子聲（`playCaptureSound`）：`0.55` → `1.0 * BOARD_SOUND_VOLUME`（0.80），頻率維持 700 Hz
+- `BOARD_SOUND_VOLUME = 0.80` 不變，統一在常數調整
+
+**App.tsx 回放絕殺修正**：
+- 回放音效 `useEffect` 中新增 `isEndgame` 判斷：`playbackState.status === 'red_win' || 'black_win'`
+- 是絕殺步時：`playBoardSoundFeedback` 的 `check` 傳 `false`（避免說「將軍」），改由 `playEndgameSound()` 播絕殺音效 + 語音
+- 非絕殺的將軍仍正常叫「將軍」
+- 一般對局 endgame `useEffect`（監聽 `state.status`）不受影響
+
+**測試**：`npm test` 80 項全通過。
+
+---
+
 ### 2026-06-25 全 App 棋盤音效規則統一（Claude）
 
 **目標**：所有走子 / 同步 / 回放步數變化統一使用相同音效規則，語音可疊加不互斥。

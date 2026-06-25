@@ -378,10 +378,14 @@ export default function App() {
     const moveIdx = playbackStep - 1;
     if (moveIdx >= playbackRecord.moves.length) return;
     const move = playbackRecord.moves[moveIdx];
+    const isEndgame = playbackState.status === 'red_win' || playbackState.status === 'black_win';
     playBoardSoundFeedback({
       captured: !!move.captured,
-      check: isInCheck(playbackState.board, playbackState.turn),
+      /* 只有非絕殺的將軍才叫「將軍」；絕殺時 endgameSound 會說「絕殺」 */
+      check: !isEndgame && isInCheck(playbackState.board, playbackState.turn),
     });
+    /* 絕殺步：額外播放 endgame 音效（含「絕殺」語音） */
+    if (isEndgame) playEndgameSound();
   }, [playbackStep, playbackRecord, playbackState, mode]);
 
   /* ── 共用 UI 片段 ── */
