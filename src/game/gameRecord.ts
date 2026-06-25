@@ -19,6 +19,8 @@ export type GameRecord = {
   favorited?: boolean;
   endReason?: 'checkmate' | 'timeout';
   timeoutSide?: 'red' | 'black';
+  redTimeMs?: number;
+  blackTimeMs?: number;
   /**
    * The true initial GameState at game start (before move 1), including all
    * hidden-piece realType values. Playback starts from this state and applies
@@ -74,6 +76,8 @@ export function createGameRecord(input: {
   blackPlayer?: string;
   endReason?: 'checkmate' | 'timeout';
   timeoutSide?: 'red' | 'black';
+  redTimeMs?: number;
+  blackTimeMs?: number;
 }): GameRecord {
   const now = nowIso();
   return {
@@ -90,6 +94,8 @@ export function createGameRecord(input: {
     blackPlayer: input.blackPlayer?.trim() || undefined,
     endReason: input.endReason,
     timeoutSide: input.timeoutSide,
+    redTimeMs: input.redTimeMs,
+    blackTimeMs: input.blackTimeMs,
   };
 }
 
@@ -140,8 +146,15 @@ export function saveGameRecord(storage: RecordStorage | undefined, record: GameR
     const records = loadGameRecords(storage);
     const nextRecord = { ...record, updatedAt: nowIso(), moveCount: record.moves.length };
     const index = records.findIndex(item => item.id === record.id);
-    if (index >= 0) records[index] = nextRecord;
-    else records.unshift(nextRecord);
+    if (index >= 0) {
+      const existing = records[index];
+      records[index] = {
+        ...nextRecord,
+        createdAt: existing.createdAt,
+        favorited: existing.favorited,
+        note: nextRecord.note ?? existing.note,
+      };
+    } else records.unshift(nextRecord);
     storage.setItem(GAME_RECORD_STORAGE_KEY, JSON.stringify({ ...emptyList(), records }));
     return true;
   } catch {

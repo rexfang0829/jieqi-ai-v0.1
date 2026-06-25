@@ -55,6 +55,12 @@ header button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-r
 /* boardRow: --cell lives on boardShell so fileLabels and boardGrid both inherit it */
 .boardRow{display:flex;gap:8px;align-items:flex-start}
 .boardWrap{background:#b86d32;padding:14px 22px 18px;border:8px solid #5b2d13;border-radius:10px;box-shadow:0 10px 30px #0008}
+/* play mode timer chips — positioned at corners of the board wrapper */
+.playTimerChip{position:absolute;font-family:monospace;font-size:13px;font-weight:700;padding:3px 8px;border-radius:5px;background:#0f172acc;border:1px solid #334155;pointer-events:none;z-index:20;letter-spacing:.03em;white-space:nowrap}
+.playTimerBlack{top:4px;left:4px;color:#93c5fd}
+.playTimerRed{bottom:4px;right:4px;color:#fca5a5}
+.playTimerWarn{color:#fbbf24!important;animation:timerWarn .6s ease-in-out infinite alternate}
+@keyframes timerWarn{from{opacity:1}to{opacity:.55}}
 /* --cell defined on boardShell so all descendants (fileLabels + boardGrid + pointLayer) share it */
 .boardShell{--cell:64px;display:grid;grid-template-rows:auto auto auto;gap:8px}
 /* +6px compensates for border:3px * 2 inside box-sizing:border-box */
@@ -213,6 +219,4 @@ li.revealedCapture{color:#ffe8be}
   .playbackPage{flex-direction:row;align-items:flex-start;gap:16px;max-width:none}
   .playbackMain{flex:0 0 auto}
   .playbackSide{flex:1;display:flex;flex-direction:column;gap:10px}
-  .playbackMoveScroll{flex-direction:column;overflow-x:unset;overflow-y:auto;max-height:580px;padding:0}
-  .playbackMoveChip{white-space:normal;text-align:left}
-}
+  .playbackMoveScroll{

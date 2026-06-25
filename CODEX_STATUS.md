@@ -1,5 +1,28 @@
 ## 最新完成的工作
 
+### 2026-06-26 10 分鐘對弈鐘 + timeout 棋譜資料 6 項修正（Claude）
+
+**修正項目**：
+
+1. **timeout → 真實終局狀態**：逾時時呼叫 `setState(s => ({...s, status: 'black_win' / 'red_win'}))` 讓 header、endgameFeedback banner 直接由真實 state 驅動，不再靠 `playIsTimeout` 擋 UI；toolbar 按鈕也改用 `state.status !== 'playing'` 判斷。
+
+2. **GameRecord 加時間欄位**：`gameRecord.ts` 新增 `redTimeMs?: number`、`blackTimeMs?: number`；`createGameRecord` 接受並儲存；逾時存檔傳入 `redTimeMs: 0` 或 `blackTimeMs: 0`；每手自動存檔也傳入當前雙方剩餘時間。
+
+3. **自動存檔保留 createdAt/favorited**：`saveGameRecord` 更新既有記錄時，從 `existing` 取 `createdAt`、`favorited`、`note`，不再被新記錄覆蓋。
+
+4. **計時器位置改為棋盤角落 chips**：移除全寬橫列；Board 外包 `position:relative` div；黑方計時器 chip 絕對定位 `top:4px left:4px`，紅方計時器 `bottom:4px right:4px`；剩餘 ≤30 秒時閃爍 + 橙色警示；新增 `.playTimerChip`、`.playTimerBlack`、`.playTimerRed`、`.playTimerWarn` CSS。
+
+5. **首頁文案修正**：一般揭棋模式描述改為「不支援長按修正棋種」。
+
+6. **回放頁顯示 timeout 原因**：結果行改為 `resultText（時間到 / 絕殺）` 格式。
+
+**移除**：`playCreatedAtRef`（已無用）、紫色 timeout banner（由 endgameFeedback 標準 banner 取代）。
+
+**修改檔案**：`src/game/gameRecord.ts`、`src/App.tsx`、`src/style.css`。
+
+**測試**：`npm test` 80 項全通過；`npx tsc --noEmit` 無錯。
+
+
 ### 2026-06-26 正式對局自動儲存 + 收藏定位調整 + 10 分鐘對弈鐘 MVP（Claude）
 
 **功能**：

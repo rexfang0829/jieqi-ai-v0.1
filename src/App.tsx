@@ -28,7 +28,7 @@ type AppMode = 'home' | 'play' | 'records' | 'ai-master' | 'ai-vs-ai' | 'editor'
 type RecordsPage = 'library' | 'recent' | 'favorites' | 'masters' | 'playback';
 
 const modeCards: { mode: Exclude<AppMode, 'home'>; title: string; body: string }[] = [
-  { mode: 'play',      title: '一般揭棋模式',      body: '棋盤對弈主介面：翻子、落子、吃子、將軍、絕殺一氣呵成，支援長按修正暗子。' },
+  { mode: 'play',      title: '一般揭棋模式',      body: '棋盤對弈主介面：翻子、落子、吃子、將軍、絕殺一氣呵成；含 10 分鐘對弈鐘，自動儲存棋譜（不支援長按修正棋種）。' },
   { mode: 'records',   title: '打譜模式',           body: '棋譜庫管理與回放：儲存對局、逐步回放、檢視棋譜。' },
   { mode: 'ai-master', title: '輔助盤面模式',       body: '輸入盤面讓 AI 找出最佳解，分析最強後續着法。' },
   { mode: 'ai-vs-ai',  title: 'AI VS AI 模式',        body: '讓紅黑雙方都由 AI 自動對弈，可單步 / 自動播放，並儲存棋譜。' },
@@ -88,7 +88,6 @@ export default function App() {
   const PLAY_INIT_MS = 10 * 60 * 1000;
   const [playAutoSaveInitial, setPlayAutoSaveInitial] = useState<GameState | null>(null);
   const playAutoSaveIdRef = useRef<string | null>(null);
-  const playCreatedAtRef = useRef<string | null>(null);
   const [playTimeoutSide, setPlayTimeoutSide] = useState<'red' | 'black' | null>(null);
   const [playAutoSaveMsg, setPlayAutoSaveMsg] = useState('');
   const [redTimeMs, setRedTimeMs] = useState(PLAY_INIT_MS);
@@ -202,7 +201,6 @@ export default function App() {
       setState(initial); setPast([]); setSelected(null);
       setPlayAutoSaveInitial(initial);
       playAutoSaveIdRef.current = null;
-      playCreatedAtRef.current = new Date().toISOString();
       setPlayTimeoutSide(null);
       setPlayAutoSaveMsg('');
       setRedTimeMs(PLAY_INIT_MS);
@@ -416,7 +414,6 @@ export default function App() {
     closeCorrection(); cancelSync();
     setPlayAutoSaveInitial(initial);
     playAutoSaveIdRef.current = null;
-    playCreatedAtRef.current = new Date().toISOString();
     setPlayTimeoutSide(null);
     setPlayAutoSaveMsg('');
     setRedTimeMs(PLAY_INIT_MS);
@@ -580,12 +577,13 @@ export default function App() {
       redPlayer: '紅方',
       blackPlayer: '黑方',
       endReason,
+      redTimeMs,
+      blackTimeMs,
     });
     const record = { ...base, initialState: playAutoSaveInitial };
     const ok = saveGameRecord(storage(), record);
     if (ok) {
       playAutoSaveIdRef.current = base.id;
-      if (!playCreatedAtRef.current) playCreatedAtRef.current = base.createdAt;
       setPlayAutoSaveMsg('自動儲存');
     }
   }, [state.history.length, state.status]);  // eslint-disable-line react-hooks/exhaustive-deps
@@ -613,8 +611,8 @@ export default function App() {
     if (state.status !== 'playing') return;
     if (redTimeMs <= 0) {
       setPlayTimeoutSide('red');
+      setState(s => ({ ...s, status: 'black_win' }));
       playTimeoutSound('red');
-      /* 儲存逾時記錄 */
       const now = new Date();
       const pad = (n: number) => String(n).padStart(2, '0');
       const title = `對局 ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
@@ -627,6 +625,8 @@ export default function App() {
         blackPlayer: '黑方',
         endReason: 'timeout',
         timeoutSide: 'red',
+        redTimeMs: 0,
+        blackTimeMs,
       });
       saveGameRecord(storage(), { ...base, initialState: playAutoSaveInitial });
       if (!playAutoSaveIdRef.current) playAutoSaveIdRef.current = base.id;
@@ -638,6 +638,7 @@ export default function App() {
     if (state.status !== 'playing') return;
     if (blackTimeMs <= 0) {
       setPlayTimeoutSide('black');
+      setState(s => ({ ...s, status: 'red_win' }));
       playTimeoutSound('black');
       const now = new Date();
       const pad = (n: number) => String(n).padStart(2, '0');
@@ -651,6 +652,8 @@ export default function App() {
         blackPlayer: '黑方',
         endReason: 'timeout',
         timeoutSide: 'black',
+        redTimeMs,
+        blackTimeMs: 0,
       });
       saveGameRecord(storage(), { ...base, initialState: playAutoSaveInitial });
       if (!playAutoSaveIdRef.current) playAutoSaveIdRef.current = base.id;
@@ -1027,7 +1030,12 @@ export default function App() {
                   <br />
                   <span style={{fontSize:13,color:'#94a3b8'}}>{playbackRecord.redPlayer ?? '紅方'} vs {playbackRecord.blackPlayer ?? '黑方'}</span>
                   <br />
-                  <em>{resultText(playbackRecord.finalStatus)}</em>
+                  <em>
+                    {resultText(playbackRecord.finalStatus)}
+                    {playbackRecord.endReason === 'timeout'
+                      ? `（${playbackRecord.timeoutSide === 'red' ? '紅方' : '黑方'}時間到）`
+                      : playbackRecord.finalStatus !== 'playing' ? '（絕殺）' : ''}
+                  </em>
                   <br />
                   <small style={{fontSize:'11px',color: playbackHasSnapshot ? '#86efac' : '#fcd34d'}}>
                     {playbackHasSnapshot ? '✓ 快照回放' : '⚠ 舊棋譜重播，暗子可能不一致'}
@@ -1130,26 +1138,6 @@ export default function App() {
     <main>
       {renderHeader('一般揭棋模式')}
 
-      {/* 計時器列 */}
-      {playGameStarted && (
-        <div style={{display:'flex',justifyContent:'space-between',padding:'4px 12px',background:'var(--panel-bg,#1e293b)',borderBottom:'1px solid #334155',fontSize:15,fontFamily:'monospace'}}>
-          <span style={{color: redTimeMs <= 30000 ? '#f87171' : '#fca5a5'}}>
-            紅方 {redTimeFmt}
-          </span>
-          {playIsTimeout && (
-            <span style={{color:'#fcd34d',fontSize:13,alignSelf:'center'}}>
-              {playTimeoutSide === 'red' ? '紅方時間到，黑方勝' : '黑方時間到，紅方勝'}
-            </span>
-          )}
-          {playAutoSaveMsg && !playIsTimeout && (
-            <span style={{color:'#86efac',fontSize:11,alignSelf:'center'}}>{playAutoSaveMsg}</span>
-          )}
-          <span style={{color: blackTimeMs <= 30000 ? '#60a5fa' : '#93c5fd'}}>
-            黑方 {blackTimeFmt}
-          </span>
-        </div>
-      )}
-
       {renderEndgameBanner()}
       {playIsTimeout && (
         <div className="endgameBanner" style={{background:'#7c3aed'}}>
@@ -1158,18 +1146,33 @@ export default function App() {
           <small>本局結束</small>
         </div>
       )}
+      {playAutoSaveMsg && !playIsTimeout && (
+        <p style={{textAlign:'center',color:'#86efac',fontSize:11,margin:'2px 0'}}>{playAutoSaveMsg}</p>
+      )}
       <div className="toolbar">
         <button onClick={startNewPlayGame}>新局</button>
-        <button onClick={toggleSyncMode} disabled={playIsTimeout}>{syncMode ? '取消同步' : '同步上一手'}</button>
-        <button onClick={undo} disabled={!past.length || playIsTimeout}>回到上一步</button>
+        <button onClick={toggleSyncMode} disabled={state.status !== 'playing'}>{syncMode ? '取消同步' : '同步上一手'}</button>
+        <button onClick={undo} disabled={!past.length || state.status !== 'playing'}>回到上一步</button>
       </div>
       {syncMode && (
         <div className={`panel syncPanel ${syncError ? 'syncError' : ''}`} style={{marginBottom:'12px'}}>
           {syncError || (syncFrom ? '同步上一手：請點終點' : '同步上一手：請點起點')}
         </div>
       )}
-      {/* 正式對局：不傳 onSquareLongPress，禁止長按修正棋種 */}
-      <Board board={state.board} selected={selected} syncFrom={syncFrom} legalMoves={legalMoves} moves={state.history} onSquareClick={playIsTimeout ? () => {} : click} />
+      {/* 正式對局：計時器 chips 貼在棋盤角落，不傳 onSquareLongPress */}
+      <div style={{position:'relative',display:'inline-block',width:'100%'}}>
+        <Board board={state.board} selected={selected} syncFrom={syncFrom} legalMoves={legalMoves} moves={state.history} onSquareClick={click} />
+        {playGameStarted && (
+          <>
+            <div className={`playTimerChip playTimerBlack${blackTimeMs <= 30000 ? ' playTimerWarn' : ''}`}>
+              黑 {blackTimeFmt}
+            </div>
+            <div className={`playTimerChip playTimerRed${redTimeMs <= 30000 ? ' playTimerWarn' : ''}`}>
+              紅 {redTimeFmt}
+            </div>
+          </>
+        )}
+      </div>
     </main>
   );
 }
