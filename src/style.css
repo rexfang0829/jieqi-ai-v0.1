@@ -58,6 +58,7 @@ aside{width:430px;display:flex;flex-direction:column;gap:12px}
 .syncPanel{font-size:15px;line-height:1.5;border-color:#58a6ff;color:#dff0ff}
 .syncPanel.syncError{border-color:#ffb35c;color:#ffe0b8}
 textarea{width:100%;height:120px;background:#f7e2bd;color:#2c160b;border-radius:8px;padding:10px}
+input{width:100%;margin:6px 0 10px;background:#f7e2bd;color:#2c160b;border:1px solid #9b6935;border-radius:8px;padding:8px}
 select{width:100%;margin:6px 0 10px;background:#f7e2bd;color:#2c160b;border:1px solid #9b6935;border-radius:8px;padding:8px}
 .editorPanel label{display:block;margin:8px 0}
 .editorPanel button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-radius:8px;padding:8px 12px}
@@ -78,4 +79,17 @@ li.revealedCapture{color:#ffe8be}
   .endgameBanner span{font-size:16px}
   .capturedPieces em{font-size:12px;padding:2px 7px}
   aside{width:100%}
+}
+.recordPanel{max-height:none}
+.recordActions{display:flex;gap:8px;flex-wrap:wrap}
+.recordActions button,.recordItem button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-radius:8px;padding:7px 10px}
+.recordMessage{color:#ffd36a;font-size:13px}
+.recordNotice{color:#ffe8beaa;font-size:12px;line-height:1.45}
+.recordOutput{height:100px;margin-top:8px}
+.recordList h4{margin:12px 0 8px;color:#ffd36a}
+.recordItem{display:grid;grid-template-columns:1fr auto;gap:8px;margin:6px 0}
+.recordItem button:first-child{text-align:left;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:1100px){
+  .recordActions{display:grid;grid-template-columns:1fr}
+  .recordItem{grid-template-columns:1fr}
 }

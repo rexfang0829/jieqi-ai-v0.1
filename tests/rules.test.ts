@@ -8,6 +8,7 @@ import { BOARD_COLS, BOARD_POINT_COUNT, BOARD_ROWS, BOTTOM_FILE_LABELS, TOP_FILE
 import { createInitialBoard } from '../src/game/initialBoard';
 import { cancelLastMoveSync, syncLastMove } from '../src/game/lastMoveSync';
 import { getEndgameFeedback, shouldPlayEndgameSound, statusLabel } from '../src/game/endgameFeedback';
+import { createGameRecord, deleteGameRecord, GAME_RECORD_STORAGE_KEY, recordToJson, recordToText, saveGameRecord, loadGameRecords } from '../src/game/gameRecord';
 import { moveText } from '../src/game/moveNotation';
 import { isBasicLegalMove, kingsFace } from '../src/game/moveRules';
 import { realPieceName } from '../src/game/pieceText';
@@ -718,6 +719,59 @@ test('AI threat scoring for hidden enemies uses original type, not real type', (
   const stateA = { board: boardA, turn: 'red' as const, history: [], status: 'playing' as const };
   const stateB = { board: boardB, turn: 'red' as const, history: [], status: 'playing' as const };
   assertEqual(recommendMove(stateA).score, recommendMove(stateB).score);
+});
+
+test('game record can be created and converted to text and json', () => {
+  const move = {
+    from: { row: 6, col: 0 },
+    to: { row: 5, col: 0 },
+    piece: piece('red', 'pawn'),
+  };
+  const record = createGameRecord({
+    id: 'record-test',
+    createdAt: '2026-06-25T00:00:00.000Z',
+    updatedAt: '2026-06-25T00:00:00.000Z',
+    title: '測試局',
+    moves: [move],
+    finalStatus: 'red_win',
+  });
+
+  assertEqual(record.version, 1);
+  assertEqual(record.title, '測試局');
+  assertEqual(record.finalStatus, 'red_win');
+  assertEqual(record.moveCount, 1);
+  assertEqual(recordToText(record).includes('局名：測試局'), true);
+  assertEqual(recordToText(record).includes('結果：紅方勝'), true);
+
+  const exported = JSON.parse(recordToJson(record));
+  assertEqual(exported.version, 1);
+  assertEqual(exported.title, '測試局');
+  assertEqual(Array.isArray(exported.moves), true);
+  assertEqual(exported.finalStatus, 'red_win');
+  assertEqual(exported.moveCount, 1);
+});
+
+test('game record storage can save load overwrite and delete records', () => {
+  const storage = fakeStorage();
+  const first = createGameRecord({
+    id: 'record-1',
+    title: '第一局',
+    moves: [],
+    finalStatus: 'playing',
+  });
+  assertEqual(saveGameRecord(storage, first), true);
+  assertEqual(loadGameRecords(storage).length, 1);
+  assertEqual(loadGameRecords(storage)[0].title, '第一局');
+
+  const updated = { ...first, title: '第一局更新', moves: [{ from: { row: 6, col: 0 }, to: { row: 5, col: 0 }, piece: piece('red', 'pawn') }] };
+  assertEqual(saveGameRecord(storage, updated), true);
+  assertEqual(loadGameRecords(storage).length, 1);
+  assertEqual(loadGameRecords(storage)[0].title, '第一局更新');
+  assertEqual(loadGameRecords(storage)[0].moveCount, 1);
+  assertEqual(storage.getItem(GAME_RECORD_STORAGE_KEY)?.includes('"version":1'), true);
+
+  assertEqual(deleteGameRecord(storage, 'record-1'), true);
+  assertEqual(loadGameRecords(storage).length, 0);
 });
 
 test('last move sync applies a legal from-to move', () => {

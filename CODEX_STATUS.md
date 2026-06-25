@@ -2,16 +2,17 @@
 
 ## 最新完成的工作
 
-2026-06-25 本輪只做「被吃子資訊 UI 收斂 + AI 建議說明文字」：
+2026-06-25 本輪完成「棋譜系統 MVP」：
 
-- 已新增被吃子資訊區 `CapturedPanel`。
-- 已從 history 整理紅方被吃 / 黑方被吃。
-- 已區分明子被吃與暗子被吃。
-- 暗子被吃會顯示「暗子（翻出 X）」。
-- cannon 顯示仍依 side 區分：紅方「炮」、黑方「包」。
-- 已加入 AI 建議簡易評分標示。
-- AI 面板 playing 狀態顯示「AI 建議（簡易評分）」與簡短限制說明。
-- 已絕殺時仍優先顯示絕殺 / 本局結束，不顯示一般推薦文案。
+- 已新增棋譜資料格式 `GameRecord`。
+- 已支援 localStorage 儲存棋譜。
+- 已支援讀取已儲存棋譜列表。
+- 已支援刪除已儲存棋譜。
+- 已支援覆蓋更新同一局棋譜。
+- 已支援複製棋譜文字。
+- 已支援匯出 JSON。
+- 已新增 `GameRecordPanel` 小型棋譜管理區。
+- 載入棋譜目前只供查看棋譜文字與基本資訊，不還原盤面。
 
 ## 本輪未改動
 
@@ -19,6 +20,7 @@
 - 沒有改 AI 搜尋。
 - 沒有改 Move 資料模型。
 - 沒有改 board 座標系。
+- 沒有做棋譜回放器。
 - 沒有做 Belief State。
 - 沒有做 Monte Carlo。
 - 沒有做 OCR / 自動截圖辨識。
@@ -27,10 +29,8 @@
 ## 修改了哪些檔案
 
 - `src/App.tsx`
-- `src/components/AiPanel.tsx`
-- `src/components/CapturedPanel.tsx`
-- `src/ai/simpleAiText.ts`
-- `src/game/capturedPieces.ts`
+- `src/components/GameRecordPanel.tsx`
+- `src/game/gameRecord.ts`
 - `src/style.css`
 - `tests/rules.test.ts`
 - `CODEX_STATUS.md`
@@ -62,9 +62,10 @@ npm.cmd run build
 
 ## 目前還有哪些已知限制
 
-- AI 仍是 simpleAi 的簡易評分，不是完整最佳手搜尋。
+- 載入棋譜目前只供查看棋譜，不還原盤面。
+- 尚未做棋譜回放器。
 - 尚未做 Threat Map。
 
 ## 是否已經 push 到 GitHub
 
-是。本輪會以 commit message `add captured pieces panel and ai disclaimer` push 到 GitHub。
+是。本輪會以 commit message `add game record system mvp` push 到 GitHub。
