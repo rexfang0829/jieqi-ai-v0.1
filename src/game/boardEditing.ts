@@ -1,5 +1,5 @@
 import type { Board, GameState, Piece, PieceType, Position, Side } from '../types/chess';
-import { inventoryError } from './pieceInventory';
+import { inventoryError, reconcileHiddenRealTypes } from './pieceInventory';
 
 export type PieceDraft = {
   side: Side;
@@ -25,16 +25,19 @@ export function createEditablePiece(draft: PieceDraft): Piece {
 export function editSquare(state: GameState, pos: Position, patch: Partial<Piece>, fallback?: PieceDraft): GameState {
   const current = state.board[pos.row][pos.col];
   if (!current && !fallback) return state;
-  if (editSquareError(state, pos, patch, fallback)) return state;
 
   const board = state.board.map(row => row.map(piece => piece ? {...piece} : null));
   board[pos.row][pos.col] = current
     ? {...current, ...patch}
     : createEditablePiece({...fallback!, ...patch});
+  const piece = board[pos.row][pos.col];
+  if (!piece) return state;
+  const reconciled = reconcileHiddenRealTypes(board, piece.side);
+  if (!reconciled) return state;
 
   return {
     ...state,
-    board,
+    board: reconciled,
     status: 'playing',
   };
 }
@@ -44,6 +47,8 @@ export function editSquareError(state: GameState, pos: Position, patch: Partial<
   if (!current && !fallback) return null;
   const side = patch.side ?? current?.side ?? fallback!.side;
   const realType = patch.realType ?? current?.realType ?? fallback!.realType;
+  const revealed = patch.revealed ?? current?.revealed ?? fallback!.revealed;
+  if (!revealed) return null;
   return inventoryError(state.board, pos, side, realType);
 }
 

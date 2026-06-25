@@ -17,6 +17,9 @@ declare module 'react' {
   export function useState<T>(initial: T | (() => T)): [T, StateSetter<T>];
   export function useMemo<T>(factory: () => T, deps: unknown[]): T;
   export function useEffect(effect: () => void | (() => void), deps?: unknown[]): void;
+  export function useRef<T>(initial: T): { current: T };
+  export type MouseEvent<T = Element> = globalThis.MouseEvent & { currentTarget: T };
+  export type PointerEvent<T = Element> = globalThis.PointerEvent & { currentTarget: T };
 
   const React: any;
   export default React;

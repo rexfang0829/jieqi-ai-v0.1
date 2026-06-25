@@ -1,6 +1,6 @@
 import type { Board as BoardType, Position } from '../types/chess';
 import { BOARD_COLS, BOARD_ROWS, BOTTOM_FILE_LABELS, TOP_FILE_LABELS, hasLegalPosition, samePosition, visualRowForBoardRow } from '../game/boardLayout';
-import { Square } from './Square';
+import { Square, type LongPressAnchor } from './Square';
 
 const visualY = (row: number) => row + 0.5;
 const markerPositions = [
@@ -11,7 +11,7 @@ const markerPositions = [
 ] as const;
 
 export function Board({ board, selected, syncFrom = null, legalMoves, onSquareClick, onSquareLongPress }: {
-  board: BoardType; selected: Position | null; syncFrom?: Position | null; legalMoves: Position[]; onSquareClick: (pos: Position) => void; onSquareLongPress?: (pos: Position) => void;
+  board: BoardType; selected: Position | null; syncFrom?: Position | null; legalMoves: Position[]; onSquareClick: (pos: Position) => void; onSquareLongPress?: (pos: Position, anchor: LongPressAnchor) => void;
 }) {
   return (
     <div className="boardWrap">
@@ -68,7 +68,7 @@ export function Board({ board, selected, syncFrom = null, legalMoves, onSquareCl
                     syncOrigin={samePosition(syncFrom, pos)}
                     legal={hasLegalPosition(legalMoves, pos)}
                     onClick={() => onSquareClick(pos)}
-                    onLongPress={() => onSquareLongPress?.(pos)}
+                    onLongPress={(anchor) => onSquareLongPress?.(pos, anchor)}
                   />
                 </div>
               );

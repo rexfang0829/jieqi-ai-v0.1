@@ -510,6 +510,14 @@ test('move sound trigger only fires after a successful move', () => {
   assertEqual(shouldPlayMoveSound(state, legal), true);
 });
 
+test('move sound trigger works for black legal moves too', () => {
+  const board = withKings();
+  place(board, 3, 0, piece('black', 'pawn'));
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const legal = applyMove(state, { row: 3, col: 0 }, { row: 4, col: 0 });
+  assertEqual(shouldPlayMoveSound(state, legal), true);
+});
+
 test('editor can add a piece to an empty square', () => {
   const state = { board: emptyBoard(), turn: 'red' as const, history: [], status: 'playing' as const };
   const next = editSquare(state, { row: 4, col: 4 }, {}, {
@@ -558,16 +566,28 @@ test('editor can change original type, real type, and revealed state', () => {
 
 test('manual piece correction updates remaining inventory', () => {
   const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
   place(board, 4, 4, piece('red', 'pawn', 'pawn', false));
   const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
   const before = remainingRealPieces(state.board, 'red');
-  const next = editSquare(state, { row: 4, col: 4 }, {
-    realType: 'cannon',
-    revealed: true,
-  });
+  const next = correctSelectedRealType(state, { row: 4, col: 4 }, 'cannon');
   const after = remainingRealPieces(next.board, 'red');
   assertEqual(after.cannon, before.cannon - 1);
-  assertEqual(after.pawn, before.pawn + 1);
+  assertEqual(after.pawn, before.pawn);
+});
+
+test('manual correction is not blocked by hidden default real types', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 4, 0, piece('red', 'pawn', 'rook', false));
+  place(board, 4, 1, piece('red', 'pawn', 'rook', false));
+  place(board, 4, 2, piece('red', 'pawn', 'pawn', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const next = correctSelectedRealType(state, { row: 4, col: 2 }, 'rook');
+  assertEqual(next.board[4][2]?.realType, 'rook');
+  assertEqual(next.board[4][2]?.revealed, true);
+  assertEqual(next.board.flat().filter(p => p?.side === 'red' && p.realType === 'rook').length <= 2, true);
 });
 
 test('piece inventory prevents exceeding side piece limits', () => {

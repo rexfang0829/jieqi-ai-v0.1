@@ -17,6 +17,8 @@ import { playEndgameSound } from './game/endgameSound';
 import { editorPieceTypeNames } from './game/pieceText';
 import { playMoveSound, shouldPlayMoveSound } from './game/soundEffects';
 
+type CorrectionAnchor = { x: number; y: number };
+
 export default function App() {
   const [state, setState] = useState(() => newGame());
   const [past, setPast] = useState<GameState[]>([]);
@@ -27,6 +29,7 @@ export default function App() {
   const [lastSoundStatus, setLastSoundStatus] = useState(state.status);
   const [editorError, setEditorError] = useState('');
   const [correctionPos, setCorrectionPos] = useState<Position | null>(null);
+  const [correctionAnchor, setCorrectionAnchor] = useState<CorrectionAnchor | null>(null);
 
   const legalMoves = useMemo(
     () => state.status === 'playing' && selected
@@ -38,13 +41,35 @@ export default function App() {
   );
   const endgameFeedback = getEndgameFeedback(state.status);
   const statusText = statusLabel(state.status, state.turn);
+  const correctionPanelStyle = correctionAnchor
+    ? { left: `${correctionAnchor.x}px`, top: `${correctionAnchor.y}px` }
+    : undefined;
+
+  function closeCorrection() {
+    setCorrectionPos(null);
+    setCorrectionAnchor(null);
+  }
+
+  function clampCorrectionAnchor(anchor: CorrectionAnchor): CorrectionAnchor {
+    if (typeof window === 'undefined') return anchor;
+    const margin = 12;
+    const panelWidth = 280;
+    const panelHeight = 230;
+    const preferredX = anchor.x + 16;
+    const preferredY = anchor.y + 16;
+    const x = Math.min(Math.max(preferredX, margin), Math.max(margin, window.innerWidth - panelWidth - margin));
+    const yBelow = preferredY + panelHeight <= window.innerHeight - margin;
+    const rawY = yBelow ? preferredY : anchor.y - panelHeight - 16;
+    const y = Math.min(Math.max(rawY, margin), Math.max(margin, window.innerHeight - panelHeight - margin));
+    return { x, y };
+  }
 
   function click(pos: Position) {
     if (syncMode) {
       syncClick(pos);
       return;
     }
-    setCorrectionPos(null);
+    closeCorrection();
 
     if (state.status !== 'playing') {
       setSelected(pos);
@@ -71,7 +96,7 @@ export default function App() {
     setState(newGame());
     setPast([]);
     setSelected(null);
-    setCorrectionPos(null);
+    closeCorrection();
     setEditorError('');
     cancelSync();
   }
@@ -80,7 +105,7 @@ export default function App() {
     setPast(history => [...history, state]);
     setState(clearBoard(state));
     setSelected(null);
-    setCorrectionPos(null);
+    closeCorrection();
     setEditorError('');
     cancelSync();
   }
@@ -99,7 +124,7 @@ export default function App() {
     setState(saved);
     setPast([]);
     setSelected(null);
-    setCorrectionPos(null);
+    closeCorrection();
     setEditorError('');
     cancelSync();
   }
@@ -108,7 +133,7 @@ export default function App() {
     setState(s => setTurn(s, turn));
     setPast([]);
     setSelected(null);
-    setCorrectionPos(null);
+    closeCorrection();
     setEditorError('');
     cancelSync();
   }
@@ -119,7 +144,7 @@ export default function App() {
       const previous = history[history.length - 1];
       setState(previous);
       setSelected(null);
-      setCorrectionPos(null);
+      closeCorrection();
       setEditorError('');
       return history.slice(0, -1);
     });
@@ -162,11 +187,12 @@ export default function App() {
     setEditorError('');
   }
 
-  function openCorrection(pos: Position) {
+  function openCorrection(pos: Position, anchor: CorrectionAnchor) {
     if (syncMode) return;
     if (!state.board[pos.row][pos.col]) return;
     setSelected(null);
     setCorrectionPos(pos);
+    setCorrectionAnchor(clampCorrectionAnchor(anchor));
     setEditorError('');
   }
 
@@ -181,7 +207,7 @@ export default function App() {
     if (next === state) return;
     setPast(history => [...history, state]);
     setState(next);
-    setCorrectionPos(null);
+    closeCorrection();
     setEditorError('');
   }
 
@@ -257,6 +283,19 @@ export default function App() {
   }, [state, selected]);
 
   useEffect(() => {
+    if (!correctionPos) return;
+
+    function pointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Element && target.closest('.correctionPanel')) return;
+      closeCorrection();
+    }
+
+    document.addEventListener('pointerdown', pointerDown);
+    return () => document.removeEventListener('pointerdown', pointerDown);
+  }, [correctionPos]);
+
+  useEffect(() => {
     if (shouldPlayEndgameSound(lastSoundStatus, state.status)) {
       playEndgameSound();
     }
@@ -273,7 +312,7 @@ export default function App() {
         <button onClick={clearCurrentBoard}>清空棋盤</button>
         <button onClick={saveCurrentPosition}>儲存目前局面</button>
         <button onClick={loadSavedPosition}>載入已儲存局面</button>
-        <button onClick={undo} disabled={!past.length}>回上一步</button>
+        <button onClick={undo} disabled={!past.length}>回到上一步</button>
         <button onClick={toggleSyncMode}>{syncMode ? '取消同步' : '同步上一手'}</button>
         <label className="turnSelector">
           輪到
@@ -302,16 +341,16 @@ export default function App() {
           )}
           <div className="panel hotkeyHint">翻子快捷鍵：1車 2馬 3象 4士 5炮 6兵</div>
           {correctionPos && (
-            <div className="panel correctionPanel">
+            <div className="panel correctionPanel" style={correctionPanelStyle}>
               <h3>修正棋種</h3>
-              <p>只修改真實棋種，並設為明子。</p>
+              <p>長按棋子後，可手動修正翻開後的真實棋種。</p>
               <div className="correctionButtons">
                 {(['rook', 'horse', 'elephant', 'advisor', 'cannon', 'pawn'] as PieceType[]).map(type => (
                   <button key={type} onClick={() => applyCorrection(type)}>{editorPieceTypeNames[type]}</button>
                 ))}
               </div>
               {editorError && <p className="editorError">{editorError}</p>}
-              <button onClick={() => setCorrectionPos(null)}>取消</button>
+              <button onClick={closeCorrection}>取消</button>
             </div>
           )}
           <PositionEditor
@@ -331,3 +370,5 @@ export default function App() {
     </main>
   );
 }
+
+

@@ -1,4 +1,4 @@
-import React from 'react';
+import { useRef, type MouseEvent, type PointerEvent } from 'react';
 import type { Piece } from '../types/chess';
 import { realPieceName } from '../game/pieceText';
 
@@ -6,9 +6,12 @@ export function pieceName(piece: Piece): string {
   return realPieceName(piece);
 }
 
-export function Square({ piece, selected, syncOrigin = false, legal, onClick, onLongPress }: { piece: Piece | null; selected: boolean; syncOrigin?: boolean; legal: boolean; onClick: () => void; onLongPress?: () => void }) {
-  const timer = React.useRef(null) as { current: number | null };
-  const longPressed = React.useRef(false) as { current: boolean };
+export type LongPressAnchor = { x: number; y: number };
+
+export function Square({ piece, selected, syncOrigin = false, legal, onClick, onLongPress }: { piece: Piece | null; selected: boolean; syncOrigin?: boolean; legal: boolean; onClick: () => void; onLongPress?: (anchor: LongPressAnchor) => void }) {
+  const timer = useRef<number | null>(null);
+  const longPressed = useRef(false);
+  const anchor = useRef<LongPressAnchor>({ x: 0, y: 0 });
 
   function clearTimer() {
     if (timer.current !== null) {
@@ -17,16 +20,21 @@ export function Square({ piece, selected, syncOrigin = false, legal, onClick, on
     }
   }
 
-  function pointerDown() {
+  function pointerDown(event: PointerEvent<HTMLButtonElement>) {
     if (!piece || !onLongPress) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    anchor.current = {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    };
     longPressed.current = false;
     timer.current = window.setTimeout(() => {
       longPressed.current = true;
-      onLongPress();
+      onLongPress(anchor.current);
     }, 520);
   }
 
-  function click(event: any) {
+  function click(event: MouseEvent<HTMLButtonElement>) {
     if (longPressed.current) {
       event.preventDefault();
       event.stopPropagation();
@@ -44,10 +52,10 @@ export function Square({ piece, selected, syncOrigin = false, legal, onClick, on
       onPointerUp={clearTimer}
       onPointerLeave={clearTimer}
       onPointerCancel={clearTimer}
-      onContextMenu={(event: any) => {
+      onContextMenu={(event: MouseEvent<HTMLButtonElement>) => {
         if (piece && onLongPress) {
           event.preventDefault();
-          onLongPress();
+          onLongPress({ x: event.clientX, y: event.clientY });
         }
       }}
     >

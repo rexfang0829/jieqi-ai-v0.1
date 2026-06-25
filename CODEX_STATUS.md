@@ -2,55 +2,42 @@
 
 ## 最新完成的工作
 
-2026-06-25 本輪完成 Phase 1.5 小範圍補強：手動修正棋種、暗子池一致性、音效。
+2026-06-25 完成 Phase 1 / early AI 小範圍修正：
 
-- 新增 piece inventory / remaining pool 檢查。
-  - 每方棋種上限：帥/將 1、士 2、象 2、車 2、馬 2、炮/包 2、兵/卒 5。
-  - 手動修正 `realType` 前會檢查同方棋種數量。
-  - 超標時阻擋修改，UI 顯示提示，不會默默造成不合法盤面。
-- 新增手機版長按修正棋種。
-  - 長按棋盤上的棋子可開啟修正選單。
-  - 大按鈕包含：車、馬、相/象、仕/士、炮/包、兵/卒。
-  - 點選後只改該棋子的 `realType`，並設 `revealed=true`。
-  - 不改 `side`，不破壞鍵盤 1-6 快捷鍵。
-  - 長按後會阻止一般點選 / 走棋觸發。
-- 新增音效 helper。
-  - 成功走棋後播放一次簡短落子音效。
-  - 不合法點擊、只選棋子、局面編輯不播放落子音效。
-  - 絕殺音效改成「咻——嘣」風格。
-  - 絕殺音效仍由既有 helper 控制，同一局只播放一次。
-  - 手機瀏覽器若阻擋音效，不會讓畫面報錯。
-- 沒有改規則引擎主流程。
-- 沒有改 AI 搜尋。
-- 沒有做 Threat Map / Belief State / Monte Carlo / OCR / Ponder。
+- 合法走棋成功後播放落子音效，紅黑雙方都適用。
+- 不合法點擊、只選棋、局面編輯、長按修正不播放落子音效。
+- 保留既有絕殺音效，仍只在進入勝負狀態時觸發。
+- 長按修正選單改為顯示在被長按棋子附近。
+- 修正選單靠近視窗邊界時會自動往內收，不固定在下方側欄。
+- 點空白處可取消修正選單。
+- 長按不會觸發一般走棋。
+- 手動修正棋種時，未翻暗子的預設 `realType` 不再阻擋修正。
+- 修正後會依公開棋子重新補正同方未翻暗子的 `realType`，避免後續翻出超過合理數量的棋子。
 
 ## 修改了哪些檔案
 
-- `src/game/pieceInventory.ts`
-  - 新增棋種數量上限、剩餘數量、超標驗證 helper。
-- `src/game/boardEditing.ts`
-  - 編輯棋種前套用 inventory 驗證。
-  - 新增長按修正使用的 `correctSelectedRealType` helper。
-- `src/game/soundEffects.ts`
-  - 新增落子音效與成功走棋音效觸發判斷。
-- `src/game/endgameSound.ts`
-  - 調整絕殺音效為掃頻加低頻終局感。
 - `src/App.tsx`
-  - 接上長按修正選單、超標提示、成功走棋落子音效。
+  - 加入長按修正選單座標、邊界避讓、點空白取消。
+  - 保留合法走棋成功後才播放落子音效。
+  - 修復原本亂碼造成的部分 JSX 顯示標籤問題。
 - `src/components/Board.tsx`
-  - 傳遞交叉點長按事件。
+  - 讓長按事件把棋子附近的螢幕座標傳回 App。
 - `src/components/Square.tsx`
-  - 支援長按，並避免長按後觸發一般 click。
-- `src/components/PositionEditor.tsx`
-  - 顯示棋種超標錯誤提示。
+  - 長按時記錄棋子中心點座標。
+  - 長按後抑制一般 click，避免誤走棋。
 - `src/style.css`
-  - 新增長按修正選單與錯誤提示樣式。
+  - 修正選單改為 fixed 浮動面板。
+- `src/game/pieceInventory.ts`
+  - 棋種數量檢查改以公開棋子為硬限制。
+  - 新增未翻暗子 `realType` 補正邏輯。
+- `src/game/boardEditing.ts`
+  - 編輯 / 修正棋子後套用暗子池補正。
+  - 未翻棋子的預設 `realType` 不再先阻擋人工修正。
+- `src/vite-env.d.ts`
+  - 補上本專案 React shim 需要的 `useRef` 與事件型別。
 - `tests/rules.test.ts`
-  - 補上 inventory、長按修正 helper、音效觸發 helper 測試。
-- `CODEX_STATUS.md`
-  - 更新本輪狀態。
-- `NEXT_TASK.md`
-  - 更新下一輪建議。
+  - 新增紅黑合法走棋音效條件測試。
+  - 新增人工修正不受隱藏 `realType` 阻擋的回歸測試。
 
 ## npm test 是否通過
 
@@ -68,13 +55,12 @@ npm.cmd test
 npm.cmd run build
 ```
 
-## 目前已知限制
+## 目前還有哪些已知限制
 
-- 長按修正目前是最小版選單，尚未做更完整的手機操作引導。
-- 棋譜回放器尚未做。
-- Threat Map 尚未做。
-- Belief State / Monte Carlo / OCR / Ponder 尚未做。
+- 長按修正仍是手動工具，沒有做被吃子 UI、棋譜回放或 Threat Map。
+- 目前只做公開棋子與未翻暗子池的最小補正，還不是完整 Belief State。
+- 沒有做 Monte Carlo、OCR、Ponder、自動截圖辨識。
 
 ## 是否已經 push 到 GitHub
 
-本輪測試與 build 通過後，會以 commit `add manual piece correction inventory and sounds` push 到 GitHub。
+本輪測試與 build 已通過，會依流程 commit 並 push；若看到此版本在 GitHub 上，代表本輪已 push。
