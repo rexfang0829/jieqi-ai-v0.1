@@ -1,8 +1,29 @@
-# Codex Status
+# Shared AI Status（Claude / Codex / ChatGPT 共用）
+
+> 此文件由 Claude、Codex、ChatGPT 共同維護，記錄每輪 AI 完成的工作。  
+> 任何 AI 完成工作後都應更新此文件，並以日期 + 工具名稱標記。
 
 ## 最新完成的工作
 
-2026-06-25 完成兩個小階段：
+### 2026-06-25 手機版被吃子 overlay 對齊修正（Claude）
+
+**問題根因**：桌機版在 `.capturedOverlayLeft` / `.capturedOverlayRight` 設定的 `justify-content`
+（flex-direction:column 時控制垂直位置），在手機版切換為 `flex-direction:row` 後變成控制水平位置，
+造成方向反轉：黑方吃子顯示在左上、紅方吃子顯示在右下。
+
+**修改**：`src/style.css` 的手機媒體查詢中新增覆蓋：
+```css
+.capturedOverlayLeft  { order:3; justify-content:flex-start } /* 左下，紅方吃子 */
+.capturedOverlayRight { order:1; justify-content:flex-end   } /* 右上，黑方吃子 */
+```
+
+**未改動**：`getCapturedBoardStacks` 資料邏輯、piece side、小圓棋子樣式、暗子半透明、炮/包 by side。
+
+**測試**：`npm test` 通過。
+
+---
+
+### 2026-06-25 完成兩個小階段（Codex）：
 
 ### 階段 2：模式切分
 

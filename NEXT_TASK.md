@@ -1,4 +1,7 @@
-# Next Task
+# Next Task（Claude / Codex / ChatGPT 共用）
+
+> 此文件供所有 AI 工具共用，不只 Codex 使用。  
+> 完成某項後請更新此文件，並在 CODEX_STATUS.md 記錄細節。
 
 ## 下一步建議排序
 

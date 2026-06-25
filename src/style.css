@@ -123,8 +123,9 @@ li.revealedCapture{color:#ffe8be}
   .boardRow{flex-direction:column;gap:4px;align-items:flex-start}
   /* each overlay becomes a horizontal row; right (black) above board, left (red) below */
   .capturedBoardOverlay{width:100%;padding:2px 0;flex-direction:row;flex-wrap:wrap;gap:4px;align-self:auto}
-  .capturedOverlayLeft{order:3}
-  .capturedOverlayRight{order:1}
+  /* override desktop justify-content (was vertical) — now horizontal in row layout */
+  .capturedOverlayLeft{order:3;justify-content:flex-start}
+  .capturedOverlayRight{order:1;justify-content:flex-end}
   .boardShell{order:2}
   .capturedBoardStack{width:auto;flex-direction:row;flex-wrap:wrap}
   .capturedMiniPiece{width:20px;height:20px;font-size:12px;border-width:1px;box-shadow:inset 0 0 0 1px #e8b86f,0 1px 3px #0007}
