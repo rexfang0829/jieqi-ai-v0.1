@@ -1,6 +1,7 @@
-import type { Board as BoardType, Position } from '../types/chess';
+import type { Board as BoardType, Move, Position } from '../types/chess';
 import { BOARD_COLS, BOARD_ROWS, BOTTOM_FILE_LABELS, TOP_FILE_LABELS, hasLegalPosition, samePosition, visualRowForBoardRow } from '../game/boardLayout';
 import { Square, type LongPressAnchor } from './Square';
+import { CapturedBoardOverlay } from './CapturedBoardOverlay';
 
 const visualY = (row: number) => row + 0.5;
 const markerPositions = [
@@ -10,8 +11,8 @@ const markerPositions = [
   [7, 1], [7, 7],
 ] as const;
 
-export function Board({ board, selected, syncFrom = null, legalMoves, onSquareClick, onSquareLongPress }: {
-  board: BoardType; selected: Position | null; syncFrom?: Position | null; legalMoves: Position[]; onSquareClick: (pos: Position) => void; onSquareLongPress?: (pos: Position, anchor: LongPressAnchor) => void;
+export function Board({ board, selected, syncFrom = null, legalMoves, moves, onSquareClick, onSquareLongPress }: {
+  board: BoardType; selected: Position | null; syncFrom?: Position | null; legalMoves: Position[]; moves: Move[]; onSquareClick: (pos: Position) => void; onSquareLongPress?: (pos: Position, anchor: LongPressAnchor) => void;
 }) {
   return (
     <div className="boardWrap">
@@ -53,6 +54,7 @@ export function Board({ board, selected, syncFrom = null, legalMoves, onSquareCl
             ))}
           </svg>
           <div className="riverText" aria-hidden="true"><span>楚河</span><span>漢界</span></div>
+          <CapturedBoardOverlay moves={moves} />
           <div className="pointLayer">
             {board.map((row, r) => row.map((piece, c) => {
               const pos = {row: r, col: c};

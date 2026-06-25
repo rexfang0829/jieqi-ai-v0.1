@@ -13,6 +13,15 @@ export type CapturedPiecesBySide = Record<Side, {
   revealed: CapturedPieceInfo[];
 }>;
 
+export type CapturedBoardPiece = CapturedPieceInfo & {
+  hiddenBeforeCapture: boolean;
+};
+
+export type CapturedBoardStacks = {
+  topLeft: CapturedBoardPiece[];
+  bottomLeft: CapturedBoardPiece[];
+};
+
 export function capturedInfoFromMove(move: Move): CapturedPieceInfo | null {
   if (!move.captured) return null;
 
@@ -39,4 +48,19 @@ export function getCapturedPieces(history: Move[]): CapturedPiecesBySide {
   }
 
   return result;
+}
+
+function toBoardPiece(info: CapturedPieceInfo): CapturedBoardPiece {
+  return {
+    ...info,
+    hiddenBeforeCapture: info.kind === 'hidden',
+  };
+}
+
+export function getCapturedBoardStacks(history: Move[]): CapturedBoardStacks {
+  const captured = getCapturedPieces(history);
+  return {
+    topLeft: [...captured.red.revealed, ...captured.red.hidden].map(toBoardPiece),
+    bottomLeft: [...captured.black.revealed, ...captured.black.hidden].map(toBoardPiece),
+  };
 }

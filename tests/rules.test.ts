@@ -3,7 +3,7 @@ import { recommendMove } from '../src/ai/simpleAi';
 import { SIMPLE_AI_NOTE, SIMPLE_AI_TITLE } from '../src/ai/simpleAiText';
 import { applyMove, newGame } from '../src/game/gameState';
 import { clearBoard, clearSquare, correctSelectedRealType, editSquare, editSquareError, revealHotkeyType, revealSelectedByHotkey, setTurn } from '../src/game/boardEditing';
-import { getCapturedPieces } from '../src/game/capturedPieces';
+import { getCapturedBoardStacks, getCapturedPieces } from '../src/game/capturedPieces';
 import { BOARD_COLS, BOARD_POINT_COUNT, BOARD_ROWS, BOTTOM_FILE_LABELS, TOP_FILE_LABELS, hasLegalPosition, isBoardShape, visualRowForBoardRow } from '../src/game/boardLayout';
 import { createInitialBoard } from '../src/game/initialBoard';
 import { cancelLastMoveSync, syncLastMove } from '../src/game/lastMoveSync';
@@ -366,6 +366,79 @@ test('captured pieces helper groups captures by side and hidden state', () => {
   assertEqual(captured.red.hidden[0].label, `\u6697\u5b50\uff08\u7ffb\u51fa${'\u70ae'}\uff09`);
   assertEqual(captured.black.revealed[0].label, '\u5305');
   assertEqual(captured.black.hidden[0].label, `\u6697\u5b50\uff08\u7ffb\u51fa${'\u5305'}\uff09`);
+});
+
+test('captured board stacks put black captures at top left and red captures at bottom left', () => {
+  const history = [
+    {
+      from: { row: 5, col: 0 },
+      to: { row: 5, col: 1 },
+      piece: piece('black', 'rook'),
+      captured: piece('red', 'horse', 'horse', true),
+      capturedWasHidden: false,
+      captureKind: 'revealed' as const,
+    },
+    {
+      from: { row: 4, col: 8 },
+      to: { row: 4, col: 7 },
+      piece: piece('red', 'rook'),
+      captured: piece('black', 'pawn', 'pawn', true),
+      capturedWasHidden: false,
+      captureKind: 'revealed' as const,
+    },
+  ];
+  const stacks = getCapturedBoardStacks(history);
+  assertEqual(stacks.topLeft[0].side, 'red');
+  assertEqual(stacks.bottomLeft[0].side, 'black');
+});
+
+test('captured board stacks mark hidden captures as translucent candidates', () => {
+  const stacks = getCapturedBoardStacks([
+    {
+      from: { row: 5, col: 0 },
+      to: { row: 5, col: 1 },
+      piece: piece('red', 'rook'),
+      captured: piece('black', 'pawn', 'horse', false),
+      capturedWasHidden: true,
+      captureKind: 'hidden' as const,
+    },
+  ]);
+  assertEqual(stacks.bottomLeft[0].hiddenBeforeCapture, true);
+  assertEqual(stacks.bottomLeft[0].name, realPieceName(piece('black', 'pawn', 'horse', false)));
+});
+
+test('captured board stacks show cannon or bao by captured side', () => {
+  const stacks = getCapturedBoardStacks([
+    {
+      from: { row: 5, col: 0 },
+      to: { row: 5, col: 1 },
+      piece: piece('black', 'rook'),
+      captured: piece('red', 'cannon', 'cannon', true),
+      capturedWasHidden: false,
+      captureKind: 'revealed' as const,
+    },
+    {
+      from: { row: 4, col: 8 },
+      to: { row: 4, col: 7 },
+      piece: piece('red', 'rook'),
+      captured: piece('black', 'cannon', 'cannon', true),
+      capturedWasHidden: false,
+      captureKind: 'revealed' as const,
+    },
+  ]);
+  assertEqual(stacks.topLeft[0].name, '\u70ae');
+  assertEqual(stacks.bottomLeft[0].name, '\u5305');
+});
+
+test('captured board stacks do not change move list notation data', () => {
+  const move = {
+    from: { row: 6, col: 0 },
+    to: { row: 5, col: 0 },
+    piece: piece('red', 'pawn'),
+  };
+  const before = moveText(move);
+  getCapturedBoardStacks([move]);
+  assertEqual(moveText(move), before);
 });
 
 test('ai panel text marks simple scoring and endgame text stays separate', () => {

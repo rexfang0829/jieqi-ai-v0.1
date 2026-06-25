@@ -331,7 +331,7 @@ export default function App() {
         </div>
       )}
       <div className="layout">
-        <Board board={state.board} selected={selected} syncFrom={syncFrom} legalMoves={legalMoves} onSquareClick={click} onSquareLongPress={openCorrection} />
+        <Board board={state.board} selected={selected} syncFrom={syncFrom} legalMoves={legalMoves} moves={state.history} onSquareClick={click} onSquareLongPress={openCorrection} />
         <aside>
           <AiPanel state={state} />
           {syncMode && (
@@ -370,5 +370,3 @@ export default function App() {
     </main>
   );
 }
-
-
