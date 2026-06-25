@@ -21,9 +21,9 @@ type CorrectionAnchor = { x: number; y: number };
 type AppMode = 'home' | 'play' | 'records' | 'ai-master' | 'editor';
 
 const modeCards: { mode: Exclude<AppMode, 'home'>; title: string; body: string }[] = [
-  { mode: 'play', title: '揭棋對弈模式', body: '棋盤對弈主介面：翻子、落子、吃子、將軍、絕殺一氣呵成，支援長按修正暗子。' },
+  { mode: 'play', title: '一般揭棋模式', body: '棋盤對弈主介面：翻子、落子、吃子、將軍、絕殺一氣呵成，支援長按修正暗子。' },
   { mode: 'records', title: '打譜模式', body: 'AI 分析、棋譜管理、被吃子記錄、記步列表與心得紀錄。' },
-  { mode: 'ai-master', title: 'AI 大師模式', body: '輸入盤面讓 AI 找出最佳解，分析最強後續着法。' },
+  { mode: 'ai-master', title: '輔助盤面模式', body: '輸入盤面讓 AI 找出最佳解，分析最強後續着法。' },
   { mode: 'editor', title: '局面編輯 / 測試模式', body: '清空棋盤、手動擺子、換手方、儲存與載入局面。' },
 ];
 
@@ -386,7 +386,7 @@ export default function App() {
       <main className="homeScreen">
         <section className="homeHero">
           <h1>大盤揭棋 AI v0.1</h1>
-          <p>選擇模式開始。揭棋對弈、棋譜打譜、AI 大師分析與局面測試分開顯示。</p>
+          <p>選擇模式開始。揭棋對弈、棋譜打譜、輔助盤面分析與局面測試分開顯示。</p>
         </section>
         <section className="modeGrid">
           {modeCards.map(card => (
@@ -403,9 +403,9 @@ export default function App() {
   if (mode === 'ai-master') {
     return (
       <main>
-        {renderHeader('AI 大師模式')}
+        {renderHeader('輔助盤面模式')}
         <section className="panel emptyModePanel">
-          <h2>AI 大師模式（開發中）</h2>
+          <h2>輔助盤面模式（開發中）</h2>
           <p>輸入盤面，讓 AI 搜尋最佳解序列。目前尚未啟用，下一輪實作。</p>
         </section>
       </main>
@@ -465,10 +465,10 @@ export default function App() {
     );
   }
 
-  /* 揭棋對弈模式 — board only, no scroll */
+  /* 一般揭棋模式 — board only, no scroll */
   return (
     <main>
-      {renderHeader('揭棋對弈模式')}
+      {renderHeader('一般揭棋模式')}
       {renderEndgameBanner()}
       <div className="toolbar">
         <button onClick={toggleSyncMode}>{syncMode ? '取消同步' : '同步上一手'}</button>
