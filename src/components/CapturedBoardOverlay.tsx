@@ -24,12 +24,20 @@ function CapturedStack({ className, pieces }: { className: string; pieces: Captu
   );
 }
 
-export function CapturedBoardOverlay({ moves }: { moves: Move[] }) {
+/** position="left"  → red's captures, bottom-left of board
+ *  position="right" → black's captures, top-right of board */
+export function CapturedBoardOverlay({ moves, position }: { moves: Move[]; position: 'left' | 'right' }) {
   const stacks = getCapturedBoardStacks(moves);
+  if (position === 'left') {
+    return (
+      <div className="capturedBoardOverlay capturedOverlayLeft">
+        <CapturedStack className="capturedBottomLeft" pieces={stacks.bottomLeft} />
+      </div>
+    );
+  }
   return (
-    <div className="capturedBoardOverlay">
-      <CapturedStack className="capturedTopLeft" pieces={stacks.topLeft} />
-      <CapturedStack className="capturedBottomLeft" pieces={stacks.bottomLeft} />
+    <div className="capturedBoardOverlay capturedOverlayRight">
+      <CapturedStack className="capturedTopRight" pieces={stacks.topRight} />
     </div>
   );
 }

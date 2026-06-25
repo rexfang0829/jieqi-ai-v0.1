@@ -17,7 +17,7 @@ export function Board({ board, selected, syncFrom = null, legalMoves, moves, onS
   return (
     <div className="boardWrap">
       <div className="boardRow">
-        <CapturedBoardOverlay moves={moves} />
+        <CapturedBoardOverlay moves={moves} position="left" />
         <div className="boardShell">
           <div className="fileLabels topFileLabels" aria-hidden="true">
             {TOP_FILE_LABELS.map(label => <span key={label}>{label}</span>)}
@@ -82,6 +82,7 @@ export function Board({ board, selected, syncFrom = null, legalMoves, moves, onS
             {BOTTOM_FILE_LABELS.map(label => <span key={label}>{label}</span>)}
           </div>
         </div>
+        <CapturedBoardOverlay moves={moves} position="right" />
       </div>
     </div>
   );

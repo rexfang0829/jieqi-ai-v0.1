@@ -18,8 +18,10 @@ export type CapturedBoardPiece = CapturedPieceInfo & {
 };
 
 export type CapturedBoardStacks = {
-  topLeft: CapturedBoardPiece[];
+  /** Pieces RED has captured from black — displayed bottom-left */
   bottomLeft: CapturedBoardPiece[];
+  /** Pieces BLACK has captured from red — displayed top-right */
+  topRight: CapturedBoardPiece[];
 };
 
 export function capturedInfoFromMove(move: Move): CapturedPieceInfo | null {
@@ -60,7 +62,9 @@ function toBoardPiece(info: CapturedPieceInfo): CapturedBoardPiece {
 export function getCapturedBoardStacks(history: Move[]): CapturedBoardStacks {
   const captured = getCapturedPieces(history);
   return {
-    topLeft: [...captured.red.revealed, ...captured.red.hidden].map(toBoardPiece),
+    // red captured these black pieces → show at bottom-left (red's side)
     bottomLeft: [...captured.black.revealed, ...captured.black.hidden].map(toBoardPiece),
+    // black captured these red pieces → show at top-right (black's side)
+    topRight: [...captured.red.revealed, ...captured.red.hidden].map(toBoardPiece),
   };
 }

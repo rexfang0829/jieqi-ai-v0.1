@@ -388,7 +388,7 @@ test('captured board stacks put black captures at top left and red captures at b
     },
   ];
   const stacks = getCapturedBoardStacks(history);
-  assertEqual(stacks.topLeft[0].side, 'red');
+  assertEqual(stacks.topRight[0].side, 'red');
   assertEqual(stacks.bottomLeft[0].side, 'black');
 });
 
@@ -426,7 +426,7 @@ test('captured board stacks show cannon or bao by captured side', () => {
       captureKind: 'revealed' as const,
     },
   ]);
-  assertEqual(stacks.topLeft[0].name, '\u70ae');
+  assertEqual(stacks.topRight[0].name, '\u70ae');
   assertEqual(stacks.bottomLeft[0].name, '\u5305');
 });
 
