@@ -1,8 +1,8 @@
 {
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "test": "tsc -p tsconfig.test.json && node .tmp-tests/tests/rules.test.js",
+    "build": "npx tsc && npx vite build",
+    "test": "npx tsc -p tsconfig.test.json && node .tmp-tests/tests/rules.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

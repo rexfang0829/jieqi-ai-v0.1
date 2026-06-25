@@ -77,30 +77,26 @@ export function playEndgameSound(win: Window = window): void {
     // 行動瀏覽器可能在使用者互動前封鎖音訊，UI 照常運作
   }
 
-  // 語音「絕殺」：延遲 400ms，低沉男聲
-  win.setTimeout(() => {
-    try {
-      if (typeof win.speechSynthesis === 'undefined') return;
+  // 語音「絕殺」：直接在手勢 call stack 內呼叫，不用 setTimeout
+  try {
+    if (typeof win.speechSynthesis !== 'undefined') {
       const UtteranceClass = (win as unknown as Record<string, unknown>)['SpeechSynthesisUtterance'] as
         | (new (text: string) => SpeechSynthesisUtterance)
         | undefined;
-      if (!UtteranceClass) return;
-      const utter = new UtteranceClass('絕殺');
-      utter.lang = 'zh-TW';
-      utter.pitch = 0.6;
-      utter.rate = 0.75;
-      utter.volume = 1;
-      const voices = win.speechSynthesis.getVoices();
-      const maleVoice = voices.find(
-        v => v.lang.startsWith('zh') &&
-          (v.name.toLowerCase().includes('male') || v.name.includes('男')),
-      );
-      const zhVoice = voices.find(v => v.lang.startsWith('zh'));
-      if (maleVoice) utter.voice = maleVoice;
-      else if (zhVoice) utter.voice = zhVoice;
-      win.speechSynthesis.speak(utter);
-    } catch {
-      // speechSynthesis 不可用時靜默略過
+      if (UtteranceClass) {
+        win.speechSynthesis.cancel();
+        const utter = new UtteranceClass('絕殺');
+        utter.lang = 'zh-TW';
+        utter.pitch = 0.6;
+        utter.rate = 0.75;
+        utter.volume = 1;
+        const voices = win.speechSynthesis.getVoices();
+        const zhVoice = voices.find(v => v.lang.startsWith('zh'));
+        if (zhVoice) utter.voice = zhVoice;
+        win.speechSynthesis.speak(utter);
+      }
     }
-  }, 400);
+  } catch {
+    // speechSynthesis 不可用時靜默略過
+  }
 }

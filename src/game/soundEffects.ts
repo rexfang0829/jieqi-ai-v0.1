@@ -16,7 +16,6 @@ function getAudioContext(win: Window): AudioContext | null {
   }
 }
 
-/** 白噪音 + bandpass 模擬木頭棋子敲擊聲 */
 function noiseBurst(
   context: AudioContext,
   frequency: number,
@@ -50,45 +49,32 @@ function noiseBurst(
   source.stop(t + decayTime + 0.01);
 }
 
-function speakChinese(
-  win: Window,
-  text: string,
-  pitch: number,
-  rate: number,
-  delayMs: number,
-): void {
-  win.setTimeout(() => {
-    try {
-      if (typeof win.speechSynthesis === 'undefined') return;
-      const UtteranceClass = (win as unknown as Record<string, unknown>)['SpeechSynthesisUtterance'] as
-        | (new (text: string) => SpeechSynthesisUtterance)
-        | undefined;
-      if (!UtteranceClass) return;
-      const utter = new UtteranceClass(text);
-      utter.lang = 'zh-TW';
-      utter.pitch = pitch;
-      utter.rate = rate;
-      utter.volume = 1;
-      const voices = win.speechSynthesis.getVoices();
-      const maleVoice = voices.find(
-        v => v.lang.startsWith('zh') &&
-          (v.name.toLowerCase().includes('male') || v.name.includes('男')),
-      );
-      const zhVoice = voices.find(v => v.lang.startsWith('zh'));
-      if (maleVoice) utter.voice = maleVoice;
-      else if (zhVoice) utter.voice = zhVoice;
-      win.speechSynthesis.speak(utter);
-    } catch {
-      // speechSynthesis 不可用時靜默略過
-    }
-  }, delayMs);
+function speakNow(win: Window, text: string, pitch: number, rate: number): void {
+  try {
+    if (typeof win.speechSynthesis === 'undefined') return;
+    const UtteranceClass = (win as unknown as Record<string, unknown>)['SpeechSynthesisUtterance'] as
+      | (new (t: string) => SpeechSynthesisUtterance)
+      | undefined;
+    if (!UtteranceClass) return;
+    win.speechSynthesis.cancel();
+    const utter = new UtteranceClass(text);
+    utter.lang = 'zh-TW';
+    utter.pitch = pitch;
+    utter.rate = rate;
+    utter.volume = 1;
+    const voices = win.speechSynthesis.getVoices();
+    const zhVoice = voices.find(v => v.lang.startsWith('zh'));
+    if (zhVoice) utter.voice = zhVoice;
+    win.speechSynthesis.speak(utter);
+  } catch {
+    // speechSynthesis unavailable
+  }
 }
 
 export function shouldPlayMoveSound(previous: GameState, next: GameState): boolean {
   return previous !== next && next.history.length === previous.history.length + 1;
 }
 
-/** 落子聲：木頭輕敲 */
 export function playMoveSound(win: Window = window): void {
   try {
     const ctx = getAudioContext(win);
@@ -96,11 +82,10 @@ export function playMoveSound(win: Window = window): void {
     noiseBurst(ctx, 900, 8, 0.35, 0.07);
     win.setTimeout(() => { ctx.close().catch(() => undefined); }, 200);
   } catch {
-    // 行動瀏覽器可能在使用者互動前封鎖音訊，UI 照常運作
+    // audio blocked
   }
 }
 
-/** 吃子聲：木頭重敲 */
 export function playCaptureSound(win: Window = window): void {
   try {
     const ctx = getAudioContext(win);
@@ -108,11 +93,10 @@ export function playCaptureSound(win: Window = window): void {
     noiseBurst(ctx, 700, 6, 0.55, 0.10);
     win.setTimeout(() => { ctx.close().catch(() => undefined); }, 300);
   } catch {
-    // 行動瀏覽器可能在使用者互動前封鎖音訊，UI 照常運作
+    // audio blocked
   }
 }
 
-/** 將軍聲：棋子聲 + 男聲語音「將軍」 */
 export function playCheckSound(win: Window = window): void {
   try {
     const ctx = getAudioContext(win);
@@ -120,7 +104,7 @@ export function playCheckSound(win: Window = window): void {
     noiseBurst(ctx, 800, 7, 0.45, 0.08);
     win.setTimeout(() => { ctx.close().catch(() => undefined); }, 300);
   } catch {
-    // 行動瀏覽器可能在使用者互動前封鎖音訊，UI 照常運作
+    // audio blocked
   }
-  speakChinese(win, '將軍', 0.7, 0.85, 100);
+  speakNow(win, '將軍', 0.7, 0.85);
 }
