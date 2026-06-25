@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GameState, PieceType, Position } from './types/chess';
 import { Board } from './components/Board';
 import { MoveList } from './components/MoveList';
-import { GameRecordPanel } from './components/GameRecordPanel';
 import { AiPanel } from './components/AiPanel';
 import { WisdomPanel } from './components/WisdomPanel';
 import { PositionEditor } from './components/PositionEditor';
@@ -62,6 +61,11 @@ export default function App() {
   const [editorError, setEditorError] = useState('');
   const [correctionPos, setCorrectionPos] = useState<Position | null>(null);
   const [correctionAnchor, setCorrectionAnchor] = useState<CorrectionAnchor | null>(null);
+
+  /* ── 一般揭棋模式：快速儲存棋譜 ── */
+  const [playQuickSave, setPlayQuickSave] = useState(false);
+  const [playQuickTitle, setPlayQuickTitle] = useState('未命名棋譜');
+  const [playQuickMsg, setPlayQuickMsg] = useState('');
 
   /* ── 棋譜模式子頁狀態 ── */
   const [recordsPage, setRecordsPage] = useState<RecordsPage>('library');
@@ -306,6 +310,18 @@ export default function App() {
     const ok = saveGameRecord(storage(), record);
     setSaveMsg(ok ? '已儲存（含初始快照）' : '儲存失敗');
     if (ok) setRecordsList(loadGameRecords(storage()));
+  }
+
+  /* 一般揭棋模式：快速儲存棋譜 */
+  function savePlayQuick() {
+    const initialState = past.length > 0 ? past[0] : state;
+    const record = {
+      ...createGameRecord({ title: playQuickTitle.trim() || '未命名棋譜', moves: state.history, finalStatus: state.status }),
+      initialState,
+    };
+    const ok = saveGameRecord(storage(), record);
+    setPlayQuickMsg(ok ? '棋譜已儲存' : '儲存失敗');
+    setPlayQuickSave(false);
   }
 
   function deleteRecord(id: string) {
@@ -710,7 +726,25 @@ export default function App() {
       <div className="toolbar">
         <button onClick={toggleSyncMode}>{syncMode ? '取消同步' : '同步上一手'}</button>
         <button onClick={undo} disabled={!past.length}>回到上一步</button>
+        <button onClick={() => { setPlayQuickTitle('未命名棋譜'); setPlayQuickMsg(''); setPlayQuickSave(true); }}>儲存棋譜</button>
       </div>
+      {playQuickSave && (
+        <div style={{display:'flex',gap:8,alignItems:'center',padding:'6px 12px 8px',background:'var(--panel-bg,#1e293b)',borderBottom:'1px solid #334155'}}>
+          <input
+            value={playQuickTitle}
+            onChange={(e: { target: { value: string } }) => setPlayQuickTitle(e.target.value)}
+            placeholder="棋譜名稱"
+            style={{flex:1,minWidth:0,padding:'4px 8px',borderRadius:4,border:'1px solid #475569',background:'#0f172a',color:'inherit',fontSize:14}}
+            onKeyDown={(e: { key: string }) => { if (e.key === 'Enter') savePlayQuick(); if (e.key === 'Escape') setPlayQuickSave(false); }}
+            autoFocus
+          />
+          <button onClick={savePlayQuick} style={{whiteSpace:'nowrap'}}>確認</button>
+          <button onClick={() => setPlayQuickSave(false)} style={{whiteSpace:'nowrap'}}>取消</button>
+        </div>
+      )}
+      {playQuickMsg && (
+        <p style={{textAlign:'center',color:'#86efac',margin:'4px 0 6px',fontSize:13}}>{playQuickMsg}</p>
+      )}
       {syncMode && (
         <div className={`panel syncPanel ${syncError ? 'syncError' : ''}`} style={{marginBottom:'12px'}}>
           {syncError || (syncFrom ? '同步上一手：請點終點' : '同步上一手：請點起點')}
@@ -718,9 +752,6 @@ export default function App() {
       )}
       {/* 正式對局：不傳 onSquareLongPress，禁止長按修正棋種 */}
       <Board board={state.board} selected={selected} syncFrom={syncFrom} legalMoves={legalMoves} moves={state.history} onSquareClick={click} />
-
-      {/* 儲存目前對局的快捷入口（對弈模式底部） */}
-      <GameRecordPanel state={state} past={past} />
     </main>
   );
 }

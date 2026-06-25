@@ -5,6 +5,26 @@
 
 ## 最新完成的工作
 
+### 2026-06-25 一般揭棋模式棋譜管理簡化（Claude）
+
+**問題**：一般揭棋模式底部完整 `GameRecordPanel`（列表、刪除、複製、匯出）版面太重，手機需一直往下滑。
+
+**修改**（僅 `src/App.tsx`）：
+
+1. 移除 `GameRecordPanel` import。
+2. 移除 `<GameRecordPanel state={state} past={past} />` 渲染。
+3. toolbar 新增「儲存棋譜」按鈕。
+4. 點擊後展開 inline 輸入列（棋譜名稱 input + 確認 + 取消）；Enter 確認，Escape 取消。
+5. 儲存時同樣保存 `initialState = past[0] ?? state`（含暗子配置），成功顯示「棋譜已儲存」綠色提示。
+6. 新增三個 state：`playQuickSave`、`playQuickTitle`、`playQuickMsg`。
+7. 新增 `savePlayQuick()` 函式。
+
+**完整棋譜管理保留位置**：打譜模式 → 最近對局（列表、回放、刪除）。
+
+**測試**：`npm test` 80 項全通過。
+
+---
+
 ### 2026-06-25 落子聲拉滿 + 回放絕殺音效修正（Claude）
 
 **soundEffects.ts peakGain 調整**：
