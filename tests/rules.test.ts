@@ -2,7 +2,7 @@ import { getAllLegalMoves, isCheckmate, isInCheck } from '../src/game/checkRules
 import { recommendMove } from '../src/ai/simpleAi';
 import { SIMPLE_AI_NOTE, SIMPLE_AI_TITLE } from '../src/ai/simpleAiText';
 import { applyMove, newGame } from '../src/game/gameState';
-import { clearBoard, clearSquare, editSquare, revealHotkeyType, revealSelectedByHotkey, setTurn } from '../src/game/boardEditing';
+import { clearBoard, clearSquare, correctSelectedRealType, editSquare, editSquareError, revealHotkeyType, revealSelectedByHotkey, setTurn } from '../src/game/boardEditing';
 import { getCapturedPieces } from '../src/game/capturedPieces';
 import { BOARD_COLS, BOARD_POINT_COUNT, BOARD_ROWS, BOTTOM_FILE_LABELS, TOP_FILE_LABELS, hasLegalPosition, isBoardShape, visualRowForBoardRow } from '../src/game/boardLayout';
 import { createInitialBoard } from '../src/game/initialBoard';
@@ -12,7 +12,9 @@ import { createGameRecord, deleteGameRecord, GAME_RECORD_STORAGE_KEY, recordToJs
 import { moveText } from '../src/game/moveNotation';
 import { isBasicLegalMove, kingsFace } from '../src/game/moveRules';
 import { realPieceName } from '../src/game/pieceText';
+import { remainingRealPieces } from '../src/game/pieceInventory';
 import { fromSavedPosition, loadPosition, POSITION_STORAGE_KEY, savePosition, toSavedPosition } from '../src/game/positionStorage';
+import { shouldPlayMoveSound } from '../src/game/soundEffects';
 import type { Board, Piece, PieceType, Side } from '../src/types/chess';
 
 function assertEqual(actual: unknown, expected: unknown) {
@@ -494,6 +496,20 @@ test('endgame sound trigger only fires once per status change into a win', () =>
   assertEqual(shouldPlayEndgameSound('black_win', 'black_win'), false);
 });
 
+test('move sound trigger only fires after a successful move', () => {
+  const board = withKings();
+  place(board, 6, 0, piece('red', 'pawn'));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const selectedOnly = {...state};
+  const illegal = applyMove(state, { row: 6, col: 0 }, { row: 6, col: 1 });
+  const legal = applyMove(state, { row: 6, col: 0 }, { row: 5, col: 0 });
+  const edited = editSquare(state, { row: 6, col: 0 }, { revealed: true });
+  assertEqual(shouldPlayMoveSound(state, selectedOnly), false);
+  assertEqual(shouldPlayMoveSound(state, illegal), false);
+  assertEqual(shouldPlayMoveSound(state, edited), false);
+  assertEqual(shouldPlayMoveSound(state, legal), true);
+});
+
 test('editor can add a piece to an empty square', () => {
   const state = { board: emptyBoard(), turn: 'red' as const, history: [], status: 'playing' as const };
   const next = editSquare(state, { row: 4, col: 4 }, {}, {
@@ -538,6 +554,32 @@ test('editor can change original type, real type, and revealed state', () => {
   assertEqual(next.board[4][4]?.originalType, 'horse');
   assertEqual(next.board[4][4]?.realType, 'rook');
   assertEqual(next.board[4][4]?.revealed, true);
+});
+
+test('manual piece correction updates remaining inventory', () => {
+  const board = emptyBoard();
+  place(board, 4, 4, piece('red', 'pawn', 'pawn', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const before = remainingRealPieces(state.board, 'red');
+  const next = editSquare(state, { row: 4, col: 4 }, {
+    realType: 'cannon',
+    revealed: true,
+  });
+  const after = remainingRealPieces(next.board, 'red');
+  assertEqual(after.cannon, before.cannon - 1);
+  assertEqual(after.pawn, before.pawn + 1);
+});
+
+test('piece inventory prevents exceeding side piece limits', () => {
+  const board = emptyBoard();
+  place(board, 4, 0, piece('red', 'rook', 'rook', true));
+  place(board, 4, 1, piece('red', 'rook', 'rook', true));
+  place(board, 4, 2, piece('red', 'pawn', 'pawn', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  assertEqual(editSquareError(state, { row: 4, col: 2 }, { realType: 'rook', revealed: true }) !== null, true);
+  const next = editSquare(state, { row: 4, col: 2 }, { realType: 'rook', revealed: true });
+  assertEqual(next, state);
+  assertEqual(next.board[4][2]?.realType, 'pawn');
 });
 
 test('editing resets finished status back to playing', () => {
@@ -640,6 +682,16 @@ test('reveal hotkey sets real type and revealed state', () => {
   assertEqual(next.board[4][4]?.realType, 'rook');
   assertEqual(next.board[4][4]?.revealed, true);
   assertEqual(next.status, 'playing');
+});
+
+test('long press correction helper can reveal a piece as cannon', () => {
+  const board = emptyBoard();
+  place(board, 4, 4, piece('black', 'pawn', 'pawn', false));
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const next = correctSelectedRealType(state, { row: 4, col: 4 }, 'cannon');
+  assertEqual(next.board[4][4]?.side, 'black');
+  assertEqual(next.board[4][4]?.realType, 'cannon');
+  assertEqual(next.board[4][4]?.revealed, true);
 });
 
 test('reveal hotkey keeps original type, side, and other squares', () => {

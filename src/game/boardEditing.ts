@@ -1,4 +1,5 @@
 import type { Board, GameState, Piece, PieceType, Position, Side } from '../types/chess';
+import { inventoryError } from './pieceInventory';
 
 export type PieceDraft = {
   side: Side;
@@ -24,6 +25,7 @@ export function createEditablePiece(draft: PieceDraft): Piece {
 export function editSquare(state: GameState, pos: Position, patch: Partial<Piece>, fallback?: PieceDraft): GameState {
   const current = state.board[pos.row][pos.col];
   if (!current && !fallback) return state;
+  if (editSquareError(state, pos, patch, fallback)) return state;
 
   const board = state.board.map(row => row.map(piece => piece ? {...piece} : null));
   board[pos.row][pos.col] = current
@@ -35,6 +37,14 @@ export function editSquare(state: GameState, pos: Position, patch: Partial<Piece
     board,
     status: 'playing',
   };
+}
+
+export function editSquareError(state: GameState, pos: Position, patch: Partial<Piece>, fallback?: PieceDraft): string | null {
+  const current = state.board[pos.row][pos.col];
+  if (!current && !fallback) return null;
+  const side = patch.side ?? current?.side ?? fallback!.side;
+  const realType = patch.realType ?? current?.realType ?? fallback!.realType;
+  return inventoryError(state.board, pos, side, realType);
 }
 
 export function clearSquare(state: GameState, pos: Position): GameState {
@@ -83,6 +93,16 @@ export function revealHotkeyType(key: string): PieceType | null {
 export function revealSelectedByHotkey(state: GameState, selected: Position | null, key: string): GameState {
   const realType = revealHotkeyType(key);
   if (!selected || !realType) return state;
+  if (!state.board[selected.row][selected.col]) return state;
+
+  return editSquare(state, selected, {
+    realType,
+    revealed: true,
+  });
+}
+
+export function correctSelectedRealType(state: GameState, selected: Position | null, realType: PieceType): GameState {
+  if (!selected) return state;
   if (!state.board[selected.row][selected.col]) return state;
 
   return editSquare(state, selected, {

@@ -19,12 +19,14 @@ export function PositionEditor({
   onUpdatePiece,
   onCreatePiece,
   onClearSquare,
+  error,
 }: {
   selected: Position | null;
   piece: Piece | null;
   onUpdatePiece: (patch: Partial<Piece>) => void;
   onCreatePiece: (draft: PieceDraft) => void;
   onClearSquare: () => void;
+  error?: string;
 }) {
   const [draft, setDraft] = useState<PieceDraft>({ side: 'red', originalType: 'rook', realType: 'rook', revealed: false });
 
@@ -48,6 +50,7 @@ export function PositionEditor({
           submitLabel="新增棋子"
           onSubmit={() => onCreatePiece(draft)}
         />
+        {error && <p className="editorError">{error}</p>}
       </div>
     );
   }
@@ -62,6 +65,7 @@ export function PositionEditor({
         onChange={next => onUpdatePiece(next)}
         submitLabel=""
       />
+      {error && <p className="editorError">{error}</p>}
       <button onClick={onClearSquare}>清除此格</button>
     </div>
   );

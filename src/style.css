@@ -62,6 +62,11 @@ input{width:100%;margin:6px 0 10px;background:#f7e2bd;color:#2c160b;border:1px s
 select{width:100%;margin:6px 0 10px;background:#f7e2bd;color:#2c160b;border:1px solid #9b6935;border-radius:8px;padding:8px}
 .editorPanel label{display:block;margin:8px 0}
 .editorPanel button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-radius:8px;padding:8px 12px}
+.editorError{color:#ffd36a;background:#5a2418;border:1px solid #d7a55a;border-radius:8px;padding:8px;line-height:1.4}
+.correctionPanel{max-height:none}
+.correctionPanel p{margin:4px 0 10px;color:#ffe8beaa}
+.correctionButtons{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0 10px}
+.correctionButtons button,.correctionPanel>button{min-height:44px;background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-radius:8px;padding:10px 12px;font-size:16px;font-weight:800}
 ol{padding-left:22px}
 li{margin-bottom:6px}
 li.hiddenCapture{color:#ffd36a;font-weight:700}
@@ -78,6 +83,8 @@ li.revealedCapture{color:#ffe8be}
   .endgameBanner strong{font-size:22px}
   .endgameBanner span{font-size:16px}
   .capturedPieces em{font-size:12px;padding:2px 7px}
+  .correctionButtons{grid-template-columns:repeat(2,1fr)}
+  .correctionButtons button,.correctionPanel>button{min-height:48px}
   aside{width:100%}
 }
 .recordPanel{max-height:none}

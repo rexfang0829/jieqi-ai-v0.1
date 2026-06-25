@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { GameState, Position } from './types/chess';
+import type { GameState, PieceType, Position } from './types/chess';
 import { Board } from './components/Board';
 import { MoveList } from './components/MoveList';
 import { CapturedPanel } from './components/CapturedPanel';
@@ -7,13 +7,15 @@ import { GameRecordPanel } from './components/GameRecordPanel';
 import { AiPanel } from './components/AiPanel';
 import { WisdomPanel } from './components/WisdomPanel';
 import { PositionEditor } from './components/PositionEditor';
-import { clearBoard, clearSquare, editSquare, revealSelectedByHotkey, setTurn, type PieceDraft } from './game/boardEditing';
+import { clearBoard, clearSquare, correctSelectedRealType, editSquare, editSquareError, revealHotkeyType, revealSelectedByHotkey, setTurn, type PieceDraft } from './game/boardEditing';
 import { applyMove, newGame } from './game/gameEngine';
 import { cancelLastMoveSync, syncLastMove } from './game/lastMoveSync';
 import { loadPosition, savePosition } from './game/positionStorage';
 import { getAllLegalMoves } from './game/checkRules';
 import { getEndgameFeedback, shouldPlayEndgameSound, statusLabel } from './game/endgameFeedback';
 import { playEndgameSound } from './game/endgameSound';
+import { editorPieceTypeNames } from './game/pieceText';
+import { playMoveSound, shouldPlayMoveSound } from './game/soundEffects';
 
 export default function App() {
   const [state, setState] = useState(() => newGame());
@@ -23,6 +25,8 @@ export default function App() {
   const [syncFrom, setSyncFrom] = useState<Position | null>(null);
   const [syncError, setSyncError] = useState('');
   const [lastSoundStatus, setLastSoundStatus] = useState(state.status);
+  const [editorError, setEditorError] = useState('');
+  const [correctionPos, setCorrectionPos] = useState<Position | null>(null);
 
   const legalMoves = useMemo(
     () => state.status === 'playing' && selected
@@ -40,6 +44,7 @@ export default function App() {
       syncClick(pos);
       return;
     }
+    setCorrectionPos(null);
 
     if (state.status !== 'playing') {
       setSelected(pos);
@@ -52,6 +57,7 @@ export default function App() {
       if (next !== state) {
         setPast(history => [...history, state]);
         setState(next);
+        if (shouldPlayMoveSound(state, next)) playMoveSound();
       }
       setSelected(null);
       return;
@@ -65,6 +71,8 @@ export default function App() {
     setState(newGame());
     setPast([]);
     setSelected(null);
+    setCorrectionPos(null);
+    setEditorError('');
     cancelSync();
   }
 
@@ -72,6 +80,8 @@ export default function App() {
     setPast(history => [...history, state]);
     setState(clearBoard(state));
     setSelected(null);
+    setCorrectionPos(null);
+    setEditorError('');
     cancelSync();
   }
 
@@ -89,6 +99,8 @@ export default function App() {
     setState(saved);
     setPast([]);
     setSelected(null);
+    setCorrectionPos(null);
+    setEditorError('');
     cancelSync();
   }
 
@@ -96,6 +108,8 @@ export default function App() {
     setState(s => setTurn(s, turn));
     setPast([]);
     setSelected(null);
+    setCorrectionPos(null);
+    setEditorError('');
     cancelSync();
   }
 
@@ -105,24 +119,38 @@ export default function App() {
       const previous = history[history.length - 1];
       setState(previous);
       setSelected(null);
+      setCorrectionPos(null);
+      setEditorError('');
       return history.slice(0, -1);
     });
   }
 
   function editSelectedPiece(patch: Partial<NonNullable<GameState['board'][number][number]>>) {
     if (!selected) return;
+    const error = editSquareError(state, selected, patch);
+    if (error) {
+      setEditorError(error);
+      return;
+    }
     const next = editSquare(state, selected, patch);
     if (next === state) return;
     setPast(history => [...history, state]);
     setState(next);
+    setEditorError('');
   }
 
   function createSelectedPiece(draft: PieceDraft) {
     if (!selected) return;
+    const error = editSquareError(state, selected, {}, draft);
+    if (error) {
+      setEditorError(error);
+      return;
+    }
     const next = editSquare(state, selected, {}, draft);
     if (next === state) return;
     setPast(history => [...history, state]);
     setState(next);
+    setEditorError('');
   }
 
   function clearSelectedSquare() {
@@ -131,6 +159,30 @@ export default function App() {
     if (next === state) return;
     setPast(history => [...history, state]);
     setState(next);
+    setEditorError('');
+  }
+
+  function openCorrection(pos: Position) {
+    if (syncMode) return;
+    if (!state.board[pos.row][pos.col]) return;
+    setSelected(null);
+    setCorrectionPos(pos);
+    setEditorError('');
+  }
+
+  function applyCorrection(realType: PieceType) {
+    if (!correctionPos) return;
+    const error = editSquareError(state, correctionPos, { realType, revealed: true });
+    if (error) {
+      setEditorError(error);
+      return;
+    }
+    const next = correctSelectedRealType(state, correctionPos, realType);
+    if (next === state) return;
+    setPast(history => [...history, state]);
+    setState(next);
+    setCorrectionPos(null);
+    setEditorError('');
   }
 
   function toggleSyncMode() {
@@ -166,6 +218,7 @@ export default function App() {
     if (result.applied) {
       setPast(history => [...history, state]);
       setState(result.state);
+      if (shouldPlayMoveSound(state, result.state)) playMoveSound();
       setSyncMode(false);
       setSyncFrom(null);
       setSyncError('');
@@ -182,11 +235,21 @@ export default function App() {
       const target = event.target;
       if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) return;
 
+      const hotkeyType = revealHotkeyType(event.key);
+      if (selected && hotkeyType) {
+        const error = editSquareError(state, selected, { realType: hotkeyType, revealed: true });
+        if (error) {
+          event.preventDefault();
+          setEditorError(error);
+          return;
+        }
+      }
       const next = revealSelectedByHotkey(state, selected, event.key);
       if (next === state) return;
       event.preventDefault();
       setPast(history => [...history, state]);
       setState(next);
+      setEditorError('');
     }
 
     window.addEventListener('keydown', keydown);
@@ -229,7 +292,7 @@ export default function App() {
         </div>
       )}
       <div className="layout">
-        <Board board={state.board} selected={selected} syncFrom={syncFrom} legalMoves={legalMoves} onSquareClick={click} />
+        <Board board={state.board} selected={selected} syncFrom={syncFrom} legalMoves={legalMoves} onSquareClick={click} onSquareLongPress={openCorrection} />
         <aside>
           <AiPanel state={state} />
           {syncMode && (
@@ -238,12 +301,26 @@ export default function App() {
             </div>
           )}
           <div className="panel hotkeyHint">翻子快捷鍵：1車 2馬 3象 4士 5炮 6兵</div>
+          {correctionPos && (
+            <div className="panel correctionPanel">
+              <h3>修正棋種</h3>
+              <p>只修改真實棋種，並設為明子。</p>
+              <div className="correctionButtons">
+                {(['rook', 'horse', 'elephant', 'advisor', 'cannon', 'pawn'] as PieceType[]).map(type => (
+                  <button key={type} onClick={() => applyCorrection(type)}>{editorPieceTypeNames[type]}</button>
+                ))}
+              </div>
+              {editorError && <p className="editorError">{editorError}</p>}
+              <button onClick={() => setCorrectionPos(null)}>取消</button>
+            </div>
+          )}
           <PositionEditor
             selected={selected}
             piece={selected ? state.board[selected.row][selected.col] : null}
             onUpdatePiece={editSelectedPiece}
             onCreatePiece={createSelectedPiece}
             onClearSquare={clearSelectedSquare}
+            error={!correctionPos ? editorError : ''}
           />
           <GameRecordPanel state={state} />
           <CapturedPanel moves={state.history} />
