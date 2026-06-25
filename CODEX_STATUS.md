@@ -128,6 +128,23 @@ npm.cmd run build
 
 ---
 
+### 2026-06-25 棋譜回放 snapshot 最小修正（Claude）
+
+**問題**：棋譜回放從 `newGame()` 重播，但揭棋暗子 `realType` 是隨機的，回放盤面與原局不同。
+
+**修改**：
+
+1. **`src/game/gameRecord.ts`**：`GameRecord` 加 `snapshots?: GameState[]`，並在 import 加入 `GameState`。
+2. **`src/App.tsx`**：`saveCurrentGame` 改為 `const snapshots = [...past, state]`，存入 record。
+   回放的 `playbackState` useMemo 優先取 `playbackRecord.snapshots?.[playbackStep]`，沒有才走舊的 `applyMove` replay。
+   回放頁加一行小提示：有快照顯示綠色「✓ 快照回放」，舊棋譜顯示黃色「⚠ 舊棋譜重播，暗子可能不一致」。
+
+**向下相容**：舊棋譜（無 `snapshots`）繼續用 `applyMove` 回播，不會壞。
+
+**測試**：`npm test` 80 項全通過。
+
+---
+
 ### 2026-06-25 正式對局資料一致性修正 MVP（Claude）
 
 **問題**：一般揭棋模式可以長按或快捷鍵修正棋種，但棋種修正不是正式 Move，  

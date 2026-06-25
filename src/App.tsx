@@ -87,9 +87,13 @@ export default function App() {
     ? { left: `${correctionAnchor.x}px`, top: `${correctionAnchor.y}px` }
     : undefined;
 
-  /* 回放盤面：從初始局面一步步還原到 playbackStep */
+  /* 回放盤面：優先用快照，沒有快照才用 newGame() + applyMove fallback */
   const playbackState = useMemo(() => {
     if (!playbackRecord) return newGame();
+    /* 快照優先：直接回傳對應步驟的完整局面 */
+    const snap = playbackRecord.snapshots?.[playbackStep];
+    if (snap) return snap;
+    /* Fallback：逐步重播（舊棋譜或暗子可能不一致） */
     let s = newGame();
     for (let i = 0; i < playbackStep && i < playbackRecord.moves.length; i++) {
       const m = playbackRecord.moves[i];
@@ -98,6 +102,8 @@ export default function App() {
     }
     return s;
   }, [playbackRecord, playbackStep]);
+
+  const playbackHasSnapshot = !!(playbackRecord?.snapshots?.length);
 
   /* 搜尋過濾 */
   const filteredRecords = useMemo(() => {
@@ -285,9 +291,14 @@ export default function App() {
   }
 
   function saveCurrentGame() {
-    const record = createGameRecord({ title: saveTitle, moves: state.history, finalStatus: state.status });
+    /* snapshots = 初始局面 + 每手後的完整 GameState，供回放精確還原暗子 */
+    const snapshots = [...past, state];
+    const record = {
+      ...createGameRecord({ title: saveTitle, moves: state.history, finalStatus: state.status }),
+      snapshots,
+    };
     const ok = saveGameRecord(storage(), record);
-    setSaveMsg(ok ? '已儲存' : '儲存失敗');
+    setSaveMsg(ok ? '已儲存（含快照）' : '儲存失敗');
     if (ok) setRecordsList(loadGameRecords(storage()));
   }
 
@@ -575,6 +586,10 @@ export default function App() {
                   <strong>{playbackRecord.title}</strong>
                   <br />
                   <em>{resultText(playbackRecord.finalStatus)}</em>
+                  <br />
+                  <small style={{fontSize:'11px',color: playbackHasSnapshot ? '#86efac' : '#fcd34d'}}>
+                    {playbackHasSnapshot ? '✓ 快照回放' : '⚠ 舊棋譜重播，暗子可能不一致'}
+                  </small>
                 </div>
                 <span className="playbackStep">第 {playbackStep} / {totalSteps} 步</span>
               </div>
