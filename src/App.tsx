@@ -38,7 +38,13 @@ function storage() {
 }
 
 function fmtDate(iso: string): string {
-  return iso.slice(0, 10) + ' ' + iso.slice(11, 16);
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '時間未知';
+    return d.toLocaleString();
+  } catch {
+    return '時間未知';
+  }
 }
 
 function resultClass(status: GameRecord['finalStatus']): string {
@@ -66,6 +72,7 @@ export default function App() {
   const [playQuickSave, setPlayQuickSave] = useState(false);
   const [playQuickTitle, setPlayQuickTitle] = useState('未命名棋譜');
   const [playQuickMsg, setPlayQuickMsg] = useState('');
+  const [aiMasterNote, setAiMasterNote] = useState<string | null>(null);
 
   /* ── 棋譜模式子頁狀態 ── */
   const [recordsPage, setRecordsPage] = useState<RecordsPage>('library');
@@ -148,6 +155,7 @@ export default function App() {
   function enterMode(nextMode: Exclude<AppMode, 'home'>) {
     setMode(nextMode);
     setSelected(null);
+    if (nextMode === 'ai-master') setAiMasterNote(null);
     closeCorrection();
     cancelSync();
     if (nextMode === 'records') {
@@ -472,6 +480,9 @@ export default function App() {
     return (
       <main>
         {renderHeader('輔助盤面模式')}
+        {aiMasterNote && (
+          <p style={{textAlign:'center',color:'#86efac',fontSize:13,margin:'4px 0 8px'}}>{aiMasterNote}</p>
+        )}
         <AiPanel state={state} />
         <WisdomPanel />
       </main>

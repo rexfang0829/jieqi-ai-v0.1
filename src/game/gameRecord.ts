@@ -46,6 +46,17 @@ function safeStatus(status: GameStatus): GameRecord['finalStatus'] {
   return status === 'red_win' || status === 'black_win' ? status : 'playing';
 }
 
+/** Format a stored ISO date string as a local date string for display. */
+function fmtLocalDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '時間未知';
+    return d.toLocaleDateString();
+  } catch {
+    return '時間未知';
+  }
+}
+
 export function createGameRecord(input: {
   title?: string;
   moves: Move[];
@@ -78,7 +89,7 @@ export function resultText(status: GameRecord['finalStatus']): string {
 export function recordToText(record: GameRecord): string {
   const lines = [
     `局名：${record.title}`,
-    `時間：${record.createdAt.slice(0, 10)}`,
+    `時間：${fmtLocalDate(record.createdAt)}`,
     `結果：${resultText(record.finalStatus)}`,
     '',
     ...record.moves.map((move, index) => `${index + 1}. ${moveText(move)}`),

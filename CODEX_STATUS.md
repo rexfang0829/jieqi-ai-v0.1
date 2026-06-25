@@ -290,3 +290,30 @@ npm.cmd run build
 
 **測試**：`npm test` 80 項全通過。  
 **建置**：沙盒 rollup 限制，Vercel 正常。
+
+---
+
+### 2026-06-25 棋譜時間修正 + 回放局面帶入輔助盤面分析（Claude）
+
+**問題**：
+1. `fmtDate()` 用 `iso.slice(0,10)` 取 UTC 日期，台灣（UTC+8）深夜存的棋譜日期顯示少一天。
+2. 回放頁「分析目前局面」按鈕只是 `enterMode('ai-master')`，不帶入目前回放盤面。
+
+**修改**：
+
+1. **`src/App.tsx`** – `fmtDate()` 改用 `new Date(iso).toLocaleString()` + try/catch fallback（顯示系統本地日期時間）。
+2. **`src/App.tsx`** – 新增 `aiMasterNote` state（`string | null`）。
+3. **`src/App.tsx`** – `enterMode()` 進入 ai-master 時清除 `aiMasterNote`（防止舊提示殘留）。
+4. **`src/App.tsx`** – `analyzePlayback()` 重寫：
+   - `JSON.parse(JSON.stringify(playbackState))` 深複製，避免 reference 污染。
+   - `setState(snapshot)`、`setPast([])`、`setSelected(null)`、`closeCorrection()`、`cancelSync()`。
+   - `setAiMasterNote(\`已載入棋譜第 ${playbackStep} 手局面\`)`。
+   - `setMode('ai-master')`（直接切換，不走 enterMode 避免清掉提示）。
+5. **`src/App.tsx`** – ai-master 渲染：`renderHeader` 下方顯示 `aiMasterNote` 綠色提示文字。
+6. **`src/game/gameRecord.ts`** – `fmtLocalDate()` 同樣改為 `toLocaleDateString()` + fallback；`recordToText` 使用此函式。
+
+**避免 reference 污染**：使用 `JSON.parse(JSON.stringify(playbackState))` 做深複製，確保 ai-master 的 state 與 playback 的 useMemo 互相獨立。
+
+**測試**：`npm test` 80 項全通過。  
+**TypeScript**：`npx tsc` 零錯誤。  
+**建置**：沙盒 rollup 限制，Vercel 正常。
