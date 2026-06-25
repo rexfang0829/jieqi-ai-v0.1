@@ -51,7 +51,7 @@ function fmtLocalDate(iso: string): string {
   try {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return '時間未知';
-    return d.toLocaleDateString();
+    return d.toLocaleString();
   } catch {
     return '時間未知';
   }

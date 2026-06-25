@@ -353,8 +353,18 @@ export default function App() {
   }
 
   function analyzePlayback() {
-    /* 預留：將 playbackState 帶入輔助盤面模式 */
-    enterMode('ai-master');
+    /* 深複製 playbackState，避免共用 reference 污染 */
+    const snapshot: GameState = (typeof structuredClone === 'function')
+      ? structuredClone(playbackState)
+      : JSON.parse(JSON.stringify(playbackState));
+    setState(snapshot);
+    setPast([]);
+    setSelected(null);
+    closeCorrection();
+    cancelSync();
+    const title = playbackRecord?.title ?? '棋譜';
+    setAiMasterNote(`已載入「${title}」第 ${playbackStep} 手局面`);
+    setMode('ai-master');  // 直接切換，不走 enterMode（避免清掉 aiMasterNote）
   }
 
   /* ── Effects ── */

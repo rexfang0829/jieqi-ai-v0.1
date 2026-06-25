@@ -317,3 +317,24 @@ npm.cmd run build
 **測試**：`npm test` 80 項全通過。  
 **TypeScript**：`npx tsc` 零錯誤。  
 **建置**：沙盒 rollup 限制，Vercel 正常。
+
+---
+
+### 2026-06-25 回放局面帶入輔助盤面分析 + 時間顯示修正（Claude）
+
+**修改**：
+
+1. **`src/App.tsx`** – `analyzePlayback()` 完整實作：
+   - 優先用 `structuredClone(playbackState)`，不支援時 fallback `JSON.parse(JSON.stringify(...))`，確保深複製無 reference 污染。
+   - `setState(snapshot)` 將回放局面帶入 ai-master state。
+   - `setPast([])`、`setSelected(null)`、`closeCorrection()`、`cancelSync()` 清理殘留狀態。
+   - `setAiMasterNote(\`已載入「${title}」第 ${playbackStep} 手局面\`)` 顯示來源提示。
+   - `setMode('ai-master')` 直接切換（不走 `enterMode`，避免 `setAiMasterNote(null)` 清掉剛設的提示）。
+
+2. **`src/game/gameRecord.ts`** – `fmtLocalDate()` 從 `toLocaleDateString()` 改為 `toLocaleString()`，`recordToText()` 匯出文字包含完整日期時間。
+
+**`analyzePlayback` 是否真的帶入**：是。按下「分析目前局面」後，`playbackState`（由 `initialState` + applyMove 推演至第 N 步的局面）被深複製並 `setState` 進去，輔助盤面顯示的棋盤與回放當下完全相同，`AiPanel` 基於這個盤面給建議。
+
+**測試**：`npm test` 80 項全通過。  
+**TypeScript**：`npx tsc` 零錯誤。  
+**建置**：沙盒 rollup 限制，Vercel 正常。
