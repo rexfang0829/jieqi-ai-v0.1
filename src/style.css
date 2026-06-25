@@ -1,6 +1,7 @@
 *{box-sizing:border-box}
 body{margin:0;background:#2b160c;color:#f8e1b5;font-family:'Noto Serif TC','Microsoft JhengHei',serif}
 main{padding:20px}
+button,input,select,textarea{font:inherit}
 header{display:flex;gap:18px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
 h1{margin:0;font-size:28px}
 button{cursor:pointer}
@@ -81,6 +82,7 @@ header button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-r
 aside{width:430px;display:flex;flex-direction:column;gap:12px}
 .panel{background:#3b2011;border:1px solid #9b6935;border-radius:12px;padding:14px;max-height:290px;overflow:auto}
 .panel h3{margin:0 0 8px}
+.panel,p,li,button,textarea,input{overflow-wrap:anywhere}
 .hotkeyHint{font-size:14px;line-height:1.5}
 .syncPanel{font-size:15px;line-height:1.5;border-color:#58a6ff;color:#dff0ff}
 .syncPanel.syncError{border-color:#ffb35c;color:#ffe0b8}
@@ -110,11 +112,12 @@ li.revealedCapture{color:#ffe8be}
   .modeCard{min-height:116px;padding:16px}
   .modeCard strong{font-size:20px}
   .toolbar button,.homeButton,header button{min-height:44px}
-  .layout{flex-direction:column}
-  .boardGrid{--cell:42px}
-  .fileLabels{grid-template-columns:repeat(9,42px);width:calc(42px * 9 + 6px);font-size:22px}
-  .square{width:40px;height:40px}
-  .piece{width:34px;height:34px;font-size:21px}
+  .layout{flex-direction:column;gap:14px}
+  .boardWrap{max-width:100%;overflow-x:auto;padding:8px 10px 12px;border-width:5px;border-radius:8px}
+  .boardGrid{--cell:min(42px,calc((100vw - 58px) / 9))}
+  .fileLabels{grid-template-columns:repeat(9,var(--cell));width:calc(var(--cell) * 9 + 6px);font-size:22px}
+  .square{width:calc(var(--cell) * .94);height:calc(var(--cell) * .94)}
+  .piece{width:calc(var(--cell) * .8);height:calc(var(--cell) * .8);font-size:calc(var(--cell) * .5)}
   .riverText{font-size:19px;letter-spacing:6px}
   .endgameBanner{width:100%;gap:8px;justify-content:center}
   .endgameBanner strong{font-size:22px}
@@ -122,6 +125,9 @@ li.revealedCapture{color:#ffe8be}
   .capturedPieces em{font-size:12px;padding:2px 7px}
   /* hide side overlay on mobile — CapturedPanel below board covers it */
   .capturedBoardOverlay{display:none}
+  .panel{width:100%;max-height:none}
+  .aiPanel,.capturedPanel,.recordPanel,.editorPanel{max-height:none}
+  .correctionPanel{width:min(280px,calc(100vw - 24px))}
   .correctionButtons{grid-template-columns:repeat(2,1fr)}
   .correctionButtons button,.correctionPanel>button{min-height:48px}
   aside{width:100%}
@@ -129,6 +135,7 @@ li.revealedCapture{color:#ffe8be}
 .recordPanel{max-height:none}
 .recordActions{display:flex;gap:8px;flex-wrap:wrap}
 .recordActions button,.recordItem button{background:#8e2f1f;color:#ffe8be;border:1px solid #d7a55a;border-radius:8px;padding:7px 10px}
+.recordItem button:last-child{background:#641b16;border-color:#e08764;color:#ffe2d5}
 .recordMessage{color:#ffd36a;font-size:13px}
 .recordNotice{color:#ffe8beaa;font-size:12px;line-height:1.45}
 .recordOutput{height:100px;margin-top:8px}
@@ -138,4 +145,6 @@ li.revealedCapture{color:#ffe8be}
 @media(max-width:1100px){
   .recordActions{display:grid;grid-template-columns:1fr}
   .recordItem{grid-template-columns:1fr}
+  .recordActions button,.recordItem button,.editorPanel button{min-height:46px}
+  textarea{height:96px}
 }
