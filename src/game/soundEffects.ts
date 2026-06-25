@@ -5,15 +5,29 @@ type AudioWindow = Window & {
   webkitAudioContext?: typeof AudioContext;
 };
 
-function getAudioContext(win: Window): AudioContext | null {
+// Singleton AudioContext — 建立一次，之後 resume() 重用，避免行動瀏覽器節流
+let sharedCtx: AudioContext | null = null;
+
+function getSharedContext(): AudioContext | null {
   try {
-    const audioWindow = win as AudioWindow;
-    const Ctx = audioWindow.AudioContext ?? audioWindow.webkitAudioContext;
+    if (sharedCtx && sharedCtx.state !== 'closed') return sharedCtx;
+    const win = window as AudioWindow;
+    const Ctx = win.AudioContext ?? win.webkitAudioContext;
     if (!Ctx) return null;
-    return new Ctx();
+    sharedCtx = new Ctx();
+    return sharedCtx;
   } catch {
     return null;
   }
+}
+
+async function getResumedContext(): Promise<AudioContext | null> {
+  const ctx = getSharedContext();
+  if (!ctx) return null;
+  if (ctx.state === 'suspended') {
+    try { await ctx.resume(); } catch { return null; }
+  }
+  return ctx;
 }
 
 function noiseBurst(
@@ -75,36 +89,24 @@ export function shouldPlayMoveSound(previous: GameState, next: GameState): boole
   return previous !== next && next.history.length === previous.history.length + 1;
 }
 
-export function playMoveSound(win: Window = window): void {
-  try {
-    const ctx = getAudioContext(win);
+export function playMoveSound(): void {
+  getResumedContext().then(ctx => {
     if (!ctx) return;
-    noiseBurst(ctx, 900, 8, 0.35, 0.07);
-    win.setTimeout(() => { ctx.close().catch(() => undefined); }, 200);
-  } catch {
-    // audio blocked
-  }
+    try { noiseBurst(ctx, 900, 8, 0.35, 0.07); } catch { /* blocked */ }
+  }).catch(() => undefined);
 }
 
-export function playCaptureSound(win: Window = window): void {
-  try {
-    const ctx = getAudioContext(win);
+export function playCaptureSound(): void {
+  getResumedContext().then(ctx => {
     if (!ctx) return;
-    noiseBurst(ctx, 700, 6, 0.55, 0.10);
-    win.setTimeout(() => { ctx.close().catch(() => undefined); }, 300);
-  } catch {
-    // audio blocked
-  }
+    try { noiseBurst(ctx, 700, 6, 0.55, 0.10); } catch { /* blocked */ }
+  }).catch(() => undefined);
 }
 
 export function playCheckSound(win: Window = window): void {
-  try {
-    const ctx = getAudioContext(win);
+  getResumedContext().then(ctx => {
     if (!ctx) return;
-    noiseBurst(ctx, 800, 7, 0.45, 0.08);
-    win.setTimeout(() => { ctx.close().catch(() => undefined); }, 300);
-  } catch {
-    // audio blocked
-  }
+    try { noiseBurst(ctx, 800, 7, 0.45, 0.08); } catch { /* blocked */ }
+  }).catch(() => undefined);
   speakNow(win, '將軍', 0.7, 0.85);
 }

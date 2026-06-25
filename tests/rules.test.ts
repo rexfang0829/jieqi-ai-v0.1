@@ -1001,13 +1001,13 @@ function mockWin(): Window {
 
 test('playMoveSound does not throw when AudioContext is unavailable', () => {
   let threw = false;
-  try { playMoveSound(mockWin()); } catch { threw = true; }
+  try { playMoveSound(); } catch { threw = true; }
   assertEqual(threw, false);
 });
 
 test('playCaptureSound does not throw when AudioContext is unavailable', () => {
   let threw = false;
-  try { playCaptureSound(mockWin()); } catch { threw = true; }
+  try { playCaptureSound(); } catch { threw = true; }
   assertEqual(threw, false);
 });
 
