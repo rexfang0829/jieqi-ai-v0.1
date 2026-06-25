@@ -125,3 +125,27 @@ npm.cmd run build
 
 **測試**：`npm test` 80 項全通過。  
 **建置**：沙盒 rollup 限制，Vercel 正常。
+
+---
+
+### 2026-06-25 正式對局資料一致性修正 MVP（Claude）
+
+**問題**：一般揭棋模式可以長按或快捷鍵修正棋種，但棋種修正不是正式 Move，  
+不會寫入 history，導致棋譜回放盤面與實際對局不一致。
+
+**修改**（僅 `src/App.tsx`，兩處 targeted edit）：
+
+1. **keydown effect**：在 `mode !== 'editor' && mode !== 'ai-master'` 時直接 return，  
+   並把 `mode` 加入 deps array，確保 effect 跟著模式更新。
+2. **一般揭棋模式 Board**：移除 `onSquareLongPress={openCorrection}`，  
+   同時移除底部的 hotkey hint 面板與 `{renderCorrectionPanel()}`。
+
+**結果**：
+- 一般揭棋模式：正常走棋/翻子/吃子/將軍/絕殺/同步/undo/儲存棋譜都不受影響。
+- 長按棋子不再出現修正面板。
+- 1~6 快捷鍵在對弈模式完全無效。
+- 局面編輯 / 輔助盤面模式：長按修正與快捷鍵完整保留。
+- 棋譜回放頁：Board 本來就沒有 onSquareLongPress，不受影響。
+
+**測試**：`npm test` 80 項全通過。  
+**建置**：沙盒 rollup 限制，Vercel 正常。

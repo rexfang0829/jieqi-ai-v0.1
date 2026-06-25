@@ -321,6 +321,8 @@ export default function App() {
     function keydown(event: KeyboardEvent) {
       const target = event.target;
       if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) return;
+      /* 棋種修正快捷鍵只在 editor / ai-master 模式允許，避免污染正式對局棋譜 */
+      if (mode !== 'editor' && mode !== 'ai-master') return;
       const hotkeyType = revealHotkeyType(event.key);
       if (selected && hotkeyType) {
         const error = editSquareError(state, selected, { realType: hotkeyType, revealed: true });
@@ -333,7 +335,7 @@ export default function App() {
     }
     window.addEventListener('keydown', keydown);
     return () => window.removeEventListener('keydown', keydown);
-  }, [state, selected]);
+  }, [state, selected, mode]);
 
   useEffect(() => {
     if (!correctionPos) return;
@@ -675,9 +677,8 @@ export default function App() {
           {syncError || (syncFrom ? '同步上一手：請點終點' : '同步上一手：請點起點')}
         </div>
       )}
-      <Board board={state.board} selected={selected} syncFrom={syncFrom} legalMoves={legalMoves} moves={state.history} onSquareClick={click} onSquareLongPress={openCorrection} />
-      <div className="panel hotkeyHint" style={{marginTop:'12px',maxWidth:'fit-content'}}>翻子快捷鍵：1車 2馬 3象 4士 5炮 6兵</div>
-      {renderCorrectionPanel()}
+      {/* 正式對局：不傳 onSquareLongPress，禁止長按修正棋種 */}
+      <Board board={state.board} selected={selected} syncFrom={syncFrom} legalMoves={legalMoves} moves={state.history} onSquareClick={click} />
 
       {/* 儲存目前對局的快捷入口（對弈模式底部） */}
       <GameRecordPanel state={state} />
