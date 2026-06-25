@@ -87,23 +87,32 @@ export default function App() {
     ? { left: `${correctionAnchor.x}px`, top: `${correctionAnchor.y}px` }
     : undefined;
 
-  /* 回放盤面：優先用快照，沒有快照才用 newGame() + applyMove fallback */
+  /* 回放盤面：優先 initialState + moves 推演；次選 snapshots（舊棋譜相容）；最後 fallback newGame */
   const playbackState = useMemo(() => {
     if (!playbackRecord) return newGame();
-    /* 快照優先：直接回傳對應步驟的完整局面 */
+
+    function applyUpTo(start: ReturnType<typeof newGame>, upTo: number) {
+      let s = start;
+      for (let i = 0; i < upTo && i < playbackRecord!.moves.length; i++) {
+        const m = playbackRecord!.moves[i];
+        const next = applyMove(s, m.from, m.to);
+        if (next !== s) s = next;
+      }
+      return s;
+    }
+
+    /* 優先：initialState + moves 推演（精確，不隨機） */
+    if (playbackRecord.initialState) {
+      return applyUpTo(playbackRecord.initialState, playbackStep);
+    }
+    /* 次選：snapshots 直接取步驟（舊棋譜，每步全量存法） */
     const snap = playbackRecord.snapshots?.[playbackStep];
     if (snap) return snap;
-    /* Fallback：逐步重播（舊棋譜或暗子可能不一致） */
-    let s = newGame();
-    for (let i = 0; i < playbackStep && i < playbackRecord.moves.length; i++) {
-      const m = playbackRecord.moves[i];
-      const next = applyMove(s, m.from, m.to);
-      if (next !== s) s = next;
-    }
-    return s;
+    /* 最後 fallback：newGame() + moves 推演（暗子可能不一致） */
+    return applyUpTo(newGame(), playbackStep);
   }, [playbackRecord, playbackStep]);
 
-  const playbackHasSnapshot = !!(playbackRecord?.snapshots?.length);
+  const playbackHasSnapshot = !!(playbackRecord?.initialState || playbackRecord?.snapshots?.length);
 
   /* 搜尋過濾 */
   const filteredRecords = useMemo(() => {
@@ -291,14 +300,14 @@ export default function App() {
   }
 
   function saveCurrentGame() {
-    /* snapshots = 初始局面 + 每手後的完整 GameState，供回放精確還原暗子 */
-    const snapshots = [...past, state];
+    /* 只存 initialState（開局完整暗子配置），不存每步 snapshots，節省 localStorage */
+    const initialState = past.length > 0 ? past[0] : state;
     const record = {
       ...createGameRecord({ title: saveTitle, moves: state.history, finalStatus: state.status }),
-      snapshots,
+      initialState,
     };
     const ok = saveGameRecord(storage(), record);
-    setSaveMsg(ok ? '已儲存（含快照）' : '儲存失敗');
+    setSaveMsg(ok ? '已儲存（含初始快照）' : '儲存失敗');
     if (ok) setRecordsList(loadGameRecords(storage()));
   }
 
@@ -696,7 +705,7 @@ export default function App() {
       <Board board={state.board} selected={selected} syncFrom={syncFrom} legalMoves={legalMoves} moves={state.history} onSquareClick={click} />
 
       {/* 儲存目前對局的快捷入口（對弈模式底部） */}
-      <GameRecordPanel state={state} />
+      <GameRecordPanel state={state} past={past} />
     </main>
   );
 }

@@ -128,6 +128,55 @@ npm.cmd run build
 
 ---
 
+### 2026-06-25 棋譜儲存改為 initialState + moves 策略（Claude）
+
+**動機**：每步全量 snapshots 會造成 localStorage 膨脹；揭棋回放只需要開局完整暗子配置（initialState），後續 moves 即可精確重現。
+
+**修改**：
+
+1. **`src/game/gameRecord.ts`**：
+   - `GameRecord` 加 `initialState?: GameState`（新策略）。
+   - `snapshots?: GameState[]` 保留但標記 `@deprecated`，舊棋譜向下相容。
+
+2. **`src/App.tsx`**：
+   - `saveCurrentGame`：改為 `const initialState = past.length > 0 ? past[0] : state`，只存一個初始快照。
+   - `playbackState` useMemo：優先順序改為 ①`initialState` + moves 推演 → ②`snapshots[step]`（舊棋譜相容） → ③`newGame()` + moves（最終 fallback，暗子可能不一致）。
+   - `playbackHasSnapshot`：更新為 `!!(initialState || snapshots?.length)`。
+
+3. **`src/components/GameRecordPanel.tsx`**：
+   - `currentRecord` useMemo：改存 `initialState = past[0] ?? state`，不再展開全量 snapshots。
+   - 儲存成功訊息改為「棋譜已儲存（含初始快照）」。
+
+**儲存體積**：舊策略每手儲存一整個 GameState，N 手 = N 倍體積；新策略無論幾手只多一個 GameState。
+
+**向下相容**：有 `snapshots` 的舊棋譜仍可回放，不壞資料。
+
+**測試**：`npm test` 80 項全通過。
+
+---
+
+### 2026-06-25 GameRecordPanel 補 snapshots 支援（Claude）
+
+**問題**：一般揭棋模式底部的「儲存棋譜」按鈕（`GameRecordPanel`）沒有傳入 `past`，
+導致儲存的棋譜沒有 `snapshots`，回放仍走舊的 `applyMove` 重播，暗子會隨機變動。
+
+**修改**：
+
+1. **`src/components/GameRecordPanel.tsx`**：
+   - props 從 `{ state }` 改為 `{ state, past?: GameState[] }`。
+   - `currentRecord` useMemo 內：`const snapshots = past ? [...past, state] : undefined`，
+     有快照時合併進 record（`{ ...base, snapshots }`），沒有時維持原本行為。
+   - 儲存成功訊息：有快照時顯示「棋譜已儲存（含快照）」，沒有時顯示「棋譜已儲存」。
+
+2. **`src/App.tsx`**：
+   - 一般揭棋模式底部從 `<GameRecordPanel state={state} />` 改為 `<GameRecordPanel state={state} past={past} />`。
+
+**向下相容**：`past` 為可選，其他地方若沒傳 `past` 仍可正常運作，只是不存 snapshots。
+
+**測試**：`npm test` 80 項全通過。
+
+---
+
 ### 2026-06-25 棋譜回放 snapshot 最小修正（Claude）
 
 **問題**：棋譜回放從 `newGame()` 重播，但揭棋暗子 `realType` 是隨機的，回放盤面與原局不同。

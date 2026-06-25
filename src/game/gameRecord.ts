@@ -1,4 +1,4 @@
-import type { GameStatus, Move } from '../types/chess';
+import type { GameState, GameStatus, Move } from '../types/chess';
 import { moveText } from './moveNotation';
 
 export const GAME_RECORD_VERSION = 1;
@@ -14,6 +14,18 @@ export type GameRecord = {
   finalStatus: Extract<GameStatus, 'playing' | 'red_win' | 'black_win'>;
   moveCount: number;
   note?: string;
+  /**
+   * The true initial GameState at game start (before move 1), including all
+   * hidden-piece realType values. Playback starts from this state and applies
+   * moves in order, giving an exact reproduction without randomisation.
+   * Old records without this field fall back to snapshots or newGame() replay.
+   */
+  initialState?: GameState;
+  /**
+   * @deprecated Kept for backward compatibility with records saved before
+   * the initialState strategy. New records use initialState instead.
+   */
+  snapshots?: GameState[];
 };
 
 type GameRecordList = {

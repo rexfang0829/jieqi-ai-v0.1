@@ -6,7 +6,7 @@ function storage() {
   return typeof window === 'undefined' ? undefined : window.localStorage;
 }
 
-export function GameRecordPanel({ state }: { state: GameState }) {
+export function GameRecordPanel({ state, past }: { state: GameState; past?: GameState[] }) {
   const [title, setTitle] = useState('未命名棋譜');
   const [records, setRecords] = useState<GameRecord[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -14,12 +14,17 @@ export function GameRecordPanel({ state }: { state: GameState }) {
   const [manualText, setManualText] = useState('');
   const [viewRecord, setViewRecord] = useState<GameRecord | null>(null);
 
-  const currentRecord = useMemo(() => createGameRecord({
-    id: activeId ?? undefined,
-    title,
-    moves: state.history,
-    finalStatus: state.status,
-  }), [activeId, title, state.history, state.status]);
+  const currentRecord = useMemo(() => {
+    /* 只存 initialState（開局暗子配置），不存每步 snapshots */
+    const initialState = past !== undefined ? (past.length > 0 ? past[0] : state) : undefined;
+    const base = createGameRecord({
+      id: activeId ?? undefined,
+      title,
+      moves: state.history,
+      finalStatus: state.status,
+    });
+    return initialState ? { ...base, initialState } : base;
+  }, [activeId, title, state, past]);
 
   const displayRecord = viewRecord ?? currentRecord;
 
@@ -33,7 +38,8 @@ export function GameRecordPanel({ state }: { state: GameState }) {
 
   function saveCurrent() {
     const ok = saveGameRecord(storage(), currentRecord);
-    setMessage(ok ? '棋譜已儲存' : '儲存失敗');
+    const hasInit = !!currentRecord.initialState;
+    setMessage(ok ? (hasInit ? '棋譜已儲存（含初始快照）' : '棋譜已儲存') : '儲存失敗');
     if (ok) {
       setActiveId(currentRecord.id);
       setViewRecord(null);
