@@ -19,6 +19,7 @@
   - Human vs AI 與 AI vs AI 已改用 recommendMoveFair
   - 輔助盤面（AiPanel）保留 recommendMoveOracle（Oracle/debug 模式）
 - 死車威脅保留 + 暗士翻子卡陣風險 MVP（advisorRevealClogRisk / deadMajorThreatHold / forcedBadDefense）
+- 上一手高亮（lastMove from 白點 / to 白圈）+ AI 報告盤面快照
 
 ## 後續優先項目
 

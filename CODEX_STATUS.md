@@ -470,3 +470,23 @@ npm.cmd run build
 
 ### 測試
 - 全部測試通過，`npx tsc --noEmit` 清洁
+
+
+---
+
+## 2026-06-27 上一手高亮 + AI 報告盤面快照
+
+### 功能
+- **上一手高亮**：Board 新增 `lastMove` prop，from 方格顯示小白點，to 方格顯示白色光圈
+- **盤面快照**：`formatAiDebugReport` 加入10×9 文字棋盤，明子顯紅車/黑馬，暗子顯紅暗車/黑暗卒
+
+### 修改檔案
+- `src/components/Square.tsx`：`lastMoveFrom` / `lastMoveTo` props
+- `src/components/Board.tsx`：`lastMove` prop
+- `src/style.css`：`.lastMoveFrom::before` / `.lastMoveTo::before` 樣式
+- `src/App.tsx` + `src/components/HumanVsAiPanel.tsx`：各模式傳入 `lastMove`
+- `src/ai/aiDebugReport.ts`：`boardSnapshot()` helper + 插入報告
+- `tests/rules.test.ts`：2 個新測試
+
+### 驗收
+- 全部測試通過，`npx tsc --noEmit` 清洁

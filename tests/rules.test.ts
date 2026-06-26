@@ -2430,3 +2430,29 @@ test('forced hidden advisor defense of doomed rook is penalized', () => {
   // reason should not say "preserve hidden cannon" - should be about advisor/doomed
   assertOk(advisorTrace.reason !== '保留暗炮威懾');
 });
+
+test('formatAiDebugReport: includes board snapshot section', () => {
+  const state = newGame();
+  const r: import('../src/ai/aiTrace').AiRecommendation = { move: null, score: 0, reason: '' };
+  const text = formatAiDebugReport({ modeName: 'test', state, recommendation: r });
+  assertOk(text.includes('盤面快照'));
+  assertOk(text.includes('r0:'));
+  assertOk(text.includes('r9:'));
+});
+
+test('formatAiDebugReport: board snapshot shows revealed pieces and hidden pieces', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king', 'king', true));
+  place(board, 0, 4, piece('black', 'king', 'king', true));
+  place(board, 5, 0, piece('red', 'rook', 'rook', true));  // revealed red rook
+  place(board, 3, 2, piece('black', 'cannon', 'cannon', false)); // hidden black cannon
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const r: import('../src/ai/aiTrace').AiRecommendation = { move: null, score: 0, reason: '' };
+  const text = formatAiDebugReport({ modeName: 'test', state, recommendation: r });
+  // Revealed red rook shows as 紅車
+  assertOk(text.includes('紅車'));
+  // Hidden black cannon shows as 黑暗包
+  assertOk(text.includes('黑暗包'));
+  // Empty cells show as ··
+  assertOk(text.includes('··'));
+});

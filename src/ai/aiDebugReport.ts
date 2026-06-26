@@ -1,6 +1,7 @@
 import type { GameState, Move } from '../types/chess';
 import type { AiMoveTrace, AiRecommendation } from './aiTrace';
 import { moveText } from '../game/moveNotation';
+import { pieceTypeName } from '../game/pieceText';
 
 /** Context passed into formatAiDebugReport. */
 export type AiDebugReportInput = {
@@ -49,6 +50,25 @@ function fmtTrace(t: AiMoveTrace): string {
   return lines.join('\n');
 }
 
+
+/** Render a 10×9 text board snapshot for the debug report. */
+function boardSnapshot(state: GameState): string {
+  const lines: string[] = [];
+  lines.push('盤面快照（r0=黑方上方，r9=紅方下方，明子=紅車/黑馬，暗子=紅暗車/黑暗卒）：');
+  lines.push('   0    1    2    3    4    5    6    7    8');
+  for (let r = 0; r < 10; r++) {
+    const cells = state.board[r].map(piece => {
+      if (!piece) return '··';
+      const side = piece.side === 'red' ? '紅' : '黑';
+      if (piece.revealed) {
+        return side + pieceTypeName(piece.side, piece.realType);
+      }
+      return side + '暗' + pieceTypeName(piece.side, piece.originalType);
+    });
+    lines.push('r' + r + ': ' + cells.join('  '));
+  }
+  return lines.join('\n');
+}
 /** Format a human-readable AI debug report as plain text. */
 export function formatAiDebugReport(input: AiDebugReportInput): string {
   const { modeName, state, analysisMoves, recommendation: r } = input;
@@ -58,6 +78,10 @@ export function formatAiDebugReport(input: AiDebugReportInput): string {
   lines.push('模式：' + modeName);
   lines.push('輪到：' + (state.turn === 'red' ? '紅方' : '黑方'));
   lines.push('手數：' + state.history.length + (analysisMoves?.length ? '（+' + analysisMoves.length + ' 變化手）' : ''));
+
+  /* Board snapshot */
+  lines.push('');
+  lines.push(boardSnapshot(state));
 
   /* Recent moves */
   const allMoves = [...state.history, ...(analysisMoves ?? [])];

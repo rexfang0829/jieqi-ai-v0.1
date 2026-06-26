@@ -8,7 +8,7 @@ export function pieceName(piece: Piece): string {
 
 export type LongPressAnchor = { x: number; y: number };
 
-export function Square({ piece, selected, syncOrigin = false, legal, onClick, onLongPress }: { piece: Piece | null; selected: boolean; syncOrigin?: boolean; legal: boolean; onClick: () => void; onLongPress?: (anchor: LongPressAnchor) => void }) {
+export function Square({ piece, selected, syncOrigin = false, legal, lastMoveFrom = false, lastMoveTo = false, onClick, onLongPress }: { piece: Piece | null; selected: boolean; syncOrigin?: boolean; legal: boolean; lastMoveFrom?: boolean; lastMoveTo?: boolean; onClick: () => void; onLongPress?: (anchor: LongPressAnchor) => void }) {
   const timer = useRef<number | null>(null);
   const longPressed = useRef(false);
   const anchor = useRef<LongPressAnchor>({ x: 0, y: 0 });
@@ -46,7 +46,7 @@ export function Square({ piece, selected, syncOrigin = false, legal, onClick, on
 
   return (
     <button
-      className={`square ${selected ? 'selected' : ''} ${syncOrigin ? 'syncOrigin' : ''} ${legal ? 'legal' : ''} ${legal && piece ? 'captureTarget' : ''}`}
+      className={`square ${selected ? 'selected' : ''} ${syncOrigin ? 'syncOrigin' : ''} ${legal ? 'legal' : ''} ${legal && piece ? 'captureTarget' : ''} ${lastMoveFrom ? 'lastMoveFrom' : ''} ${lastMoveTo ? 'lastMoveTo' : ''}`}
       onClick={click}
       onPointerDown={pointerDown}
       onPointerUp={clearTimer}

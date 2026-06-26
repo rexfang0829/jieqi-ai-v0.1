@@ -219,6 +219,7 @@ export function HumanVsAiPanel({ onHome, storage }: Props) {
         selected={selected}
         legalMoves={legalMoves}
         moves={gameState.history}
+        lastMove={gameState.history[gameState.history.length - 1] ?? null}
         onSquareClick={click}
       />
 

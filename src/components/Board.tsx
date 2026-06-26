@@ -11,8 +11,8 @@ const markerPositions = [
   [7, 1], [7, 7],
 ] as const;
 
-export function Board({ board, selected, syncFrom = null, legalMoves, moves, onSquareClick, onSquareLongPress }: {
-  board: BoardType; selected: Position | null; syncFrom?: Position | null; legalMoves: Position[]; moves: Move[]; onSquareClick: (pos: Position) => void; onSquareLongPress?: (pos: Position, anchor: LongPressAnchor) => void;
+export function Board({ board, selected, syncFrom = null, legalMoves, moves, lastMove = null, onSquareClick, onSquareLongPress }: {
+  board: BoardType; selected: Position | null; syncFrom?: Position | null; legalMoves: Position[]; moves: Move[]; lastMove?: Move | null; onSquareClick: (pos: Position) => void; onSquareLongPress?: (pos: Position, anchor: LongPressAnchor) => void;
 }) {
   return (
     <div className="boardWrap">
@@ -70,6 +70,8 @@ export function Board({ board, selected, syncFrom = null, legalMoves, moves, onS
                       selected={samePosition(selected, pos)}
                       syncOrigin={samePosition(syncFrom, pos)}
                       legal={hasLegalPosition(legalMoves, pos)}
+                      lastMoveFrom={!!(lastMove && lastMove.from.row === r && lastMove.from.col === c)}
+                      lastMoveTo={!!(lastMove && lastMove.to.row === r && lastMove.to.col === c)}
                       onClick={() => onSquareClick(pos)}
                       onLongPress={(anchor) => onSquareLongPress?.(pos, anchor)}
                     />

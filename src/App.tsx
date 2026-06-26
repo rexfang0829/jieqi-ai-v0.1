@@ -896,6 +896,7 @@ export default function App() {
           selected={selected}
           legalMoves={legalMoves}
           moves={state.history}
+          lastMove={state.history[state.history.length - 1] ?? null}
           onSquareClick={click}
           onSquareLongPress={openCorrection}
         />
@@ -957,6 +958,7 @@ export default function App() {
             selected={null}
             legalMoves={[]}
             moves={aiVsAiState.history}
+            lastMove={aiVsAiState.history[aiVsAiState.history.length - 1] ?? null}
             onSquareClick={() => {}}
           />
         ) : (
@@ -1219,6 +1221,7 @@ export default function App() {
                 selected={null}
                 legalMoves={[]}
                 moves={playbackState.history}
+                lastMove={playbackState.history[playbackState.history.length - 1] ?? null}
                 onSquareClick={() => {}}
               />
 
@@ -1351,7 +1354,7 @@ export default function App() {
       )}
       {/* 正式對局：計時器 chips 貼在棋盤角落，不傳 onSquareLongPress */}
       <div style={{position:'relative',display:'inline-block',width:'100%'}}>
-        <Board board={state.board} selected={selected} syncFrom={syncFrom} legalMoves={legalMoves} moves={state.history} onSquareClick={click} />
+        <Board board={state.board} selected={selected} syncFrom={syncFrom} legalMoves={legalMoves} moves={state.history} lastMove={state.history[state.history.length - 1] ?? null} onSquareClick={click} />
         {playGameStarted && (
           <>
             <div className={`playTimerChip playTimerBlack${blackTimeMs <= 30000 ? ' playTimerWarn' : ''}`}>
