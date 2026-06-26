@@ -517,6 +517,20 @@ npm.cmd run build
 ### 驗證
 - `npm.cmd test` 通過。
 - `npm.cmd run build` 通過（仍有既有 `.playbackMoveScroll` CSS minify warning，本輪未處理 CSS）。
+
+## 2026-06-26 AI 揭棋要點與暗子壓制 MVP（Codex）
+
+### 本輪完成
+- 在 `src/ai/simpleAi.ts` 既有評分架構上新增 `keySquareBonus()`，會對中路、河界、對方將區附近、二路 / 八路靠近對方陣地、可壓制暗子的位置給小幅加分。
+- 新增 `leaveKeySquarePenalty()`，若棋子離開揭棋要點且沒有明確收益，會小幅扣分。
+- 新增 `hiddenPiecePressureBonus()`，走完後用公平資訊掃描對方未翻暗子，若我方合法步控制暗子位置則小幅加分；不讀暗子 `realType`、不做機率推理。
+- `evaluateMove()` 已接入要點加分、離開要點懲罰、暗子壓制加分，並把明顯要點佔領與暗子壓制納入 purposeful，避免被無目的步扣分。
+- reason 新增「佔據揭棋要點」「離開要點且收益不足，已扣分」「壓制對方暗子」「控制對方重要暗子位置」。
+- 保留既有 AI 評分功能：絕殺優先、避免送一步殺、candidateMoves、一層交換評估、開局翻兵、無目的步扣分、無成果將軍降分、targetValue、連士 / 過河兵、落點保護 / 高價子無保護扣分。
+
+### 驗證
+- `npm.cmd test` 通過。
+- `npm.cmd run build` 通過（仍有既有 `.playbackMoveScroll` CSS minify warning，本輪未處理 CSS）。
 ## 2026-06-26 AI 吃子目標價值與落點保護（Codex）
 
 ### 本輪完成

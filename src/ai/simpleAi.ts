@@ -41,6 +41,10 @@ type MoveEvaluation = {
   hangingMove: boolean;
   capturedConnectedAdvisor: boolean;
   capturedCrossedPawn: boolean;
+  keySquareScore: number;
+  leaveKeySquareScore: number;
+  hiddenPressureScore: number;
+  controlsImportantHidden: boolean;
   blocksImmediateWin: boolean;
   checking: boolean;
   effectiveCheck: boolean;
@@ -225,6 +229,62 @@ function kingZonePressureBonus(board: Board, side: Side, movedTo: Position): num
   return 0;
 }
 
+function isNearEnemyCamp(side: Side, position: Position): boolean {
+  return side === 'red' ? position.row <= 3 : position.row >= 6;
+}
+
+function keySquareBonus(board: Board, side: Side, position: Position): number {
+  let score = 0;
+
+  if (position.col === 4) score += 8;
+  else if (position.col === 3 || position.col === 5) score += 4;
+
+  if (position.row === 4 || position.row === 5) score += 8;
+  if (isNearEnemyPalace({ id: 'key-square', side, originalType: 'pawn', realType: 'pawn', revealed: true }, position)) score += 12;
+  if ((position.col === 1 || position.col === 7) && isNearEnemyCamp(side, position)) score += 6;
+
+  const enemy = opponent(side);
+  const adjacentHidden = [
+    { row: position.row - 1, col: position.col },
+    { row: position.row + 1, col: position.col },
+    { row: position.row, col: position.col - 1 },
+    { row: position.row, col: position.col + 1 },
+  ].some(pos => {
+    const piece = board[pos.row]?.[pos.col];
+    return piece?.side === enemy && !piece.revealed;
+  });
+  if (adjacentHidden) score += 6;
+
+  return Math.min(score, 28);
+}
+
+function leaveKeySquarePenalty(board: Board, side: Side, from: Position, to: Position, hasClearGain: boolean): number {
+  if (hasClearGain) return 0;
+
+  const fromScore = keySquareBonus(board, side, from);
+  const toScore = keySquareBonus(board, side, to);
+  if (fromScore < 16 || fromScore - toScore < 8) return 0;
+  return fromScore >= 22 ? -20 : -12;
+}
+
+function hiddenPiecePressureBonus(board: Board, side: Side): number {
+  const controlled = new Set<string>();
+  for (const move of getAllLegalMoves(board, side)) {
+    const target = board[move.to.row][move.to.col];
+    if (target?.side === opponent(side) && !target.revealed) {
+      controlled.add(`${move.to.row},${move.to.col}`);
+    }
+  }
+
+  let score = 0;
+  for (const key of controlled) {
+    const [row, col] = key.split(',').map(Number);
+    score += 8;
+    if (col === 4 || row === 4 || row === 5 || isNearEnemyCamp(side, { row, col })) score += 4;
+  }
+  return Math.min(score, 32);
+}
+
 function opponentReplyPenalty(board: Board, side: Side, movedTo: Position, movedPiece: Piece): {
   risk: number;
   immediateCapture: boolean;
@@ -284,6 +344,10 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean)
   const protectedMove = isSquareProtectedBySide(nextBoard, state.turn, move.to);
   const capturedConnectedAdvisor = !!move.captured && publicType(move.captured) === 'advisor' && isConnectedAdvisor(move.captured, state.board, move.to);
   const capturedCrossedPawn = !!move.captured && publicType(move.captured) === 'pawn' && isCrossedPawn(move.captured, move.to);
+  const rawKeySquareScore = keySquareBonus(nextBoard, state.turn, move.to);
+  const keySquareScore = openingBonus > 0 ? Math.min(rawKeySquareScore, 4) : rawKeySquareScore;
+  const hiddenPressureScore = hiddenPiecePressureBonus(nextBoard, state.turn);
+  const controlsImportantHidden = hiddenPressureScore >= 12;
   const checking = next !== state && next.status === 'playing' && isInCheck(next.board, next.turn);
   const effectiveCheck = checking && (
     captureGain > 0 ||
@@ -293,18 +357,21 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean)
   );
   const lowQualityCheck = checking && !effectiveCheck;
   const exchangeNet = captureGain - reply.possibleLoss;
+  const hasClearGain = captureGain >= value.cannon || blocksImmediateWin || effectiveCheck || (captureGain > 0 && exchangeNet >= 0) || escapeBonus > 0;
+  const leaveKeySquareScore = leaveKeySquarePenalty(state.board, state.turn, move.from, move.to, hasClearGain);
   const purposeful = (
     captureGain > 0 ||
     openingBonus > 0 ||
     importantThreat ||
     escapeBonus > 0 ||
     pressureBonus > 0 ||
+    keySquareScore >= 12 ||
+    hiddenPressureScore >= 12 ||
     blocksImmediateWin ||
     effectiveCheck
   );
   const meaningless = !purposeful && !checking;
   const highValueMover = movedPieceValue(move.piece) >= value.horse;
-  const hasClearGain = captureGain >= value.cannon || blocksImmediateWin || effectiveCheck;
   const hangingMove = highValueMover && !protectedMove && !hasClearGain;
   const purposePenalty = meaningless ? meaninglessMovePenalty : 0;
   const checkPenalty = lowQualityCheck ? lowQualityCheckPenalty : 0;
@@ -323,6 +390,9 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean)
     threatBonus +
     escapeBonus +
     pressureBonus +
+    keySquareScore +
+    hiddenPressureScore +
+    leaveKeySquareScore +
     blockDangerBonus +
     checkBonus +
     protectionScore +
@@ -346,6 +416,10 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean)
     hangingMove,
     capturedConnectedAdvisor,
     capturedCrossedPawn,
+    keySquareScore,
+    leaveKeySquareScore,
+    hiddenPressureScore,
+    controlsImportantHidden,
     blocksImmediateWin,
     checking,
     effectiveCheck,
@@ -365,10 +439,14 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (best.captured && evaluation.exchangeNet >= 0) return '交換不虧';
   if (evaluation.effectiveCheck) return '有效將軍';
   if (evaluation.lowQualityCheck) return '無成果將軍，已降分';
+  if (evaluation.leaveKeySquareScore < 0) return '離開要點且收益不足，已扣分';
   if (evaluation.meaningless) return '此步缺乏明確目的，已扣分';
   if (evaluation.threatValue >= value.horse) return '威脅對方重要棋子';
   if (evaluation.escapeBonus > 0) return '讓重要棋子脫離危險';
   if (evaluation.pressureBonus > 0) return '增加將區壓力';
+  if (evaluation.controlsImportantHidden) return '控制對方重要暗子位置';
+  if (evaluation.hiddenPressureScore > 0) return '壓制對方暗子';
+  if (evaluation.keySquareScore >= 12) return '佔據揭棋要點';
   if (evaluation.protectedMove) return '落點有保護';
   if (evaluation.openingBonus > 0) return '開局翻兵';
   if (evaluation.risk > 0 || evaluation.immediateCapture) return '此步有被吃風險，已扣分';
