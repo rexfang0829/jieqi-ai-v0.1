@@ -621,3 +621,42 @@ npm.cmd run build
 
 ### 是否已經 push 到 GitHub
 - 本段更新完成後將 commit 並 push。
+## 2026-06-26 AI 開局 1379 路兵與先手權修正（Codex）
+
+### 最新完成的工作
+- 強化開局 1 / 3 / 7 / 9 路暗兵優先 heuristic。
+- 新增開局節奏 / 先手權評估：暗炮 2/8 過早長距離吃未翻馬 / 車，若沒有絕殺、有效將軍、避免一步殺或明確保住結構，會被扣分。
+- AI 不再單純高估暗炮過早出擊吃暗大子，避免第一手固定暗炮 2/8 進 7 打暗馬。
+- 邊炮 / 邊 G 車局保留分流：紅邊炮局偏向活馬 / 活象解壓；紅邊 G / 車局偏向守兵線關鍵點活馬。
+- 同線被敵方邊炮或邊 G / 車壓住時，不再把同路翻兵當作開局優先。
+- 已補開局回歸測試，覆蓋 1379 翻兵、初始局面避免暗炮固定長打、邊炮 / 邊 G 車分流、絕殺與安全高價交換優先權。
+
+### 修改了哪些檔案
+- `src/ai/aiWeights.ts`
+  - 提高開局 1379 路兵權重。
+  - 新增暗炮開局節奏扣分參數。
+- `src/ai/simpleAi.ts`
+  - 限定開局翻兵 bonus 只給 1 / 3 / 7 / 9 路。
+  - 新增過早暗炮長距離出擊扣分。
+  - 調整 reason 文案。
+  - 避免邊炮 / 邊 G 車局同路翻兵吃到開局優先分。
+- `tests/rules.test.ts`
+  - 新增與調整開局 AI 回歸測試。
+- `CODEX_STATUS.md`
+  - 記錄本輪完成內容。
+- `NEXT_TASK.md`
+  - 整理已完成與下一步，移除重複段落。
+
+### npm test 是否通過
+- 通過：`npm.cmd test`
+
+### npm run build 是否通過
+- 通過：`npm.cmd run build`
+- 備註：仍有既有 `.playbackMoveScroll` CSS minify warning，本輪不處理 UI / CSS。
+
+### 目前還有哪些已知限制
+- 這仍是 simpleAi heuristic，不是 Belief State、Monte Carlo 或真正自我學習。
+- 開局棋理仍需要更多實戰局面回歸測試與 pattern 觸發資料。
+
+### 是否已經 push 到 GitHub
+- 本段更新完成後將 commit 並 push。

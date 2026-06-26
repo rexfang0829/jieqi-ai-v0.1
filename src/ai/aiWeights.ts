@@ -17,6 +17,8 @@ export type AiWeights = {
   openingPawnBonus: number;
   edgePawnBonus: number;
   thirdSeventhPawnBonus: number;
+  openingCannonTempoPenaltyRatio: number;
+  openingCannonTempoMinPenalty: number;
   keySquareCenterFileBonus: number;
   keySquareNearCenterFileBonus: number;
   keySquareRiverBonus: number;
@@ -94,9 +96,11 @@ export const defaultAiWeights: AiWeights = {
   protectedMoveBonus: 20,
   hangingMovePenalty: -50,
   revealBonus: 20,
-  openingPawnBonus: 40,
-  edgePawnBonus: 10,
-  thirdSeventhPawnBonus: 8,
+  openingPawnBonus: 110,
+  edgePawnBonus: 35,
+  thirdSeventhPawnBonus: 30,
+  openingCannonTempoPenaltyRatio: 1.15,
+  openingCannonTempoMinPenalty: 360,
   keySquareCenterFileBonus: 8,
   keySquareNearCenterFileBonus: 4,
   keySquareRiverBonus: 8,

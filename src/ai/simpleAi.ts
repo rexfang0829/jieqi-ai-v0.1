@@ -1,4 +1,4 @@
-import type { Board, GameState, Move, Piece, PieceType, Position, Side } from '../types/chess';
+﻿import type { Board, GameState, Move, Piece, PieceType, Position, Side } from '../types/chess';
 import { getAllLegalMoves, isInCheck } from '../game/checkRules';
 import { applyMove } from '../game/gameEngine';
 import { createInitialBoard } from '../game/initialBoard';
@@ -41,6 +41,8 @@ type MoveEvaluation = {
   pawnLineDefense: boolean;
   preventsPawnLineLock: boolean;
   badHorseRelease: boolean;
+  openingTempoPenalty: number;
+  forcingReply: boolean;
   blocksImmediateWin: boolean;
   checking: boolean;
   effectiveCheck: boolean;
@@ -181,12 +183,19 @@ function isOpeningPawnStart(side: Side, position: Position): boolean {
   );
 }
 
+function isPriorityOpeningPawnFile(col: number): boolean {
+  return col === 0 || col === 2 || col === 6 || col === 8;
+}
+
 function openingPawnRevealBonus(state: GameState, move: Move, weights: AiWeights): number {
   if (state.history.length > 8) return 0;
   if (move.piece.side !== state.turn) return 0;
   if (move.piece.originalType !== 'pawn') return 0;
   if (move.piece.revealed) return 0;
   if (!isOpeningPawnStart(state.turn, move.from)) return 0;
+  if (!isPriorityOpeningPawnFile(move.from.col)) return 0;
+  if (enemyOpeningEdgeCannonCols(state.board, state.turn).includes(move.from.col)) return 0;
+  if (enemyOpeningEdgeRookCols(state.board, state.turn).includes(move.from.col)) return 0;
 
   let bonus = weights.openingPawnBonus;
   if (move.from.col === 0 || move.from.col === 8) bonus += weights.edgePawnBonus;
@@ -228,6 +237,16 @@ function isSquareAttacked(board: Board, bySide: Side, target: Position): boolean
   return getAllLegalMoves(board, bySide).some(move =>
     move.captured && samePosition(move.to, target)
   );
+}
+
+function isPrematureOpeningCannonStrike(state: GameState, move: Move): boolean {
+  if (state.history.length > 8) return false;
+  if (move.piece.revealed) return false;
+  if (move.piece.originalType !== 'cannon') return false;
+  if (!move.captured || move.captured.revealed) return false;
+  if (move.captured.originalType !== 'horse' && move.captured.originalType !== 'rook') return false;
+  const distance = Math.abs(move.from.row - move.to.row) + Math.abs(move.from.col - move.to.col);
+  return distance >= 4;
 }
 
 function opponentHasImmediateWin(board: Board, side: Side): boolean {
@@ -364,17 +383,31 @@ function isBadHorseReleaseSquare(side: Side, position: Position): boolean {
 }
 
 function hasOpeningEdgeCannonPressure(board: Board, side: Side): boolean {
+  return enemyOpeningEdgeCannonCols(board, side).length > 0;
+}
+
+function enemyOpeningEdgeCannonCols(board: Board, side: Side): number[] {
   const enemy = opponent(side);
-  return board.some(row => row.some((piece, col) =>
-    piece?.side === enemy &&
-    piece.revealed &&
-    piece.originalType === 'pawn' &&
-    piece.realType === 'cannon' &&
-    (col === 0 || col === 8)
-  ));
+  const cols = new Set<number>();
+  for (const row of board) {
+    for (let col = 0; col < row.length; col++) {
+      const piece = row[col];
+      if (
+        piece?.side === enemy &&
+        piece.revealed &&
+        piece.originalType === 'pawn' &&
+        piece.realType === 'cannon' &&
+        (col === 0 || col === 8)
+      ) {
+        cols.add(col);
+      }
+    }
+  }
+  return [...cols];
 }
 
 function hasOpeningEdgeRookPawnLineLockRisk(board: Board, side: Side): boolean {
+  if (enemyOpeningEdgeRookCols(board, side).length > 0) return true;
   const enemy = opponent(side);
   return board.some((row, rowIndex) => row.some((piece, col) =>
     piece?.side === enemy &&
@@ -383,6 +416,26 @@ function hasOpeningEdgeRookPawnLineLockRisk(board: Board, side: Side): boolean {
     piece.realType === 'rook' &&
     (col === 0 || col === 8 || Math.abs(rowIndex - ownPawnLineRow(side)) <= 2)
   ));
+}
+
+function enemyOpeningEdgeRookCols(board: Board, side: Side): number[] {
+  const enemy = opponent(side);
+  const cols = new Set<number>();
+  for (const row of board) {
+    for (let col = 0; col < row.length; col++) {
+      const piece = row[col];
+      if (
+        piece?.side === enemy &&
+        piece.revealed &&
+        piece.originalType === 'pawn' &&
+        piece.realType === 'rook' &&
+        (col === 0 || col === 8)
+      ) {
+        cols.add(col);
+      }
+    }
+  }
+  return [...cols];
 }
 
 function isHorseReleaseForCannonPressure(side: Side, to: Position): boolean {
@@ -662,6 +715,19 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
   const hasClearGain = captureGain >= weights.pieceValues.cannon || blocksImmediateWin || effectiveCheck || (captureGain > 0 && exchangeNet >= 0) || escapeBonus > 0;
   const leaveKeySquareScore = leaveKeySquarePenalty(state.board, state.turn, move.from, move.to, hasClearGain, weights);
   const structure = structurePatternEvaluation(state, move, nextBoard, hasClearGain, weights);
+  const forcingReply =
+    blocksImmediateWin ||
+    effectiveCheck ||
+    structure.releasedHorseFromPressure ||
+    structure.releasedElephantFromPressure ||
+    structure.preventsPawnLineLock;
+  const safeHighExchange =
+    captureGain >= weights.pieceValues.rook &&
+    exchangeNet >= weights.safeCaptureExchangeNet &&
+    protectedMove;
+  const openingTempoPenalty = isPrematureOpeningCannonStrike(state, move) && !forcingReply && !safeHighExchange
+    ? -Math.max(weights.openingCannonTempoMinPenalty, Math.round(captureGain * weights.openingCannonTempoPenaltyRatio))
+    : 0;
   const purposeful = (
     captureGain > 0 ||
     openingBonus > 0 ||
@@ -675,7 +741,8 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     structure.releasedHorseFromPressure ||
     structure.releasedElephantFromPressure ||
     blocksImmediateWin ||
-    effectiveCheck
+    effectiveCheck ||
+    forcingReply
   );
   const meaningless = !purposeful && !checking;
   const highValueMover = defensiveTargetValue(move.piece, state.board, move.from, weights) >= weights.pieceValues.horse;
@@ -701,6 +768,7 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     hiddenPressureScore +
     leaveKeySquareScore +
     structure.score +
+    openingTempoPenalty +
     blockDangerBonus +
     checkBonus +
     protectionScore +
@@ -737,6 +805,8 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     pawnLineDefense: structure.pawnLineDefense,
     preventsPawnLineLock: structure.preventsPawnLineLock,
     badHorseRelease: structure.badHorseRelease,
+    openingTempoPenalty,
+    forcingReply,
     blocksImmediateWin,
     checking,
     effectiveCheck,
@@ -746,11 +816,13 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
 }
 
 function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: boolean, weights: AiWeights): string {
-  if (avoidedOpponentWin) return '避免送對方一步殺';
-  if (evaluation.hangingMove) return '高價子落點無保護，已扣分';
+  if (avoidedOpponentWin) return '避免對方一步殺';
+  if (evaluation.hangingMove) return '落點缺少保護，已扣分';
   if (best.captured && evaluation.exchangeNet < 0) return '交換可能虧損，已扣分';
-  if (evaluation.capturedConnectedAdvisor) return '吃連得起來的士';
-  if (evaluation.capturedCrossedPawn) return '吃過河兵卒';
+  if (evaluation.capturedConnectedAdvisor) return '吃掉連環士';
+  if (evaluation.capturedCrossedPawn) return '吃過河兵';
+  if (evaluation.openingTempoPenalty < 0 && best.captured) return '吃子但未取得後續主動，已降分';
+  if (evaluation.openingTempoPenalty < 0) return '暗炮過早出擊，先手權不足，已扣分';
   if (best.captured && evaluation.targetGain >= weights.pieceValues.cannon) return '吃高價目標';
   if (best.captured && evaluation.exchangeNet >= weights.safeCaptureExchangeNet) return '安全吃子';
   if (best.captured && evaluation.exchangeNet >= 0) return '交換不虧';
@@ -761,30 +833,30 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (evaluation.weakScreen) return '只是塞炮線但仍被卡馬腳，已扣分';
   if (evaluation.badHorseRelease) return '活馬落點不符當前威脅，已扣分';
   if (evaluation.preventsPawnLineLock) return '守住兵線，避免敵方 G 壓兵線';
+  if (evaluation.forcingReply) return '形成強制應手';
   if (evaluation.pawnLineDefense && evaluation.structurePatterns.includes('hidden_rook_guard_point')) return '活馬並保護暗車控制點';
   if (evaluation.pawnLineDefense) return '守住兵線關鍵點';
   if (evaluation.preservesHiddenCannon) return '保留暗炮威懾';
-  if (evaluation.leaveKeySquareScore < 0) return '離開要點且收益不足，已扣分';
-  if (evaluation.meaningless) return '此步缺乏明確目的，已扣分';
+  if (evaluation.leaveKeySquareScore < 0) return '離開關鍵點，價值下降';
+  if (evaluation.meaningless) return '目的性不足，已扣分';
   if (evaluation.threatValue >= weights.pieceValues.horse) return '威脅對方重要棋子';
-  if (evaluation.escapeBonus > 0) return '讓重要棋子脫離危險';
-  if (evaluation.pressureBonus > 0) return '增加將區壓力';
-  if (evaluation.controlsImportantHidden) return '控制對方重要暗子位置';
+  if (evaluation.escapeBonus > 0) return '脫離重要子力危險';
+  if (evaluation.pressureBonus > 0) return '形成攻擊壓力';
+  if (evaluation.controlsImportantHidden) return '壓制對方重要暗子';
   if (evaluation.hiddenPressureScore > 0) return '壓制對方暗子';
-  if (evaluation.keySquareScore >= weights.keySquareEnemyPalaceBonus) return '佔據揭棋要點';
+  if (evaluation.keySquareScore >= weights.keySquareEnemyPalaceBonus) return '佔住關鍵點';
   if (evaluation.protectedMove) return '落點有保護';
-  if (evaluation.openingBonus > 0) return '開局翻兵';
-  if (evaluation.risk > 0 || evaluation.immediateCapture) return '此步有被吃風險，已扣分';
-  return '簡易分數較佳';
+  if (evaluation.openingBonus > 0) return '開局優先翻 1379 路兵';
+  if (evaluation.risk > 0 || evaluation.immediateCapture) return '避免明顯送子';
+  return '簡單評分最佳';
 }
-
 export function recommendMove(
   state: GameState,
   candidateMoves?: Move[],
   weights: AiWeights = defaultAiWeights
 ): { move: Move | null; score: number; reason: string } {
   const moves = candidateMoves ?? getAllLegalMoves(state.board, state.turn);
-  if (!moves.length) return { move: null, score: -99999, reason: '沒有合法步' };
+  if (!moves.length) return { move: null, score: -99999, reason: '沒有合法走法' };
 
   for (const move of moves) {
     const next = applyMove(state, move.from, move.to);
@@ -815,3 +887,4 @@ export function recommendMove(
     reason: reasonFor(best, bestEvaluation, avoidedOpponentWin, weights),
   };
 }
+

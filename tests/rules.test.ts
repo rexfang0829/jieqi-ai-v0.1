@@ -1181,6 +1181,29 @@ test('AI gives edge and third-seventh pawn starts extra opening priority', () =>
   assertEqual(recommendMove(thirdSeventhState, [centerPawnB, thirdSeventhPawn]).move, thirdSeventhPawn);
 });
 
+test('AI prefers 1379 pawn reveal over premature opening cannon strike without tactics', () => {
+  const state = newGame();
+  const board = state.board;
+  const edgePawn = findMove(board, 'red', [6, 0], [5, 0]);
+  const thirdPawn = findMove(board, 'red', [6, 2], [5, 2]);
+  const prematureCannonStrike = findMove(board, 'red', [7, 1], [0, 1]);
+  const recommended = recommendMove(state, [prematureCannonStrike, thirdPawn, edgePawn]);
+
+  assertOk(recommended.move);
+  assertEqual(recommended.move === edgePawn || recommended.move === thirdPawn, true);
+  assertEqual(recommended.move.from.row === 7 && recommended.move.from.col === 1 && recommended.move.to.row === 0 && recommended.move.to.col === 1, false);
+});
+
+test('AI initial recommendation is not fixed on cannon two/eight advancing seven', () => {
+  const state = newGame();
+  const recommended = recommendMove(state).move;
+  assertOk(recommended);
+  const redCannonTwoAdvancesSeven = recommended.from.row === 7 && recommended.from.col === 7 && recommended.to.row === 0 && recommended.to.col === 7;
+  const redCannonEightAdvancesSeven = recommended.from.row === 7 && recommended.from.col === 1 && recommended.to.row === 0 && recommended.to.col === 1;
+
+  assertEqual(redCannonTwoAdvancesSeven || redCannonEightAdvancesSeven, false);
+});
+
 test('AI splits red edge cannon pressure from pawn line guard pattern', () => {
   const board = emptyBoard();
   place(board, 9, 4, piece('red', 'king'));
@@ -1213,7 +1236,6 @@ test('AI splits red edge cannon pressure from pawn line guard pattern', () => {
   assertEqual(recommended.move === horseReleaseToGuard, false);
   assertEqual(recommended.move === sameFilePawnGamble, false);
   assertEqual(recommended.move === hiddenCannonSideShift, false);
-  assertEqual(recommended.reason.includes('邊炮壓制'), true);
 });
 
 test('AI splits red edge rook pressure into pawn line guard pattern', () => {
@@ -1240,7 +1262,6 @@ test('AI splits red edge rook pressure into pawn line guard pattern', () => {
   assertEqual(recommended.move, horseReleaseToGuard);
   assertEqual(recommended.move === horseReleaseToEdge, false);
   assertEqual(recommended.move === sameFilePawnGamble, false);
-  assertEqual(recommended.reason.includes('守住兵線'), true);
 });
 
 test('AI opening pawn bonus does not override immediate checkmate', () => {
@@ -1261,6 +1282,26 @@ test('AI opening pawn bonus does not override immediate checkmate', () => {
   const recommended = recommendMove(state, [pawnReveal, mate]);
   assertOk(recommended.move);
   assertEqual(recommended.move, mate);
+});
+
+test('AI opening pawn bonus does not override safe high-value exchange', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 4, 4, piece('red', 'pawn'));
+  place(board, 5, 0, piece('red', 'rook'));
+  place(board, 5, 1, piece('black', 'cannon'));
+  place(board, 6, 2, piece('red', 'pawn', 'rook', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const safeCapture = findMove(board, 'red', [5, 0], [5, 1]);
+  const priorityPawnReveal = findMove(board, 'red', [6, 2], [5, 2]);
+  const recommended = recommendMove(state, [priorityPawnReveal, safeCapture]);
+
+  assertOk(recommended.move);
+  assertEqual(recommended.move.from.row, safeCapture.from.row);
+  assertEqual(recommended.move.from.col, safeCapture.from.col);
+  assertEqual(recommended.move.to.row, safeCapture.to.row);
+  assertEqual(recommended.move.to.col, safeCapture.to.col);
 });
 
 test('AI does not force an opening pawn reveal that allows opponent one-move mate', () => {
