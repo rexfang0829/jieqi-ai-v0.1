@@ -1,5 +1,5 @@
 import type { Board, GameState, Move, Piece, PieceType, Position, Side } from '../types/chess';
-import { getAllLegalMoves } from '../game/checkRules';
+import { getAllLegalMoves, isInCheck } from '../game/checkRules';
 import { applyMove } from '../game/gameEngine';
 import { createInitialBoard } from '../game/initialBoard';
 
@@ -13,6 +13,9 @@ const value: Record<PieceType, number> = {
   pawn: 80,
 };
 
+const meaninglessMovePenalty = -80;
+const lowQualityCheckPenalty = -60;
+
 const openingPawnStarts = createInitialBoard().flatMap((row, rowIndex) =>
   row.flatMap((piece, colIndex) =>
     piece?.originalType === 'pawn'
@@ -20,6 +23,23 @@ const openingPawnStarts = createInitialBoard().flatMap((row, rowIndex) =>
       : []
   )
 );
+
+type MoveEvaluation = {
+  score: number;
+  risk: number;
+  immediateCapture: boolean;
+  exchangeNet: number;
+  captureGain: number;
+  openingBonus: number;
+  threatValue: number;
+  escapeBonus: number;
+  pressureBonus: number;
+  blocksImmediateWin: boolean;
+  checking: boolean;
+  effectiveCheck: boolean;
+  lowQualityCheck: boolean;
+  meaningless: boolean;
+};
 
 function publicType(piece: { originalType: PieceType; realType: PieceType; revealed: boolean }): PieceType {
   return piece.revealed ? piece.realType : piece.originalType;
@@ -103,6 +123,49 @@ function bestRecaptureValue(board: Board, side: Side, target: Position): number 
   return best;
 }
 
+function maxCaptureValue(board: Board, side: Side): number {
+  let best = 0;
+  for (const move of getAllLegalMoves(board, side)) {
+    if (move.captured) best = Math.max(best, pieceValue(move.captured));
+  }
+  return best;
+}
+
+function isSquareAttacked(board: Board, bySide: Side, target: Position): boolean {
+  return getAllLegalMoves(board, bySide).some(move =>
+    move.captured && samePosition(move.to, target)
+  );
+}
+
+function opponentHasImmediateWin(board: Board, side: Side): boolean {
+  const enemy = opponent(side);
+  const fakeState: GameState = { board, turn: enemy, history: [], status: 'playing' };
+  return getAllLegalMoves(board, enemy).some(move =>
+    applyMove(fakeState, move.from, move.to).status === winningStatus(enemy)
+  );
+}
+
+function opponentKingPosition(board: Board, side: Side): Position | null {
+  const enemy = opponent(side);
+  for (let row = 0; row < board.length; row++) {
+    for (let col = 0; col < board[row].length; col++) {
+      const piece = board[row][col];
+      if (piece?.side === enemy && piece.realType === 'king') return { row, col };
+    }
+  }
+  return null;
+}
+
+function kingZonePressureBonus(board: Board, side: Side, movedTo: Position): number {
+  const king = opponentKingPosition(board, side);
+  if (!king) return 0;
+
+  const distance = Math.abs(king.row - movedTo.row) + Math.abs(king.col - movedTo.col);
+  if (distance <= 2) return 25;
+  if (distance <= 4 && (king.row === movedTo.row || king.col === movedTo.col)) return 15;
+  return 0;
+}
+
 function opponentReplyPenalty(board: Board, side: Side, movedTo: Position, movedPiece: Piece): {
   risk: number;
   immediateCapture: boolean;
@@ -137,10 +200,6 @@ function opponentReplyPenalty(board: Board, side: Side, movedTo: Position, moved
   };
 }
 
-function baseScore(state: GameState, move: Move, possibleLoss: number, maxReplyGain: number): number {
-  return captureScore(move) - possibleLoss + revealScore(move) + openingPawnRevealBonus(state, move) + positionScore(move) - Math.round(maxReplyGain * 0.25);
-}
-
 function allowsOpponentWin(state: GameState, move: Move): boolean {
   const next = applyMove(state, move.from, move.to);
   if (next === state || next.status !== 'playing') return false;
@@ -148,6 +207,91 @@ function allowsOpponentWin(state: GameState, move: Move): boolean {
   return opponentMoves.some(reply =>
     applyMove(next, reply.from, reply.to).status === winningStatus(next.turn)
   );
+}
+
+function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean): MoveEvaluation {
+  const next = applyMove(state, move.from, move.to);
+  const nextBoard = next === state ? applyMoveToBoard(state.board, move) : next.board;
+  const moved = nextBoard[move.to.row][move.to.col]!;
+  const reply = opponentReplyPenalty(nextBoard, state.turn, move.to, moved);
+  const captureGain = captureScore(move);
+  const openingBonus = openingPawnRevealBonus(state, move);
+  const threatValue = maxCaptureValue(nextBoard, state.turn);
+  const importantThreat = threatValue >= value.horse;
+  const wasUnderAttack = isSquareAttacked(state.board, opponent(state.turn), move.from);
+  const escapeBonus = wasUnderAttack && !reply.immediateCapture && movedPieceValue(move.piece) >= value.horse ? 45 : 0;
+  const pressureBonus = kingZonePressureBonus(nextBoard, state.turn, move.to);
+  const checking = next !== state && next.status === 'playing' && isInCheck(next.board, next.turn);
+  const effectiveCheck = checking && (
+    captureGain > 0 ||
+    importantThreat ||
+    pressureBonus > 0 ||
+    reply.possibleLoss === 0 && threatValue >= value.cannon
+  );
+  const lowQualityCheck = checking && !effectiveCheck;
+  const exchangeNet = captureGain - reply.possibleLoss;
+  const purposeful = (
+    captureGain > 0 ||
+    openingBonus > 0 ||
+    importantThreat ||
+    escapeBonus > 0 ||
+    pressureBonus > 0 ||
+    blocksImmediateWin ||
+    effectiveCheck
+  );
+  const meaningless = !purposeful && !checking;
+  const purposePenalty = meaningless ? meaninglessMovePenalty : 0;
+  const checkPenalty = lowQualityCheck ? lowQualityCheckPenalty : 0;
+  const checkBonus = effectiveCheck ? 35 : 0;
+  const threatBonus = importantThreat ? Math.round(Math.min(threatValue, value.rook) * 0.12) : 0;
+  const blockDangerBonus = blocksImmediateWin ? 70 : 0;
+
+  const score =
+    captureGain -
+    reply.possibleLoss +
+    revealScore(move) +
+    openingBonus +
+    positionScore(move) +
+    threatBonus +
+    escapeBonus +
+    pressureBonus +
+    blockDangerBonus +
+    checkBonus +
+    purposePenalty +
+    checkPenalty -
+    Math.round(reply.maxReplyGain * 0.25);
+
+  return {
+    score,
+    risk: reply.risk,
+    immediateCapture: reply.immediateCapture,
+    exchangeNet,
+    captureGain,
+    openingBonus,
+    threatValue,
+    escapeBonus,
+    pressureBonus,
+    blocksImmediateWin,
+    checking,
+    effectiveCheck,
+    lowQualityCheck,
+    meaningless,
+  };
+}
+
+function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: boolean): string {
+  if (avoidedOpponentWin) return '避免送對方一步殺';
+  if (best.captured && evaluation.exchangeNet >= 250) return '安全吃子';
+  if (best.captured && evaluation.exchangeNet >= 0) return '交換不虧';
+  if (evaluation.effectiveCheck) return '有效將軍';
+  if (evaluation.lowQualityCheck) return '無成果將軍，已降分';
+  if (evaluation.meaningless) return '此步缺乏明確目的，已扣分';
+  if (evaluation.threatValue >= value.horse) return '威脅對方重要棋子';
+  if (evaluation.escapeBonus > 0) return '讓重要棋子脫離危險';
+  if (evaluation.pressureBonus > 0) return '增加將區壓力';
+  if (evaluation.openingBonus > 0) return '開局翻兵';
+  if (evaluation.risk > 0 || evaluation.immediateCapture) return '此步有被吃風險，已扣分';
+  return '簡易分數較佳';
 }
 
 export function recommendMove(state: GameState, candidateMoves?: Move[]): { move: Move | null; score: number; reason: string } {
@@ -163,37 +307,23 @@ export function recommendMove(state: GameState, candidateMoves?: Move[]): { move
 
   const safeMoves = moves.filter(move => !allowsOpponentWin(state, move));
   const scoringMoves = safeMoves.length ? safeMoves : moves;
+  const avoidedOpponentWin = safeMoves.length > 0 && safeMoves.length < moves.length;
+  const currentlyAllowsOpponentWin = opponentHasImmediateWin(state.board, state.turn);
 
   let best = scoringMoves[0];
-  let bestScore = -999999;
-  let bestRisk = 0;
-  let bestImmediateCapture = false;
-  let bestExchangeNet = 0;
-  let sawRiskyMove = false;
+  let bestEvaluation = evaluateMove(state, best, currentlyAllowsOpponentWin && !allowsOpponentWin(state, best));
 
   for (const move of scoringMoves) {
-    const nextBoard = applyMoveToBoard(state.board, move);
-    const moved = nextBoard[move.to.row][move.to.col]!;
-    const reply = opponentReplyPenalty(nextBoard, state.turn, move.to, moved);
-    const score = baseScore(state, move, reply.possibleLoss, reply.maxReplyGain);
-
-    if (reply.risk > 0) sawRiskyMove = true;
-    if (score > bestScore) {
-      bestScore = score;
+    const evaluation = evaluateMove(state, move, currentlyAllowsOpponentWin && !allowsOpponentWin(state, move));
+    if (evaluation.score > bestEvaluation.score) {
       best = move;
-      bestRisk = reply.risk;
-      bestImmediateCapture = reply.immediateCapture;
-      bestExchangeNet = captureScore(move) - reply.possibleLoss;
+      bestEvaluation = evaluation;
     }
   }
 
-  let reason = '簡易分數較佳';
-  if (safeMoves.length && safeMoves.length < moves.length) reason = '避免對方下一手絕殺';
-  else if (best.captured && bestExchangeNet >= 250) reason = '安全吃高價子';
-  else if (best.captured && bestExchangeNet >= 0) reason = '此步交換不虧';
-  else if (bestImmediateCapture) reason = '此步會被對方吃回，已按交換扣分';
-  else if (sawRiskyMove && bestRisk === 0) reason = '避免送子';
-  else if (bestRisk > 0) reason = '此步有被吃風險，已扣分';
-
-  return { move: best, score: bestScore, reason };
+  return {
+    move: best,
+    score: bestEvaluation.score,
+    reason: reasonFor(best, bestEvaluation, avoidedOpponentWin),
+  };
 }

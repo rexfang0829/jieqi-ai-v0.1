@@ -501,3 +501,19 @@ npm.cmd run build
 ### 範圍限制
 - 本段只整理既有狀態，不新增功能。
 - 未做 Belief State、Monte Carlo、OCR、Ponder、Threat Map 或大型 AI 重寫。
+## 2026-06-26 AI 目的評估與無成果將軍降分（Codex）
+
+### 本輪完成
+- AI 現在會對候選步做目的評估：吃子、優勢交換、擋住一步殺、威脅重要棋子、重要棋脫離危險、增加將區壓力、開局翻兵，都會被視為有目的。
+- 無目的移動會套用 `meaninglessMovePenalty` 扣分，避免 AI 因第三次重複過濾後改走沒有成果的棋。
+- 無成果將軍會套用 `lowQualityCheckPenalty` 降分；只有直接贏棋、吃子、造成重要威脅或增加將區壓力的將軍才視為有效將軍。
+- 第三次重複局面禁止仍然只是合法性過濾條件，不是加分項；避開重複後的棋若本身沒有目的仍會被扣分。
+- `recommendMove` 的 reason 已補強，可回傳「有效將軍」、「無成果將軍，已降分」、「此步缺乏明確目的，已扣分」、「增加將區壓力」、「避免送對方一步殺」等更明確判斷。
+
+### 修改檔案
+- `src/ai/simpleAi.ts`：新增目的評估、將軍品質判斷、將區壓力、重要威脅、脫離危險與更明確 reason。
+- `CODEX_STATUS.md` / `NEXT_TASK.md`：同步本輪 AI 評分調整與後續待辦。
+
+### 驗證
+- `npm.cmd test` 通過。
+- `npm.cmd run build` 通過（仍有既有 `.playbackMoveScroll` CSS minify warning，本輪未處理 CSS）。
