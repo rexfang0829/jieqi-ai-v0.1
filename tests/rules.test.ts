@@ -1594,3 +1594,81 @@ test('trace for recommended move includes rook pattern when edge rook threatens 
     p === 'horse_release_to_pawn_line_guard'
   ), true);
 });
+
+test('pre-existing high-value threat: unrelated move must not claim threat reason', () => {
+  // red rook at [6][0] already threatens black horse at [6][8] (same row, clear path)
+  // moving an unrelated red pawn must not produce a threat reason
+  const board = withKings();
+  place(board, 6, 0, piece('red', 'pawn', 'rook', true));    // red rook
+  place(board, 6, 8, piece('black', 'horse', 'horse', true)); // black horse - already threatened
+  place(board, 9, 1, piece('red', 'pawn', 'pawn', false));    // unrelated pawn to move
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const pawnForward = findMove(board, 'red', [9, 1], [8, 1]);
+  const recommended = recommendMove(state, [pawnForward]);
+  assertOk(recommended.traces);
+  const tr = recommended.traces[0];
+  // pawn move didn't create the threat — rook already had it
+  assertEqual(tr.threatByMovedPiece, false);
+  assertEqual(tr.threatDelta <= 0, true);
+  assertEqual(tr.reason === '威脅對方重要棋子', false);
+  assertEqual(tr.reason.startsWith('此步直接威脅'), false);
+  assertEqual(tr.reason === '形成新的高價威脅', false);
+});
+
+test('cannon move that creates new capture threat produces byMovedPiece trace', () => {
+  // red cannon slides from [9][0] to [5][0]; fires through red pawn screen at [5][4] to hit black horse at [5][5]
+  // before the move: cannon at [9][0] has no capture threats
+  const board = withKings();  // includes red pawn at [5][4] — acts as cannon screen
+  place(board, 9, 0, piece('red', 'pawn', 'cannon', true));   // red cannon
+  place(board, 5, 5, piece('black', 'horse', 'horse', true));  // black horse as target
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const cannonAdvance = findMove(board, 'red', [9, 0], [5, 0]);
+  const recommended = recommendMove(state, [cannonAdvance]);
+  assertOk(recommended.traces);
+  const tr = recommended.traces[0];
+  // verify the trace fields directly; reason may be overridden by higher-priority
+  // factors (e.g. hangingMove) but the underlying threat data must be correct
+  assertEqual(tr.threatByMovedPiece, true);
+  assertEqual(tr.threatTargetType, 'horse');
+  assertEqual(tr.threatDelta > 0, true);
+});
+
+test('trace includes threatDelta, threatByMovedPiece, threatTargetType fields', () => {
+  const board = withKings();
+  place(board, 7, 1, piece('red', 'horse', 'horse', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const recommended = recommendMove(state);
+  assertOk(recommended.traces);
+  const first = recommended.traces[0];
+  assertOk(typeof first.threatValue === 'number');
+  assertOk(typeof first.threatDelta === 'number');
+  assertOk(typeof first.threatByMovedPiece === 'boolean');
+  assertOk(first.threatTargetType === null || typeof first.threatTargetType === 'string');
+  assertOk(first.threatTargetRevealed === null || typeof first.threatTargetRevealed === 'boolean');
+});
+
+test('edge cannon regression: move choice unaffected by threat delta patch', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn'));
+  place(board, 5, 0, piece('red', 'pawn', 'cannon', true));
+  place(board, 3, 0, piece('black', 'pawn', 'pawn', false));
+  place(board, 0, 0, piece('black', 'rook', 'rook', false));
+  place(board, 0, 1, piece('black', 'horse', 'horse', false));
+  place(board, 0, 2, piece('black', 'elephant', 'elephant', false));
+  place(board, 2, 1, piece('black', 'cannon', 'cannon', false));
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const horseReleaseToEdge = findMove(board, 'black', [0, 1], [2, 0]);
+  const horseReleaseToGuard = findMove(board, 'black', [0, 1], [2, 2]);
+  const elephantReleaseToEdge = findMove(board, 'black', [0, 2], [2, 0]);
+  const sameFilePawnGamble = findMove(board, 'black', [3, 0], [4, 0]);
+  const hiddenCannonSideShift = findMove(board, 'black', [2, 1], [2, 0]);
+  const recommended = recommendMove(state, [
+    horseReleaseToGuard, sameFilePawnGamble, hiddenCannonSideShift,
+    horseReleaseToEdge, elephantReleaseToEdge,
+  ]);
+  assertOk(recommended.move);
+  assertEqual(recommended.move === horseReleaseToEdge || recommended.move === elephantReleaseToEdge, true);
+  assertEqual(recommended.move === horseReleaseToGuard, false);
+});

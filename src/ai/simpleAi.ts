@@ -49,6 +49,19 @@ type MoveEvaluation = {
   effectiveCheck: boolean;
   lowQualityCheck: boolean;
   meaningless: boolean;
+  threatDelta: number;
+  threatByMovedPiece: boolean;
+  threatTargetType: PieceType | null;
+  threatTargetRevealed: boolean | null;
+};
+
+type AiThreatInfo = {
+  value: number;
+  from: Position;
+  to: Position;
+  targetType: PieceType;
+  targetRevealed: boolean;
+  byMovedPiece: boolean;
 };
 
 function publicType(piece: { originalType: PieceType; realType: PieceType; revealed: boolean }): PieceType {
@@ -218,6 +231,30 @@ function maxCaptureValue(board: Board, side: Side, weights: AiWeights): number {
   let best = 0;
   for (const move of getAllLegalMoves(board, side)) {
     if (move.captured) best = Math.max(best, targetValue(move.captured, board, move.to, weights));
+  }
+  return best;
+}
+
+function bestCaptureThreat(
+  board: Board,
+  side: Side,
+  movedTo: Position | undefined,
+  weights: AiWeights
+): AiThreatInfo | null {
+  let best: AiThreatInfo | null = null;
+  for (const move of getAllLegalMoves(board, side)) {
+    if (!move.captured) continue;
+    const value = targetValue(move.captured, board, move.to, weights);
+    if (!best || value > best.value) {
+      best = {
+        value,
+        from: move.from,
+        to: move.to,
+        targetType: publicType(move.captured),
+        targetRevealed: move.captured.revealed,
+        byMovedPiece: !!movedTo && samePosition(move.from, movedTo),
+      };
+    }
   }
   return best;
 }
@@ -692,8 +729,12 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
   const targetGain = captureScore(state.board, move, weights);
   const captureGain = targetGain;
   const openingBonus = openingPawnRevealBonus(state, move, weights);
-  const threatValue = maxCaptureValue(nextBoard, state.turn, weights);
-  const importantThreat = threatValue >= weights.pieceValues.horse;
+  const beforeThreat = bestCaptureThreat(state.board, state.turn, undefined, weights);
+  const afterThreat = bestCaptureThreat(nextBoard, state.turn, move.to, weights);
+  const threatValue = afterThreat?.value ?? 0;
+  const threatDelta = threatValue - (beforeThreat?.value ?? 0);
+  const threatByMovedPiece = afterThreat?.byMovedPiece ?? false;
+  const importantThreat = threatValue >= weights.pieceValues.horse && (threatDelta > 0 || threatByMovedPiece);
   const wasUnderAttack = isSquareAttacked(state.board, opponent(state.turn), move.from);
   const escapeBonus = wasUnderAttack && !reply.immediateCapture && movedPieceValue(move.piece, weights) >= weights.pieceValues.horse ? weights.escapeImportantPieceBonus : 0;
   const pressureBonus = kingZonePressureBonus(nextBoard, state.turn, move.to, weights);
@@ -813,6 +854,10 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     effectiveCheck,
     lowQualityCheck,
     meaningless,
+    threatDelta,
+    threatByMovedPiece,
+    threatTargetType: afterThreat?.targetType ?? null,
+    threatTargetRevealed: afterThreat?.targetRevealed ?? null,
   };
 }
 
@@ -840,7 +885,10 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (evaluation.preservesHiddenCannon) return '保留暗炮威懾';
   if (evaluation.leaveKeySquareScore < 0) return '離開關鍵點，價值下降';
   if (evaluation.meaningless) return '目的性不足，已扣分';
-  if (evaluation.threatValue >= weights.pieceValues.horse) return '威脅對方重要棋子';
+  const typeLabel: Record<PieceType, string> = { king: '帥/將', advisor: '仕/士', elephant: '相/象', rook: '車', horse: '馬', cannon: '炮/包', pawn: '兵/卒' };
+  const newThreat = evaluation.threatValue >= weights.pieceValues.horse && (evaluation.threatDelta > 0 || evaluation.threatByMovedPiece);
+  if (newThreat && evaluation.threatByMovedPiece && evaluation.threatTargetType) return `此步直接威脅對方${typeLabel[evaluation.threatTargetType]}`;
+  if (newThreat && evaluation.threatDelta > 0) return '形成新的高價威脅';
   if (evaluation.escapeBonus > 0) return '脫離重要子力危險';
   if (evaluation.pressureBonus > 0) return '形成攻擊壓力';
   if (evaluation.controlsImportantHidden) return '壓制對方重要暗子';
@@ -903,6 +951,11 @@ export function recommendMove(
     effectiveCheck: evaluation.effectiveCheck,
     lowQualityCheck: evaluation.lowQualityCheck,
     meaningless: evaluation.meaningless,
+    threatValue: evaluation.threatValue,
+    threatDelta: evaluation.threatDelta,
+    threatByMovedPiece: evaluation.threatByMovedPiece,
+    threatTargetType: evaluation.threatTargetType,
+    threatTargetRevealed: evaluation.threatTargetRevealed,
   }));
 
   return {

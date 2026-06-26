@@ -1,4 +1,4 @@
-import type { Move } from '../types/chess';
+import type { Move, PieceType } from '../types/chess';
 import type { AiLearningPatternId } from './learningPatterns';
 
 /**
@@ -22,6 +22,11 @@ export type AiMoveTrace = {
   effectiveCheck: boolean;
   lowQualityCheck: boolean;
   meaningless: boolean;
+  threatValue: number;
+  threatDelta: number;
+  threatByMovedPiece: boolean;
+  threatTargetType: PieceType | null;
+  threatTargetRevealed: boolean | null;
 };
 
 /**
