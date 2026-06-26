@@ -78,3 +78,6 @@
 - `npx tsc --noEmit` 通過。
 - 更新 `CODEX_STATUS.md` 與 `NEXT_TASK.md`。
 - commit 並 push。
+# 已完成補充（2026-06-26 Codex）
+- AI 戰術層 MVP：直接絕殺優先、避免送對方一步絕殺、補一層交換評估與安全吃高價子優先。
+- 棋譜變化線 MVP：可從回放分析局面保存後續變化線到 `GameRecord.variations`。

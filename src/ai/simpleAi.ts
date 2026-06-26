@@ -63,28 +63,52 @@ function positionScore(move: Move): number {
   return score;
 }
 
-function opponentReplyPenalty(board: Board, side: Side, movedTo: Position, movedPiece: Piece): { risk: number; immediateCapture: boolean; maxReplyGain: number } {
+function bestRecaptureValue(board: Board, side: Side, target: Position): number {
+  const replies = getAllLegalMoves(board, side);
+  let best = 0;
+  for (const reply of replies) {
+    if (!reply.captured || !samePosition(reply.to, target)) continue;
+    best = Math.max(best, pieceValue(reply.captured));
+  }
+  return best;
+}
+
+function opponentReplyPenalty(board: Board, side: Side, movedTo: Position, movedPiece: Piece): {
+  risk: number;
+  immediateCapture: boolean;
+  maxReplyGain: number;
+  possibleLoss: number;
+} {
   const replies = getAllLegalMoves(board, opponent(side));
   let immediateCapture = false;
   let maxReplyGain = 0;
+  let possibleLoss = 0;
 
   for (const reply of replies) {
-    if (!reply.captured) continue;
-    const gain = pieceValue(reply.captured);
-    if (gain > maxReplyGain) maxReplyGain = gain;
-    if (samePosition(reply.to, movedTo)) immediateCapture = true;
+    if (reply.captured) {
+      const gain = pieceValue(reply.captured);
+      if (gain > maxReplyGain) maxReplyGain = gain;
+    }
+
+    if (!samePosition(reply.to, movedTo)) continue;
+
+    immediateCapture = true;
+    const replyBoard = applyMoveToBoard(board, reply);
+    const recaptureValue = bestRecaptureValue(replyBoard, side, movedTo);
+    const tradeNet = movedPieceValue(movedPiece) - recaptureValue;
+    possibleLoss = Math.max(possibleLoss, Math.max(0, tradeNet));
   }
 
-  const loss = immediateCapture ? movedPieceValue(movedPiece) : 0;
   return {
     immediateCapture,
     maxReplyGain,
-    risk: Math.round(loss * 3 + maxReplyGain * 0.55),
+    possibleLoss,
+    risk: Math.round(possibleLoss * 1.8 + maxReplyGain * 0.25),
   };
 }
 
-function baseScore(move: Move): number {
-  return captureScore(move) + revealScore(move) + positionScore(move);
+function baseScore(move: Move, possibleLoss: number, maxReplyGain: number): number {
+  return captureScore(move) - possibleLoss + revealScore(move) + positionScore(move) - Math.round(maxReplyGain * 0.25);
 }
 
 function allowsOpponentWin(state: GameState, move: Move): boolean {
@@ -114,13 +138,14 @@ export function recommendMove(state: GameState, candidateMoves?: Move[]): { move
   let bestScore = -999999;
   let bestRisk = 0;
   let bestImmediateCapture = false;
+  let bestExchangeNet = 0;
   let sawRiskyMove = false;
 
   for (const move of scoringMoves) {
     const nextBoard = applyMoveToBoard(state.board, move);
     const moved = nextBoard[move.to.row][move.to.col]!;
     const reply = opponentReplyPenalty(nextBoard, state.turn, move.to, moved);
-    const score = baseScore(move) - reply.risk;
+    const score = baseScore(move, reply.possibleLoss, reply.maxReplyGain);
 
     if (reply.risk > 0) sawRiskyMove = true;
     if (score > bestScore) {
@@ -128,13 +153,15 @@ export function recommendMove(state: GameState, candidateMoves?: Move[]): { move
       best = move;
       bestRisk = reply.risk;
       bestImmediateCapture = reply.immediateCapture;
+      bestExchangeNet = captureScore(move) - reply.possibleLoss;
     }
   }
 
-  let reason = '簡易分數最佳';
+  let reason = '簡易分數較佳';
   if (safeMoves.length && safeMoves.length < moves.length) reason = '避免對方下一手絕殺';
-  else if (best.captured && bestRisk === 0) reason = '此步吃子且相對安全';
-  else if (bestImmediateCapture) reason = '此步會被對方吃回，已扣分';
+  else if (best.captured && bestExchangeNet >= 250) reason = '安全吃高價子';
+  else if (best.captured && bestExchangeNet >= 0) reason = '此步交換不虧';
+  else if (bestImmediateCapture) reason = '此步會被對方吃回，已按交換扣分';
   else if (sawRiskyMove && bestRisk === 0) reason = '避免送子';
   else if (bestRisk > 0) reason = '此步有被吃風險，已扣分';
 

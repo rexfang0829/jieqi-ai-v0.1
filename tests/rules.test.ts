@@ -643,8 +643,8 @@ test('AI chooses immediate checkmate before simple material scoring', () => {
   place(board, 1, 3, piece('red', 'rook'));
   place(board, 0, 3, piece('red', 'rook'));
   place(board, 0, 5, piece('red', 'rook'));
-  place(board, 6, 0, piece('red', 'pawn'));
-  place(board, 5, 0, piece('black', 'pawn'));
+  place(board, 7, 0, piece('red', 'pawn'));
+  place(board, 6, 0, piece('black', 'rook'));
   const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
   const mate = {
     from: { row: 1, col: 3 },
@@ -652,10 +652,10 @@ test('AI chooses immediate checkmate before simple material scoring', () => {
     piece: board[1][3]!,
   };
   const nonMate = {
-    from: { row: 6, col: 0 },
-    to: { row: 5, col: 0 },
-    piece: board[6][0]!,
-    captured: board[5][0],
+    from: { row: 7, col: 0 },
+    to: { row: 6, col: 0 },
+    piece: board[7][0]!,
+    captured: board[6][0],
   };
   assertEqual(applyMove(state, mate.from, mate.to).status, 'red_win');
   const recommended = recommendMove(state, [nonMate, mate]);
@@ -1065,6 +1065,57 @@ test('AI threat scoring for hidden enemies uses original type, not real type', (
   const stateA = { board: boardA, turn: 'red' as const, history: [], status: 'playing' as const };
   const stateB = { board: boardB, turn: 'red' as const, history: [], status: 'playing' as const };
   assertEqual(recommendMove(stateA).score, recommendMove(stateB).score);
+});
+
+test('AI does not overvalue a rook capture when the cannon is protected', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 4, 4, piece('red', 'pawn'));
+  place(board, 5, 0, piece('red', 'rook'));
+  place(board, 5, 1, piece('black', 'cannon'));
+  place(board, 5, 8, piece('black', 'rook'));
+  place(board, 6, 6, piece('red', 'pawn'));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const badCapture = {
+    from: { row: 5, col: 0 },
+    to: { row: 5, col: 1 },
+    piece: board[5][0]!,
+    captured: board[5][1],
+  };
+  const quietMove = {
+    from: { row: 6, col: 6 },
+    to: { row: 5, col: 6 },
+    piece: board[6][6]!,
+  };
+  const recommended = recommendMove(state, [badCapture, quietMove]);
+  assertOk(recommended.move);
+  assertEqual(recommended.move, quietMove);
+});
+
+test('AI prefers a safe high-value capture', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 4, 4, piece('red', 'pawn'));
+  place(board, 5, 0, piece('red', 'rook'));
+  place(board, 5, 1, piece('black', 'cannon'));
+  place(board, 6, 6, piece('red', 'pawn'));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const safeCapture = {
+    from: { row: 5, col: 0 },
+    to: { row: 5, col: 1 },
+    piece: board[5][0]!,
+    captured: board[5][1],
+  };
+  const quietMove = {
+    from: { row: 6, col: 6 },
+    to: { row: 5, col: 6 },
+    piece: board[6][6]!,
+  };
+  const recommended = recommendMove(state, [quietMove, safeCapture]);
+  assertOk(recommended.move);
+  assertEqual(recommended.move, safeCapture);
 });
 
 test('game record can be created and converted to text and json', () => {

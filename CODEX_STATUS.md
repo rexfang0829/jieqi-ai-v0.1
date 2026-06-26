@@ -453,3 +453,21 @@ npm.cmd run build
 - 戰術層仍是 MVP，沒有完整 minimax。
 - 變化線只有一層，不做多層巢狀 variation。
 - 未做 Threat Map、Belief State、Monte Carlo、後端或資料庫。
+## 2026-06-26 AI 戰術層與棋譜變化線 MVP 收尾（Codex）
+
+### 本輪完成
+- `recommendMove(state, candidateMoves?)` 已保留候選 moves 支援，AI VS AI 的第三次重複過濾不受影響。
+- AI 已加入直接絕殺優先：候選步若走完立即讓己方勝，直接選該步。
+- AI 已加入避免送對方一步絕殺：若某步會讓對方下一手直接勝，且仍有其他選擇，會避開該步。
+- 棋譜變化線 MVP 已加入：`GameRecord.variations` 可保存從回放局面分析出的變化線，並可存入 localStorage。
+- 本輪補上簡化一層交換評估：我方走子後若對方能吃回剛移動棋子，會再檢查我方是否能立刻反吃攻擊棋，依 `被吃子價值 - 可反吃攻擊棋價值` 計算可能損失。
+- AI 現在會用 `gain - possibleLoss` 評估吃子交換，安全吃高價子會優先，虧交換不再被單純吃子分高估。
+
+### 修改檔案
+- `src/ai/simpleAi.ts`：補一層交換評估、優勢交換評分與安全吃高價子理由。
+- `tests/rules.test.ts`：補絕殺優先、吃高價但絕殺更優先、虧交換不高估、安全吃高價子優先、變化線保存回歸測試。
+- `CODEX_STATUS.md` / `NEXT_TASK.md`：更新本輪狀態與下一步。
+
+### 驗證
+- `npm.cmd test` 通過。
+- `npx.cmd tsc --noEmit` 通過。
