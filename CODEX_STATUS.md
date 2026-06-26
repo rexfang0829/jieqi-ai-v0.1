@@ -1,5 +1,39 @@
 ## 最新完成的工作
 
+### 2026-06-27 Fair AI Permission Boundary MVP（Claude）
+
+**目標**：建立正式下棋 AI 的公平資訊權限牆，避免 AI 在正式下棋時偷看未翻暗子的 realType。
+
+**新增/修改檔案**：
+
+1. **`src/ai/aiVisibility.ts`**（全新）：
+   - `AiVisiblePiece`：unrevealed 時不帶 `realType`（TS 層強制）
+   - `AiVisibleBoard` / `AiVisibleMove` / `AiVisibleState`
+   - `createAiView(state, perspectiveSide)`：unrevealed piece 隱藏 realType
+   - `visibleStateToMaskedGameState(view)`：MVP 過渡 adapter，未翻 realType mask 成 originalType
+
+2. **`src/ai/simpleAi.ts`**（修改）：
+   - 新增 `recommendMoveOracle()`：完整資訊，等同舊 `recommendMove()`，用於 debug/分析
+   - 新增 `recommendMoveFair()`：正式下棋入口，透過 createAiView + visibleStateToMaskedGameState 隔離，MVP 忽略外部 candidateMoves
+
+3. **`src/components/HumanVsAiPanel.tsx`**：正式對局 AI 改用 `recommendMoveFair`
+4. **`src/App.tsx`**：AI vs AI 兩處改用 `recommendMoveFair`
+5. **`src/components/AiPanel.tsx`**：輔助盤面/debug 改用 `recommendMoveOracle`
+
+6. **`tests/rules.test.ts`**（新增 4 個測試）：
+   - `Fair AI view hides realType for unrevealed pieces`
+   - `Fair AI masked state replaces hidden realType with originalType`
+   - `recommendMoveFair is stable when hidden realType changes but public info is same`
+   - `Oracle AI and Fair AI entrypoints both return recommendations`
+
+**哪些模式已改用 recommendMoveFair**：Human vs AI、AI vs AI
+
+**哪些地方仍保留 Oracle**：AiPanel（輔助盤面/debug 分析）
+
+**測試**：`npm test` 全部通過（含 4 個新 fair info 測試）；`npx tsc --noEmit` 無錯。
+
+---
+
 ### 2026-06-26 AI pattern 觸發紀錄 MVP（Claude）
 
 **目標**：`recommendMove()` 回傳 `traces` 陣列，記錄每個候選步的詳細評分資訊，方便後續 pattern win rate 統計與調小自我對弈。

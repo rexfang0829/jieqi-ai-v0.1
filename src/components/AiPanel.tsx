@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { GameState, Move } from '../types/chess';
-import { recommendMove } from '../ai/simpleAi';
+import { recommendMoveOracle } from '../ai/simpleAi';
 import { SIMPLE_AI_NOTE, SIMPLE_AI_TITLE } from '../ai/simpleAiText';
 import { getEndgameFeedback } from '../game/endgameFeedback';
 import { moveText } from '../game/moveNotation';
@@ -27,7 +27,7 @@ export function AiPanel({ state, version: _version, modeName, analysisMoves }: P
     );
   }
 
-  const r = recommendMove(state);
+  const r = recommendMoveOracle(state);
 
   function copyReport() {
     const text = formatAiDebugReport({
@@ -40,7 +40,7 @@ export function AiPanel({ state, version: _version, modeName, analysisMoves }: P
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }).catch(() => {
-      /* clipboard unavailable — silently ignore */
+      /* clipboard unavailable -- silently ignore */
     });
   }
 

@@ -7,7 +7,7 @@ import { filterThirdRepetitionMoves } from '../game/repetitionRules';
 import { playBoardSoundFeedback } from '../game/soundEffects';
 import { playEndgameSound } from '../game/endgameSound';
 import { getEndgameFeedback, statusLabel } from '../game/endgameFeedback';
-import { recommendMove } from '../ai/simpleAi';
+import { recommendMoveFair } from '../ai/simpleAi';
 import { moveText } from '../game/moveNotation';
 import { createGameRecord, saveGameRecord } from '../game/gameRecord';
 import type { RecordStorage } from '../game/gameRecord';
@@ -86,7 +86,7 @@ export function HumanVsAiPanel({ onHome, storage }: Props) {
       const legal = getAllLegalMoves(current.board, current.turn);
       const allowed = filterThirdRepetitionMoves(current, pastRef.current, legal);
       const candidates = allowed.length ? allowed : legal;
-      const r = recommendMove(current, candidates.length ? candidates : undefined);
+      const r = recommendMoveFair(current);
       if (!r.move) { setAiThinking(false); return; }
       const next = applyMove(current, r.move.from, r.move.to);
       const ann: AiAnnotation = { score: r.score, reason: r.reason, moveIndex: current.history.length };
@@ -183,7 +183,7 @@ export function HumanVsAiPanel({ onHome, storage }: Props) {
             >執黑後手</button>
           </div>
           <p style={{ color: '#64748b', fontSize: 13, marginTop: 16 }}>
-            AI 使用現有 recommendMove() 邏輯，無需後端。
+            AI 使用公平資訊 recommendMoveFair()，無需後端。
           </p>
         </div>
       </main>

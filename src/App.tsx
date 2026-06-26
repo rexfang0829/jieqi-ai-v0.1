@@ -24,7 +24,7 @@ import { getEndgameFeedback, shouldPlayEndgameSound, statusLabel } from './game/
 import { playEndgameSound, playTimeoutSound } from './game/endgameSound';
 import { editorPieceTypeNames } from './game/pieceText';
 import { playBoardSoundFeedback } from './game/soundEffects';
-import { recommendMove } from './ai/simpleAi';
+import { recommendMoveFair } from './ai/simpleAi';
 import {
   createGameRecord, deleteGameRecord, loadGameRecords, resultText,
   saveGameRecord, toggleFavoriteRecord, type GameRecord, type GameVariation,
@@ -572,7 +572,7 @@ export default function App() {
       setAiVsAiMsg(AI_REPEAT_END_MESSAGE);
       return;
     }
-    const r = recommendMove(current, allowedMoves);
+    const r = recommendMoveFair(current);
     if (!r.move) { setAiVsAiMsg('AI 無合法步，對局結束'); return; }
     const next = applyMove(current, r.move.from, r.move.to);
     const nextPast = [...aiVsAiPastRef.current, current];
@@ -682,7 +682,7 @@ export default function App() {
         setAiVsAiMsg(AI_REPEAT_END_MESSAGE);
         return;
       }
-      const r = recommendMove(current, allowedMoves);
+      const r = recommendMoveFair(current);
       if (!r.move) { setAiVsAiAutoPlay(false); setAiVsAiMsg('AI 無合法步，對局結束'); return; }
       const nextPast = [...aiVsAiPastRef.current, current];
       aiVsAiPastRef.current = nextPast;

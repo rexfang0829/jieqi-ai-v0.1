@@ -1,4 +1,5 @@
 ﻿import type { Board, GameState, Move, Piece, PieceType, Position, Side } from '../types/chess';
+import { createAiView, visibleStateToMaskedGameState, type AiVisibleState } from './aiVisibility';
 import { getAllLegalMoves, isInCheck } from '../game/checkRules';
 import { applyMove } from '../game/gameEngine';
 import { createInitialBoard } from '../game/initialBoard';
@@ -1179,3 +1180,34 @@ export function recommendMove(
   };
 }
 
+
+/**
+ * Oracle AI 入口：完整資訊，用於 debug / 分析 / 輔助盤面。
+ * 等同於原本的 recommendMove()，命名清楚表達天眼性質。
+ */
+export function recommendMoveOracle(
+  state: GameState,
+  candidateMoves?: Move[],
+  weights: AiWeights = defaultAiWeights
+): AiRecommendation {
+  return recommendMove(state, candidateMoves, weights);
+}
+
+/**
+ * Fair AI 入口：正式下棋使用。
+ * 自動建立公平資訊視圖，未翻棋子的 realType 不可見。
+ * MVP 階段忽略外部 candidateMoves，避免帶入完整 realType。
+ */
+export function recommendMoveFair(
+  stateOrView: GameState | AiVisibleState,
+  _candidateMoves?: Move[],
+  weights: AiWeights = defaultAiWeights
+): AiRecommendation {
+  const view =
+    'perspectiveSide' in stateOrView
+      ? stateOrView
+      : createAiView(stateOrView, stateOrView.turn);
+  const maskedState = visibleStateToMaskedGameState(view);
+  // MVP: ignore candidateMoves, let recommendMove generate from maskedState
+  return recommendMove(maskedState, undefined, weights);
+}

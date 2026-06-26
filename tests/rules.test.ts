@@ -2281,3 +2281,78 @@ test('reveal choice risk fair info: watcher hidden realType must not change scor
   assertEqual(traceA.revealChoicePenalty, traceB.revealChoicePenalty);
   assertEqual(traceA.score, traceB.score);
 });
+
+// ─── Fair AI Boundary MVP tests ───────────────────────────────────────────────
+import { createAiView, visibleStateToMaskedGameState } from '../src/ai/aiVisibility';
+import { recommendMoveFair, recommendMoveOracle } from '../src/ai/simpleAi';
+
+test('Fair AI view hides realType for unrevealed pieces', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 6, 0, piece('red', 'pawn', 'rook', false));
+  place(board, 6, 2, piece('red', 'pawn', 'horse', true));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const view = createAiView(state, 'red');
+  const hidden = view.board[6][0];
+  assertOk(hidden);
+  assertEqual(hidden.revealed, false);
+  assertEqual('realType' in hidden, false);
+  const revealed = view.board[6][2];
+  assertOk(revealed);
+  assertEqual(revealed.revealed, true);
+  assertEqual(revealed.realType, 'horse');
+});
+
+test('Fair AI masked state replaces hidden realType with originalType', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 6, 0, piece('red', 'pawn', 'rook', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const view = createAiView(state, 'red');
+  const masked = visibleStateToMaskedGameState(view);
+  const maskedPiece = masked.board[6][0];
+  assertOk(maskedPiece);
+  assertEqual(maskedPiece.revealed, false);
+  assertEqual(maskedPiece.originalType, 'pawn');
+  assertEqual(maskedPiece.realType, 'pawn');
+});
+
+test('recommendMoveFair is stable when hidden realType changes but public info is same', () => {
+  function makeState(hiddenRealType: PieceType): GameState {
+    const board = emptyBoard();
+    place(board, 9, 4, piece('red', 'king'));
+    place(board, 0, 4, piece('black', 'king'));
+    place(board, 5, 4, piece('red', 'pawn', 'pawn', true));
+    place(board, 6, 0, piece('red', 'pawn', hiddenRealType, false));
+    place(board, 7, 1, piece('red', 'horse', 'horse', false));
+    place(board, 3, 0, piece('black', 'pawn', 'pawn', false));
+    return { board, turn: 'red', history: [], status: 'playing' };
+  }
+  const stateA = makeState('rook');
+  const stateB = makeState('pawn');
+  const recA = recommendMoveFair(stateA);
+  const recB = recommendMoveFair(stateB);
+  assertOk(recA.move);
+  assertOk(recB.move);
+  assertEqual(recA.score, recB.score);
+  assertEqual(recA.reason, recB.reason);
+  assertEqual(recA.move.from.row, recB.move.from.row);
+  assertEqual(recA.move.from.col, recB.move.from.col);
+  assertEqual(recA.move.to.row, recB.move.to.row);
+  assertEqual(recA.move.to.col, recB.move.to.col);
+});
+
+test('Oracle AI and Fair AI entrypoints both return recommendations', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn', 'pawn', true));
+  place(board, 6, 0, piece('red', 'pawn', 'rook', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const fair = recommendMoveFair(state);
+  const oracle = recommendMoveOracle(state);
+  assertOk(fair.move);
+  assertOk(oracle.move);
+});
