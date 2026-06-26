@@ -1,10 +1,10 @@
 # NEXT_TASK
 
 ## Completed this round
-- Added post-move loose hidden piece evaluation.
+- Added post-move loose hidden piece MVP evaluation.
 - Added trace fields for loose hidden piece count, protected-under-attack count, rescue, ignore, and penalty.
 - Added weights for loose-piece penalty, rescue bonus, protected-under-attack cap, and activation cap.
-- Added regression tests for unprotected hidden pawn rescue, protected attacked hidden piece, and hidden cannon fair-info behavior.
+- Tightened regression tests for unprotected hidden pawn rescue, ignored loose hidden pawn, and defended hidden piece pressure.
 
 ## Suggested next tasks
 1. AI opening theory regression expansion.

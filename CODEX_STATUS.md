@@ -530,3 +530,27 @@ npm.cmd run build
 - The evaluator does not peek at unrevealed `realType`.
 
 ---
+## 2026-06-27 Codex test/document update
+
+### Latest completed work
+- Strengthened test coverage for post-move loose hidden piece evaluation.
+- Confirmed trace fields cover `postMoveLooseHiddenPiece`, `postMoveLooseHiddenPieceCount`, `postMoveProtectedUnderAttackCount`, `postMoveLoosePiecePenalty`, `rescuesLooseHiddenPiece`, and `ignoresLooseHiddenPiece`.
+- Documented the loose hidden piece MVP weights: `postMoveLooseHiddenPiecePenalty`, `rescueLooseHiddenPieceBonus`, `protectedUnderAttackPenaltyCap`, and `activationOnlyCapWhenLoosePieceExists`.
+- Chess logic covered: hidden piece attacked with no defender is a free-loss risk; hidden piece attacked with a defender is exchangeable pressure, not urgent rescue.
+
+### Tests added or tightened
+- Revealed elephant attacks an unprotected black hidden pawn: moving the pawn gets `rescuesLooseHiddenPiece === true`, no post-move loose flag, and scores above pure hidden horse activation.
+- Same position: black hidden horse activation that ignores the pawn gets `postMoveLooseHiddenPiece === true`, `ignoresLooseHiddenPiece === true`, and a negative loose-piece penalty.
+- Cannon pressure on a defended hidden horse is tracked as protected under attack, not as loose hidden piece danger.
+
+### Verification
+- `npm.cmd test`: passed.
+- `npx.cmd tsc --noEmit`: passed.
+- `npm.cmd run build`: passed.
+
+### Scope note
+- This remains loose hidden piece MVP only.
+- No AI scoring weights or evaluation logic changed in this round.
+- No Board UI, moveNotation, gameEngine, checkRules, or Fair AI permission boundary changes.
+
+---
