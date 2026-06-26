@@ -1,0 +1,101 @@
+import type { PieceType } from '../types/chess';
+
+export type AiWeights = {
+  pieceValues: Record<PieceType, number>;
+  targetCannonValue: number;
+  connectedAdvisorValue: number;
+  advisorTargetValue: number;
+  elephantTargetValue: number;
+  uncrossedPawnTargetValue: number;
+  crossedPawnTargetValue: number;
+  crossedPawnNearPalaceValue: number;
+  meaninglessMovePenalty: number;
+  lowQualityCheckPenalty: number;
+  protectedMoveBonus: number;
+  hangingMovePenalty: number;
+  revealBonus: number;
+  openingPawnBonus: number;
+  edgePawnBonus: number;
+  thirdSeventhPawnBonus: number;
+  keySquareCenterFileBonus: number;
+  keySquareNearCenterFileBonus: number;
+  keySquareRiverBonus: number;
+  keySquareEnemyPalaceBonus: number;
+  keySquareSecondEighthFileBonus: number;
+  keySquareAdjacentHiddenBonus: number;
+  keySquareMaxBonus: number;
+  leaveKeySquareWeakPenalty: number;
+  leaveKeySquareStrongPenalty: number;
+  hiddenPiecePressureBonus: number;
+  importantHiddenPiecePressureBonus: number;
+  hiddenPiecePressureMaxBonus: number;
+  kingZoneNearBonus: number;
+  kingZoneLineBonus: number;
+  effectiveCheckBonus: number;
+  importantThreatRatio: number;
+  blockImmediateWinBonus: number;
+  escapeImportantPieceBonus: number;
+  possibleLossMultiplier: number;
+  maxReplyGainPenaltyRatio: number;
+  openingKeySquareMaxBonus: number;
+  leaveKeySquareThreshold: number;
+  leaveKeySquareDropThreshold: number;
+  leaveKeySquareStrongThreshold: number;
+  connectedAdvisorDistance: number;
+  safeCaptureExchangeNet: number;
+  effectiveCheckThreatValue: number;
+};
+
+export const defaultAiWeights: AiWeights = {
+  pieceValues: {
+    king: 10000,
+    rook: 500,
+    cannon: 350,
+    horse: 300,
+    elephant: 150,
+    advisor: 150,
+    pawn: 80,
+  },
+  targetCannonValue: 360,
+  connectedAdvisorValue: 280,
+  advisorTargetValue: 170,
+  elephantTargetValue: 140,
+  uncrossedPawnTargetValue: 60,
+  crossedPawnTargetValue: 120,
+  crossedPawnNearPalaceValue: 145,
+  meaninglessMovePenalty: -80,
+  lowQualityCheckPenalty: -60,
+  protectedMoveBonus: 20,
+  hangingMovePenalty: -50,
+  revealBonus: 20,
+  openingPawnBonus: 40,
+  edgePawnBonus: 10,
+  thirdSeventhPawnBonus: 8,
+  keySquareCenterFileBonus: 8,
+  keySquareNearCenterFileBonus: 4,
+  keySquareRiverBonus: 8,
+  keySquareEnemyPalaceBonus: 12,
+  keySquareSecondEighthFileBonus: 6,
+  keySquareAdjacentHiddenBonus: 6,
+  keySquareMaxBonus: 28,
+  leaveKeySquareWeakPenalty: -12,
+  leaveKeySquareStrongPenalty: -20,
+  hiddenPiecePressureBonus: 8,
+  importantHiddenPiecePressureBonus: 4,
+  hiddenPiecePressureMaxBonus: 32,
+  kingZoneNearBonus: 25,
+  kingZoneLineBonus: 15,
+  effectiveCheckBonus: 35,
+  importantThreatRatio: 0.12,
+  blockImmediateWinBonus: 70,
+  escapeImportantPieceBonus: 45,
+  possibleLossMultiplier: 1.8,
+  maxReplyGainPenaltyRatio: 0.25,
+  openingKeySquareMaxBonus: 4,
+  leaveKeySquareThreshold: 16,
+  leaveKeySquareDropThreshold: 8,
+  leaveKeySquareStrongThreshold: 22,
+  connectedAdvisorDistance: 3,
+  safeCaptureExchangeNet: 250,
+  effectiveCheckThreatValue: 350,
+};

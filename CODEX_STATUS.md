@@ -518,6 +518,24 @@ npm.cmd run build
 - `npm.cmd test` 通過。
 - `npm.cmd run build` 通過（仍有既有 `.playbackMoveScroll` CSS minify warning，本輪未處理 CSS）。
 
+## 2026-06-26 AI 權重參數化 MVP（Codex）
+
+### 本輪完成
+- 新增 `src/ai/aiWeights.ts`，集中管理 simpleAi 目前使用的棋子價值、吃子目標價值、開局翻兵、揭棋要點、暗子壓制、交換風險、將區壓力、無目的步與無成果將軍等分數常數。
+- `recommendMove(state, candidateMoves?, weights = defaultAiWeights)` 已支援可選 weights；舊呼叫方式不需要修改。
+- `simpleAi.ts` 的 helper 改用參數傳入 `AiWeights`，避免使用全域 mutable state。
+- 本輪只是集中管理分數，`defaultAiWeights` 盡量沿用原本數值，未做 AI 自動調參、自我學習或搜尋重寫。
+- 保留既有功能：絕殺優先、避免送一步殺、candidateMoves、一層交換評估、開局翻兵、無目的步扣分、無成果將軍降分、targetValue、連士 / 過河兵、落點保護、揭棋要點、暗子壓制與 reason 補強。
+
+### 修改檔案
+- `src/ai/aiWeights.ts`：新增 `AiWeights` 型別與 `defaultAiWeights`。
+- `src/ai/simpleAi.ts`：改由 `weights` 讀取 AI 評分常數，並讓 `recommendMove` 支援可選 weights。
+- `CODEX_STATUS.md` / `NEXT_TASK.md`：同步本輪狀態與後續待辦。
+
+### 驗證
+- `npm.cmd test` 通過。
+- `npm.cmd run build` 通過（仍有既有 `.playbackMoveScroll` CSS minify warning，本輪未處理 CSS）。
+
 ## 2026-06-26 AI 揭棋要點與暗子壓制 MVP（Codex）
 
 ### 本輪完成
