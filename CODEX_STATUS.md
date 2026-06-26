@@ -1,5 +1,20 @@
 ## 最新完成的工作
 
+### 2026-06-26 timeout 音效重複 + 雙 banner 修正（Claude）
+
+**問題 1 — timeout 後誤播「絕殺」**：timeout effect 呼叫 `setState({...s, status: 'black_win'})` 後，全域 endgame useEffect 偵測到 status 變化，接著播 `playEndgameSound()`（語音「絕殺」）。
+
+**修正**：新增 `isPlayTimeoutRef = useRef(false)`。timeout 發生時設為 `true`；`startNewPlayGame` 和 `enterMode` 進入 play 模式時重置為 `false`。全域 endgame effect 加 guard：`!isPlayTimeoutRef.current`，timeout 狀態下不播「絕殺」。
+
+**問題 2 — timeout 顯示兩個結束 banner**：同時出現標準 endgameFeedback banner（「絕殺」）與自訂紫色 timeout banner。
+
+**修正**：移除紫色獨立 banner；改為 inline 覆寫 `renderEndgameBanner` 的內容：timeout 時 title 顯示「時間到」，winnerText 加上「（超時）」，保留同一個 endgameBanner CSS class 樣式。
+
+**修改檔案**：僅 `src/App.tsx`。
+
+**測試**：`npm test` 80 項全通過；`npx tsc --noEmit` 無錯。
+
+
 ### 2026-06-26 10 分鐘對弈鐘 + timeout 棋譜資料 6 項修正（Claude）
 
 **修正項目**：
@@ -348,3 +363,30 @@ npm.cmd run build
    - `setState(snapshot)`、`setPast([])`、`setSelected(null)`、`closeCorrection()`、`cancelSync()`。
    - `setAiMasterNote(\`已載入棋譜第 ${playbackStep} 手局面\`)`。
    - `setMode('ai-master')`（�
+## 2026-06-26 局面第三次重複禁止 MVP
+
+### 最新完成的工作
+- 新增局面 key 與第三次重複判斷，key 包含棋盤每格、side、revealed、realType、turn。
+- 一般接棋對弈走子 / 同步上一手在套用前會禁止造成第三次同局面，並提示「此手會造成第三次重複局面」。
+- AI VS AI 走子前會排除造成第三次同局面的合法步；若所有合法步都會重複，停止自動播放並顯示「無可避免重複，對局結束」。
+- simpleAi 支援傳入已過濾的候選步，不改原本評分邏輯。
+
+### 修改檔案
+- `src/game/repetitionRules.ts`：新增 getPositionKey、第三次重複判斷與候選步過濾。
+- `src/App.tsx`：接入一般走子、同步上一手、AI VS AI step/autoplay 的重複局面檢查。
+- `src/ai/simpleAi.ts`：recommendMove 新增 candidateMoves 參數。
+- `tests/rules.test.ts`：新增同路來回、繞路回同局、第二次允許、暗子 realType 不誤判測試。
+- `CODEX_STATUS.md` / `NEXT_TASK.md`：更新本輪交接狀態。
+
+### 測試
+- `npm.cmd test` 通過。
+- `npx.cmd tsc --noEmit` 通過。
+
+### 已知限制
+- 只做第三次同局面禁止 MVP。
+- 尚未實作完整長將 / 長捉規則。
+- 尚未加入和棋或判負裁定。
+- 未做 Belief State、Monte Carlo、OCR、Ponder。
+
+### Push 狀態
+- 本輪完成後會 commit 並 push。

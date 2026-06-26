@@ -14,8 +14,9 @@ import { isBasicLegalMove, kingsFace } from '../src/game/moveRules';
 import { realPieceName } from '../src/game/pieceText';
 import { remainingRealPieces } from '../src/game/pieceInventory';
 import { fromSavedPosition, loadPosition, POSITION_STORAGE_KEY, savePosition, toSavedPosition } from '../src/game/positionStorage';
+import { getPositionKey, wouldCauseThirdRepetition } from '../src/game/repetitionRules';
 import { shouldPlayMoveSound, playMoveSound, playCaptureSound, playCheckSound } from '../src/game/soundEffects';
-import type { Board, Piece, PieceType, Side } from '../src/types/chess';
+import type { Board, GameState, Move, Piece, PieceType, Position, Side } from '../src/types/chess';
 
 function assertEqual(actual: unknown, expected: unknown) {
   if (!Object.is(actual, expected)) {
@@ -64,6 +65,34 @@ function hasMove(board: Board, side: Side, from: [number, number], to: [number, 
   );
 }
 
+function repetitionState(): GameState {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn'));
+  place(board, 6, 0, piece('red', 'rook'));
+  place(board, 3, 8, piece('black', 'rook'));
+  return { board, turn: 'red', history: [], status: 'playing' };
+}
+
+function legalMove(state: GameState, from: Position, to: Position): Move {
+  const move = getAllLegalMoves(state.board, state.turn).find(m =>
+    m.from.row === from.row &&
+    m.from.col === from.col &&
+    m.to.row === to.row &&
+    m.to.col === to.col
+  );
+  assertOk(move);
+  return move;
+}
+
+function playAndRemember(state: GameState, past: GameState[], from: Position, to: Position): GameState {
+  past.push(state);
+  const next = applyMove(state, from, to);
+  assertOk(next !== state);
+  return next;
+}
+
 function test(name: string, fn: () => void) {
   fn();
   console.log(`ok - ${name}`);
@@ -80,6 +109,58 @@ function fakeStorage(initial?: Record<string, string>) {
     },
   };
 }
+
+test('second repeated position is still allowed', () => {
+  const past: GameState[] = [];
+  let state = repetitionState();
+  state = playAndRemember(state, past, { row: 6, col: 0 }, { row: 6, col: 1 });
+  state = playAndRemember(state, past, { row: 3, col: 8 }, { row: 3, col: 7 });
+  state = playAndRemember(state, past, { row: 6, col: 1 }, { row: 6, col: 0 });
+  const move = legalMove(state, { row: 3, col: 7 }, { row: 3, col: 8 });
+  assertEqual(wouldCauseThirdRepetition(state, past, move), false);
+});
+
+test('same file back-and-forth third repetition is forbidden', () => {
+  const past: GameState[] = [];
+  let state = repetitionState();
+  state = playAndRemember(state, past, { row: 6, col: 0 }, { row: 6, col: 1 });
+  state = playAndRemember(state, past, { row: 3, col: 8 }, { row: 3, col: 7 });
+  state = playAndRemember(state, past, { row: 6, col: 1 }, { row: 6, col: 0 });
+  state = playAndRemember(state, past, { row: 3, col: 7 }, { row: 3, col: 8 });
+  state = playAndRemember(state, past, { row: 6, col: 0 }, { row: 6, col: 1 });
+  state = playAndRemember(state, past, { row: 3, col: 8 }, { row: 3, col: 7 });
+  state = playAndRemember(state, past, { row: 6, col: 1 }, { row: 6, col: 0 });
+  const move = legalMove(state, { row: 3, col: 7 }, { row: 3, col: 8 });
+  assertEqual(wouldCauseThirdRepetition(state, past, move), true);
+});
+
+test('detour returning to same position third repetition is forbidden', () => {
+  const past: GameState[] = [];
+  let state = repetitionState();
+  state = playAndRemember(state, past, { row: 6, col: 0 }, { row: 6, col: 1 });
+  state = playAndRemember(state, past, { row: 3, col: 8 }, { row: 3, col: 7 });
+  state = playAndRemember(state, past, { row: 6, col: 1 }, { row: 6, col: 2 });
+  state = playAndRemember(state, past, { row: 3, col: 7 }, { row: 3, col: 6 });
+  state = playAndRemember(state, past, { row: 6, col: 2 }, { row: 6, col: 0 });
+  state = playAndRemember(state, past, { row: 3, col: 6 }, { row: 3, col: 8 });
+  state = playAndRemember(state, past, { row: 6, col: 0 }, { row: 6, col: 1 });
+  state = playAndRemember(state, past, { row: 3, col: 8 }, { row: 3, col: 7 });
+  state = playAndRemember(state, past, { row: 6, col: 1 }, { row: 6, col: 2 });
+  state = playAndRemember(state, past, { row: 3, col: 7 }, { row: 3, col: 6 });
+  state = playAndRemember(state, past, { row: 6, col: 2 }, { row: 6, col: 0 });
+  const move = legalMove(state, { row: 3, col: 6 }, { row: 3, col: 8 });
+  assertEqual(wouldCauseThirdRepetition(state, past, move), true);
+});
+
+test('hidden pieces with different realType have different repetition keys', () => {
+  const boardA = withKings();
+  const boardB = withKings();
+  boardA[4][0] = piece('red', 'pawn', 'rook', false);
+  boardB[4][0] = piece('red', 'pawn', 'horse', false);
+  const stateA = { board: boardA, turn: 'red' as const, history: [], status: 'playing' as const };
+  const stateB = { board: boardB, turn: 'red' as const, history: [], status: 'playing' as const };
+  assertEqual(getPositionKey(stateA) === getPositionKey(stateB), false);
+});
 
 test('horse leg blocks horse movement', () => {
   const board = withKings();

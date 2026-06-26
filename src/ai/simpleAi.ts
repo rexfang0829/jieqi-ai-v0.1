@@ -74,8 +74,8 @@ function baseScore(move: Move): number {
   return captureScore(move) + revealScore(move) + positionScore(move);
 }
 
-export function recommendMove(state: GameState): { move: Move | null; score: number; reason: string } {
-  const moves = getAllLegalMoves(state.board, state.turn);
+export function recommendMove(state: GameState, candidateMoves?: Move[]): { move: Move | null; score: number; reason: string } {
+  const moves = candidateMoves ?? getAllLegalMoves(state.board, state.turn);
   if (!moves.length) return { move: null, score: -99999, reason: '沒有合法步' };
 
   let best = moves[0], bestScore = -999999, bestRisk = 0, bestImmediateCapture = false;

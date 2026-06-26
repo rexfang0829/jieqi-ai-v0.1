@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { GameState, PieceType, Position } from './types/chess';
+import type { GameState, Move, PieceType, Position } from './types/chess';
 import { Board } from './components/Board';
 import { MoveList } from './components/MoveList';
 import { AiPanel } from './components/AiPanel';
@@ -13,6 +13,12 @@ import { applyMove, newGame } from './game/gameEngine';
 import { cancelLastMoveSync, syncLastMove } from './game/lastMoveSync';
 import { loadPosition, savePosition } from './game/positionStorage';
 import { getAllLegalMoves, isInCheck } from './game/checkRules';
+import {
+  AI_REPEAT_END_MESSAGE,
+  THIRD_REPETITION_MESSAGE,
+  filterThirdRepetitionMoves,
+  wouldCauseThirdRepetition,
+} from './game/repetitionRules';
 import { getEndgameFeedback, shouldPlayEndgameSound, statusLabel } from './game/endgameFeedback';
 import { playEndgameSound, playTimeoutSound } from './game/endgameSound';
 import { editorPieceTypeNames } from './game/pieceText';
@@ -71,6 +77,7 @@ export default function App() {
   const [syncMode, setSyncMode] = useState(false);
   const [syncFrom, setSyncFrom] = useState<Position | null>(null);
   const [syncError, setSyncError] = useState('');
+  const [repeatError, setRepeatError] = useState('');
   const [lastSoundStatus, setLastSoundStatus] = useState(state.status);
   const playbackSoundStepRef = useRef<number>(-1);  // 追蹤上一次播音的 step，避免 mount 時誤播
   const [editorError, setEditorError] = useState('');
@@ -93,14 +100,17 @@ export default function App() {
   const [redTimeMs, setRedTimeMs] = useState(PLAY_INIT_MS);
   const [blackTimeMs, setBlackTimeMs] = useState(PLAY_INIT_MS);
   const playTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isPlayTimeoutRef = useRef(false);  // 避免 timeout 後全域 endgame effect 再播「絕殺」
 
   /* ── AI VS AI 模式 ── */
   const [aiVsAiState, setAiVsAiState] = useState<GameState>(() => newGame());
   const [aiVsAiInitial, setAiVsAiInitial] = useState<GameState | null>(null);
   const [aiVsAiAutoPlay, setAiVsAiAutoPlay] = useState(false);
   const [aiVsAiMsg, setAiVsAiMsg] = useState('');
+  const [aiVsAiPast, setAiVsAiPast] = useState<GameState[]>([]);
   const aiVsAiIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const aiVsAiStateRef = useRef<GameState>(aiVsAiState);
+  const aiVsAiPastRef = useRef<GameState[]>([]);
 
   /* ── 棋譜模式子頁狀態 ── */
   const [recordsPage, setRecordsPage] = useState<RecordsPage>('library');
@@ -175,9 +185,24 @@ export default function App() {
     setSyncError('');
   }
 
+  function moveFor(from: Position, to: Position): Move | undefined {
+    return getAllLegalMoves(state.board, state.turn).find(move =>
+      move.from.row === from.row &&
+      move.from.col === from.col &&
+      move.to.row === to.row &&
+      move.to.col === to.col
+    );
+  }
+
+  function blocksThirdRepetition(from: Position, to: Position): boolean {
+    const move = moveFor(from, to);
+    return !!move && mode === 'play' && wouldCauseThirdRepetition(state, past, move);
+  }
+
   function goHome() {
     setMode('home');
     setSelected(null);
+    setRepeatError('');
     closeCorrection();
     cancelSync();
   }
@@ -185,6 +210,7 @@ export default function App() {
   function enterMode(nextMode: Exclude<AppMode, 'home'>) {
     setMode(nextMode);
     setSelected(null);
+    setRepeatError('');
     if (nextMode === 'ai-master') setAiMasterNote(null);
     closeCorrection();
     cancelSync();
@@ -199,8 +225,10 @@ export default function App() {
     if (nextMode === 'play') {
       const initial = newGame();
       setState(initial); setPast([]); setSelected(null);
+      setRepeatError('');
       setPlayAutoSaveInitial(initial);
       playAutoSaveIdRef.current = null;
+      isPlayTimeoutRef.current = false;
       setPlayTimeoutSide(null);
       setPlayAutoSaveMsg('');
       setRedTimeMs(PLAY_INIT_MS);
@@ -226,10 +254,16 @@ export default function App() {
 
     const piece = state.board[pos.row][pos.col];
     if (selected && legalMoves.some(p => p.row === pos.row && p.col === pos.col)) {
+      if (blocksThirdRepetition(selected, pos)) {
+        setRepeatError(THIRD_REPETITION_MESSAGE);
+        setSelected(null);
+        return;
+      }
       const next = applyMove(state, selected, pos);
       if (next !== state) {
         setPast(h => [...h, state]);
         setState(next);
+        setRepeatError('');
         const lastMove = next.history[next.history.length - 1];
         playBoardSoundFeedback({
           captured: !!lastMove?.captured,
@@ -245,12 +279,12 @@ export default function App() {
 
   function resetToInitial() {
     setState(newGame()); setPast([]); setSelected(null);
-    closeCorrection(); setEditorError(''); cancelSync();
+    setRepeatError(''); closeCorrection(); setEditorError(''); cancelSync();
   }
 
   function clearCurrentBoard() {
     setPast(h => [...h, state]); setState(clearBoard(state));
-    setSelected(null); closeCorrection(); setEditorError(''); cancelSync();
+    setSelected(null); setRepeatError(''); closeCorrection(); setEditorError(''); cancelSync();
   }
 
   function saveCurrentPosition() { savePosition(storage(), state); }
@@ -259,19 +293,19 @@ export default function App() {
     const saved = loadPosition(storage());
     if (!saved) return;
     setState(saved); setPast([]); setSelected(null);
-    closeCorrection(); setEditorError(''); cancelSync();
+    setRepeatError(''); closeCorrection(); setEditorError(''); cancelSync();
   }
 
   function changeTurn(turn: GameState['turn']) {
     setState(s => setTurn(s, turn)); setPast([]); setSelected(null);
-    closeCorrection(); setEditorError(''); cancelSync();
+    setRepeatError(''); closeCorrection(); setEditorError(''); cancelSync();
   }
 
   function undo() {
     setPast(h => {
       if (!h.length) return h;
       const previous = h[h.length - 1];
-      setState(previous); setSelected(null); closeCorrection(); setEditorError('');
+      setState(previous); setSelected(null); setRepeatError(''); closeCorrection(); setEditorError('');
       return h.slice(0, -1);
     });
   }
@@ -327,9 +361,16 @@ export default function App() {
   function syncClick(pos: Position) {
     setSelected(null); setSyncError('');
     if (!syncFrom) { setSyncFrom(pos); return; }
+    if (blocksThirdRepetition(syncFrom, pos)) {
+      setSyncFrom(null);
+      setSyncError(THIRD_REPETITION_MESSAGE);
+      setRepeatError(THIRD_REPETITION_MESSAGE);
+      return;
+    }
     const result = syncLastMove(state, syncFrom, pos);
     if (result.applied) {
       setPast(h => [...h, state]); setState(result.state);
+      setRepeatError('');
       const lastMove = result.state.history[result.state.history.length - 1];
       playBoardSoundFeedback({
         captured: !!lastMove?.captured,
@@ -411,9 +452,11 @@ export default function App() {
   function startNewPlayGame() {
     const initial = newGame();
     setState(initial); setPast([]); setSelected(null);
+    setRepeatError('');
     closeCorrection(); cancelSync();
     setPlayAutoSaveInitial(initial);
     playAutoSaveIdRef.current = null;
+    isPlayTimeoutRef.current = false;
     setPlayTimeoutSide(null);
     setPlayAutoSaveMsg('');
     setRedTimeMs(PLAY_INIT_MS);
@@ -430,6 +473,8 @@ export default function App() {
     const initial = newGame();
     setAiVsAiState(initial);
     setAiVsAiInitial(initial);
+    setAiVsAiPast([]);
+    aiVsAiPastRef.current = [];
     setAiVsAiAutoPlay(false);
     setAiVsAiMsg('');
   }
@@ -438,9 +483,19 @@ export default function App() {
     const current = aiVsAiStateRef.current;
     if (current.status !== 'playing') return;
     if (current.history.length >= 300) { setAiVsAiMsg('已達手數上限（300 手）'); return; }
-    const r = recommendMove(current);
+    const legalMoves = getAllLegalMoves(current.board, current.turn);
+    const allowedMoves = filterThirdRepetitionMoves(current, aiVsAiPastRef.current, legalMoves);
+    if (legalMoves.length && !allowedMoves.length) {
+      setAiVsAiAutoPlay(false);
+      setAiVsAiMsg(AI_REPEAT_END_MESSAGE);
+      return;
+    }
+    const r = recommendMove(current, allowedMoves);
     if (!r.move) { setAiVsAiMsg('AI 無合法步，對局結束'); return; }
     const next = applyMove(current, r.move.from, r.move.to);
+    const nextPast = [...aiVsAiPastRef.current, current];
+    aiVsAiPastRef.current = nextPast;
+    setAiVsAiPast(nextPast);
     setAiVsAiState(next);
     playBoardSoundFeedback({ captured: !!r.move.captured, check: false });
   }
@@ -489,7 +544,7 @@ export default function App() {
   }, [correctionPos]);
 
   useEffect(() => {
-    if (shouldPlayEndgameSound(lastSoundStatus, state.status)) playEndgameSound();
+    if (shouldPlayEndgameSound(lastSoundStatus, state.status) && !isPlayTimeoutRef.current) playEndgameSound();
     if (lastSoundStatus !== state.status) setLastSoundStatus(state.status);
   }, [lastSoundStatus, state.status]);
 
@@ -519,6 +574,7 @@ export default function App() {
 
   /* ── AI VS AI：同步 state ref ── */
   useEffect(() => { aiVsAiStateRef.current = aiVsAiState; }, [aiVsAiState]);
+  useEffect(() => { aiVsAiPastRef.current = aiVsAiPast; }, [aiVsAiPast]);
 
   /* ── AI VS AI：自動播放 interval ── */
   useEffect(() => {
@@ -537,8 +593,18 @@ export default function App() {
         setAiVsAiAutoPlay(false);
         return;
       }
-      const r = recommendMove(current);
+      const legalMoves = getAllLegalMoves(current.board, current.turn);
+      const allowedMoves = filterThirdRepetitionMoves(current, aiVsAiPastRef.current, legalMoves);
+      if (legalMoves.length && !allowedMoves.length) {
+        setAiVsAiAutoPlay(false);
+        setAiVsAiMsg(AI_REPEAT_END_MESSAGE);
+        return;
+      }
+      const r = recommendMove(current, allowedMoves);
       if (!r.move) { setAiVsAiAutoPlay(false); setAiVsAiMsg('AI 無合法步，對局結束'); return; }
+      const nextPast = [...aiVsAiPastRef.current, current];
+      aiVsAiPastRef.current = nextPast;
+      setAiVsAiPast(nextPast);
       setAiVsAiState(applyMove(current, r.move.from, r.move.to));
     }, 700);
     return () => { if (aiVsAiIntervalRef.current) { clearInterval(aiVsAiIntervalRef.current); aiVsAiIntervalRef.current = null; } };
@@ -611,6 +677,7 @@ export default function App() {
     if (state.status !== 'playing') return;
     if (redTimeMs <= 0) {
       setPlayTimeoutSide('red');
+      isPlayTimeoutRef.current = true;
       setState(s => ({ ...s, status: 'black_win' }));
       playTimeoutSound('red');
       const now = new Date();
@@ -638,6 +705,7 @@ export default function App() {
     if (state.status !== 'playing') return;
     if (blackTimeMs <= 0) {
       setPlayTimeoutSide('black');
+      isPlayTimeoutRef.current = true;
       setState(s => ({ ...s, status: 'red_win' }));
       playTimeoutSound('black');
       const now = new Date();
@@ -1138,16 +1206,18 @@ export default function App() {
     <main>
       {renderHeader('一般揭棋模式')}
 
-      {renderEndgameBanner()}
-      {playIsTimeout && (
-        <div className="endgameBanner" style={{background:'#7c3aed'}}>
-          <strong>時間到</strong>
-          <span>{playTimeoutSide === 'red' ? '黑方勝（紅方超時）' : '紅方勝（黑方超時）'}</span>
+      {endgameFeedback && (
+        <div className={`endgameBanner ${endgameFeedback.winner}`}>
+          <strong>{playIsTimeout ? '時間到' : endgameFeedback.title}</strong>
+          <span>{endgameFeedback.winnerText}{playIsTimeout ? '（超時）' : ''}</span>
           <small>本局結束</small>
         </div>
       )}
       {playAutoSaveMsg && !playIsTimeout && (
         <p style={{textAlign:'center',color:'#86efac',fontSize:11,margin:'2px 0'}}>{playAutoSaveMsg}</p>
+      )}
+      {repeatError && (
+        <div className="panel syncPanel syncError" style={{marginBottom:'12px'}}>{repeatError}</div>
       )}
       <div className="toolbar">
         <button onClick={startNewPlayGame}>新局</button>

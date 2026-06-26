@@ -29,3 +29,30 @@
 - LocalStorage 容量管理（超限自動刪最舊）
 - PWA / 離線支援
 - Vercel 部署驗證
+# 下一輪建議：AI VS AI MVP 收斂
+
+## 目標
+讓 AI VS AI 模式更適合長時間測試規則與 AI 行為，但仍維持 MVP，不做大型 AI 重寫。
+
+## 為什麼要做
+本輪已加入第三次重複禁止，下一步適合檢查 AI VS AI 的停止條件、訊息、棋譜保存與基本可觀察性，方便之後測試 Threat Map 或更深層 AI。
+
+## 具體要做
+- 檢查 AI VS AI 的開始、暫停、單步、自動播放、到達手數上限、無合法步、無可避免重複等狀態顯示。
+- 補 AI VS AI 基礎測試或可抽出的純函式測試。
+- 確認 AI VS AI 棋譜保存不破壞現有 GameRecord。
+
+## 不要做
+- 不做 Belief State。
+- 不做 Monte Carlo。
+- 不做 OCR / Ponder / 自動截圖辨識。
+- 不做 Threat Map。
+- 不重寫 AI。
+- 不改 board 座標系。
+- 不加後端、資料庫、登入系統。
+
+## 完成標準
+- `npm test` 通過。
+- `npx tsc --noEmit` 通過。
+- 更新 `CODEX_STATUS.md` 與 `NEXT_TASK.md`。
+- commit 並 push。
