@@ -14,6 +14,7 @@
 - 一鍵複製 AI 測試報告 MVP（formatAiDebugReport + 複製按鈕）
 - 後手翻棋選擇權懲罰（revealChoiceRisk / revealChoicePenalty）
 - 公平資訊開局大子活化（majorActivation / openingMajorGoal / opponentRevealSuppression）
+- revealChoiceRisk 公平資訊修正（用 publicHiddenReplyThreatValue 取代 hiddenPieceValue，禁止偷看未翻 realType）
 
 ## 後續優先項目
 

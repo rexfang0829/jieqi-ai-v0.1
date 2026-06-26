@@ -704,10 +704,27 @@ function structurePatternEvaluation(state: GameState, move: Move, nextBoard: Boa
 }
 
 /**
+ * 公平資訊：估計對方回擊棋子的威脅值。
+ * 只使用 piece.originalType（公開資訊），不讀 unrevealed piece.realType。
+ * revealed=true 時可讀 realType，因為那是已公開資訊。
+ */
+function publicHiddenReplyThreatValue(piece: Piece, weights: AiWeights): number {
+  if (piece.revealed) return weights.pieceValues[piece.realType];
+  const type = piece.originalType;
+  if (type === 'rook') return weights.pieceValues.rook;
+  if (type === 'cannon') return weights.targetCannonValue;
+  if (type === 'horse') return weights.pieceValues.horse;
+  if (type === 'advisor') return weights.advisorTargetValue;
+  if (type === 'elephant') return weights.elephantTargetValue;
+  if (type === 'pawn') return weights.uncrossedPawnTargetValue;
+  return weights.pieceValues[type];
+}
+
+/**
  * 後手翻棋選擇權風險評估。
  * 觸發條件：我方高價子吃對方低外觀暗子，且落點被對方高價暗子看住。
  * 對方可依我方翻出結果決定是否交換 → 我方承擔翻子風險。
- * 不使用 unrevealed piece.realType 做加分，只用 hiddenPieceValue heuristic 估值。
+ * 不使用 unrevealed piece.realType：對方看住暗子以 originalType 估值（公平資訊）。
  */
 function computeRevealChoiceRisk(
   board: Board,
@@ -738,8 +755,8 @@ function computeRevealChoiceRisk(
   let maxHiddenThreat = 0;
   for (const reply of oppMoves) {
     if (!samePosition(reply.to, move.to)) continue;
-    // 估計該回擊棋子的價值（使用 hiddenPieceValue heuristic，不直接判斷 realType）
-    const replyEst = hiddenPieceValue(reply.piece, nextBoard, weights);
+    // 公平資訊估值：只用 originalType，不讀 unrevealed realType
+    const replyEst = publicHiddenReplyThreatValue(reply.piece, weights);
     maxHiddenThreat = Math.max(maxHiddenThreat, replyEst);
   }
 

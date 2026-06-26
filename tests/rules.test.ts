@@ -2241,3 +2241,43 @@ test('公平資訊防呆 F: AI 不可因未翻 realType 不同而改變 openingM
   // 分數也應相同（不偷看 realType）
   assertEqual(horseTrace1.score, horseTrace2.score);
 });
+
+test('reveal choice risk fair info: watcher hidden realType must not change score or penalty', () => {
+  // 兩盤面公開資訊完全相同：看住落點的黑暗子 originalType='rook'，只有 realType 不同。
+  // revealChoiceRisk / revealChoicePenalty / score 必須相同，確保不偷看 realType。
+  // 注意：紅王放 col=0、黑王放 col=4（不同列，不需要阻隔兵），
+  //        且紅方無其他棋子可回吃，確保 opponentReplyPenalty 的 recaptureValue=0 在兩盤相同。
+  function makeState(watcherRealType: PieceType): GameState {
+    const board = emptyBoard();
+    place(board, 9, 0, piece('red', 'king'));                           // 紅王在 col0
+    place(board, 0, 4, piece('black', 'king'));                         // 黑王在 col4（不同列，不互照）
+    place(board, 4, 2, piece('red', 'rook', 'rook', true));             // 紅明車（走子方）
+    place(board, 4, 4, piece('black', 'pawn', 'pawn', false));          // 黑暗卒（低外觀被吃目標）
+    place(board, 3, 4, piece('black', 'rook', watcherRealType, false)); // 看住落點的黑暗子，公開=rook
+    return { board, turn: 'red', history: [], status: 'playing' };
+  }
+
+  const stateA = makeState('rook');
+  const stateB = makeState('pawn');
+
+  const recA = recommendMove(stateA);
+  const recB = recommendMove(stateB);
+  assertOk(recA.traces);
+  assertOk(recB.traces);
+
+  const traceA = recA.traces.find(t =>
+    t.move.from.row === 4 && t.move.from.col === 2 &&
+    t.move.to.row === 4 && t.move.to.col === 4
+  );
+  const traceB = recB.traces.find(t =>
+    t.move.from.row === 4 && t.move.from.col === 2 &&
+    t.move.to.row === 4 && t.move.to.col === 4
+  );
+  assertOk(traceA);
+  assertOk(traceB);
+
+  // 公平資訊：unrevealed realType 不同不可影響評分
+  assertEqual(traceA.revealChoiceRisk, traceB.revealChoiceRisk);
+  assertEqual(traceA.revealChoicePenalty, traceB.revealChoicePenalty);
+  assertEqual(traceA.score, traceB.score);
+});
