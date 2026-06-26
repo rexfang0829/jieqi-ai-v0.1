@@ -518,6 +518,27 @@ npm.cmd run build
 - `npm.cmd test` 通過。
 - `npm.cmd run build` 通過（仍有既有 `.playbackMoveScroll` CSS minify warning，本輪未處理 CSS）。
 
+## 2026-06-26 開局暗子機率與結構壓制評估 MVP（Codex）
+
+### 本輪完成
+- 新增開局暗兵機率假設：`isOpeningPhase()` 讓 AI 在前 12 手內提高「暗子可能是兵卒」對馬腳、象眼、炮架、兵線關鍵點與暗車前方的結構威脅評估。
+- 新增炮線壓制評估：可掃描敵炮是否透過剛好一個炮架瞄住己方暗車 / 暗大子，並評估候選步是否改善炮線壓制，而不是只看單純塞線。
+- 新增馬象活化評估：開局馬、象從原始位置活出時，若能解除炮線 / 馬腳 / 象眼壓制，會給結構分與 reason。
+- 新增邊路 G / 車兵線封鎖風險：AI 會辨識敵方 G / 車吃進兵線的風險，並加分給守住兵線關鍵點、避免敵方 G 壓兵線、保留暗車控制點的手。
+- 新增暗大子動態保留價值：`hiddenPieceValue()` 依同類已翻出數量評估暗車、暗炮、暗馬的防守價值，並由 `defensiveTargetValue()` 接進一層交換風險。
+- 新增 `src/ai/learningPatterns.ts`，用 pattern id 與 metadata 命名人類經驗棋理，例如 `opening_cannon_hits_hidden_rook`、`opening_edge_rook_pawn_line_lock`、`preserve_hidden_cannon_threat`、`horse_release_to_guard_pawn_line`。
+- 目前不是完整自我學習，未寫入棋譜或資料庫；只是先預留 pattern / learning metadata 入口，後續 AI VS AI 可記錄 pattern 觸發、AI 選手與最終結果。
+
+### 修改檔案
+- `src/ai/simpleAi.ts`：接入開局結構評估、暗大子保留價值、炮線壓制、兵線封鎖風險與相關 reason。
+- `src/ai/aiWeights.ts`：新增結構評估與暗大子保留價值權重。
+- `src/ai/learningPatterns.ts`：新增可記錄、可調權重的 pattern metadata。
+- `CODEX_STATUS.md` / `NEXT_TASK.md`：同步本輪狀態與後續待辦。
+
+### 驗證
+- `npm.cmd test` 通過。
+- `npm.cmd run build` 通過（仍有既有 `.playbackMoveScroll` CSS minify warning，本輪未處理 CSS）。
+
 ## 2026-06-26 AI 權重參數化 MVP（Codex）
 
 ### 本輪完成

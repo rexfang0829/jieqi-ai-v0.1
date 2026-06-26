@@ -44,6 +44,32 @@ export type AiWeights = {
   connectedAdvisorDistance: number;
   safeCaptureExchangeNet: number;
   effectiveCheckThreatValue: number;
+  openingPhaseMoveLimit: number;
+  openingHiddenPawnAssumptionBonus: number;
+  pawnFootBlockThreatBonus: number;
+  pawnElephantEyeBlockThreatBonus: number;
+  pawnCannonScreenThreatBonus: number;
+  pawnLineLockThreatBonus: number;
+  pawnNearHiddenRookThreatBonus: number;
+  structureReleaseHorseBonus: number;
+  structureReleaseElephantBonus: number;
+  cannonLineThreatPenalty: number;
+  weakScreenAllowsPawnBlockPenalty: number;
+  preserveHiddenCannonBonus: number;
+  pawnLineDefenseBonus: number;
+  preventEnemyRookPawnLineLockBonus: number;
+  hiddenRookGuardPointBonus: number;
+  enemyRookOnPawnLinePenalty: number;
+  badHorseReleaseSquarePenalty: number;
+  hiddenRookValueNoRevealed: number;
+  hiddenRookValueOneRevealed: number;
+  hiddenRookValueTwoRevealed: number;
+  hiddenCannonValueNoRevealed: number;
+  hiddenCannonValueOneRevealed: number;
+  hiddenCannonValueTwoRevealed: number;
+  hiddenHorseValueNoRevealed: number;
+  hiddenHorseValueOneRevealed: number;
+  hiddenHorseValueTwoRevealed: number;
 };
 
 export const defaultAiWeights: AiWeights = {
@@ -98,4 +124,30 @@ export const defaultAiWeights: AiWeights = {
   connectedAdvisorDistance: 3,
   safeCaptureExchangeNet: 250,
   effectiveCheckThreatValue: 350,
+  openingPhaseMoveLimit: 12,
+  openingHiddenPawnAssumptionBonus: 10,
+  pawnFootBlockThreatBonus: 18,
+  pawnElephantEyeBlockThreatBonus: 14,
+  pawnCannonScreenThreatBonus: 12,
+  pawnLineLockThreatBonus: 22,
+  pawnNearHiddenRookThreatBonus: 16,
+  structureReleaseHorseBonus: 36,
+  structureReleaseElephantBonus: 28,
+  cannonLineThreatPenalty: -24,
+  weakScreenAllowsPawnBlockPenalty: -18,
+  preserveHiddenCannonBonus: 16,
+  pawnLineDefenseBonus: 24,
+  preventEnemyRookPawnLineLockBonus: 32,
+  hiddenRookGuardPointBonus: 18,
+  enemyRookOnPawnLinePenalty: -30,
+  badHorseReleaseSquarePenalty: -18,
+  hiddenRookValueNoRevealed: 380,
+  hiddenRookValueOneRevealed: 300,
+  hiddenRookValueTwoRevealed: 210,
+  hiddenCannonValueNoRevealed: 300,
+  hiddenCannonValueOneRevealed: 250,
+  hiddenCannonValueTwoRevealed: 190,
+  hiddenHorseValueNoRevealed: 280,
+  hiddenHorseValueOneRevealed: 230,
+  hiddenHorseValueTwoRevealed: 170,
 };
