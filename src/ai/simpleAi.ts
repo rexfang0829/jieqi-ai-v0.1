@@ -4,6 +4,7 @@ import { applyMove } from '../game/gameEngine';
 import { createInitialBoard } from '../game/initialBoard';
 import { defaultAiWeights, type AiWeights } from './aiWeights';
 import type { AiLearningPatternId } from './learningPatterns';
+import type { AiMoveTrace, AiRecommendation } from './aiTrace';
 
 const openingPawnStarts = createInitialBoard().flatMap((row, rowIndex) =>
   row.flatMap((piece, colIndex) =>
@@ -854,7 +855,7 @@ export function recommendMove(
   state: GameState,
   candidateMoves?: Move[],
   weights: AiWeights = defaultAiWeights
-): { move: Move | null; score: number; reason: string } {
+): AiRecommendation {
   const moves = candidateMoves ?? getAllLegalMoves(state.board, state.turn);
   if (!moves.length) return { move: null, score: -99999, reason: '沒有合法走法' };
 
@@ -872,19 +873,43 @@ export function recommendMove(
 
   let best = scoringMoves[0];
   let bestEvaluation = evaluateMove(state, best, currentlyAllowsOpponentWin && !allowsOpponentWin(state, best), weights);
+  const evaluations: { move: Move; evaluation: ReturnType<typeof evaluateMove> }[] = [
+    { move: best, evaluation: bestEvaluation },
+  ];
 
-  for (const move of scoringMoves) {
+  for (const move of scoringMoves.slice(1)) {
     const evaluation = evaluateMove(state, move, currentlyAllowsOpponentWin && !allowsOpponentWin(state, move), weights);
+    evaluations.push({ move, evaluation });
     if (evaluation.score > bestEvaluation.score) {
       best = move;
       bestEvaluation = evaluation;
     }
   }
 
+  const traces: AiMoveTrace[] = evaluations.map(({ move, evaluation }) => ({
+    move,
+    score: evaluation.score,
+    reason: reasonFor(move, evaluation, avoidedOpponentWin, weights),
+    patterns: evaluation.structurePatterns,
+    structureScore: evaluation.structureScore,
+    exchangeNet: evaluation.exchangeNet,
+    risk: evaluation.risk,
+    captureGain: evaluation.captureGain,
+    openingBonus: evaluation.openingBonus,
+    keySquareScore: evaluation.keySquareScore,
+    hiddenPressureScore: evaluation.hiddenPressureScore,
+    leaveKeySquareScore: evaluation.leaveKeySquareScore,
+    checking: evaluation.checking,
+    effectiveCheck: evaluation.effectiveCheck,
+    lowQualityCheck: evaluation.lowQualityCheck,
+    meaningless: evaluation.meaningless,
+  }));
+
   return {
     move: best,
     score: bestEvaluation.score,
     reason: reasonFor(best, bestEvaluation, avoidedOpponentWin, weights),
+    traces,
   };
 }
 

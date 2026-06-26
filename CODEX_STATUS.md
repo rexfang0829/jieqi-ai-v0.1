@@ -1,73 +1,29 @@
 ## 最新完成的工作
 
-### 2026-06-26 Learning pattern metadata 整理（Claude）
+### 2026-06-26 AI pattern 觸發紀錄 MVP（Claude）
 
-**目標**：`learningPatterns.ts` 補充並明確區分邊炮與邊 G / 車 pattern，方便後續 pattern 觸發紀錄與自我對弈統計。
+**目標**：`recommendMove()` 回傳 `traces` 陣列，記錄每個候選步的詳細評分資訊，方便後續 pattern win rate 統計與調小自我對弈。
 
-**新增 4 個 pattern id**（保留全部既有 id，不破壞 simpleAi.ts 引用）：
+**新增/修改檔案**：
 
-- `opening_edge_cannon_structure_pressure`：敵方邊兵翻出炮，炮透過炮架壓制暗車 / 暗大子；標準方向偏馬八進九 / 象七進九；不應套用兵線封鎖防守邏輯。
-- `opening_edge_rook_line_lock_defense`：敵方邊兵翻出 G / 車，風險是吃進兵線、封鎖己方兵卒翻子權；標準方向偏馬八進七；不應套用邊炮壓制邏輯。
-- `horse_release_from_cannon_pressure`：活馬解除邊炮壓制（對應馬八進九方向），記錄炮線壓力下降量。
-- `horse_release_to_pawn_line_guard`：活馬守兵線（對應馬八進七方向），與舊 `horse_release_to_guard_pawn_line` 語義相容，新紀錄優先用此 id。
+1. **`src/ai/aiTrace.ts`**（全新）：
+   - `AiMoveTrace` 型別：move / score / reason / patterns / structureScore / exchangeNet / risk / captureGain / openingBonus / keySquareScore / hiddenPressureScore / leaveKeySquareScore / checking / effectiveCheck / lowQualityCheck / meaningless
+   - `AiRecommendation` 型別：move / score / reason / traces?（向下相容）
 
-**修改檔案**：僅 `src/ai/learningPatterns.ts`（type union + record 新增）。
+2. **`src/ai/simpleAi.ts`**（修改）：
+   - import `AiMoveTrace`、`AiRecommendation`
+   - `recommendMove` 回傳型別改為 `AiRecommendation`
+   - 評分迴圈改為收集所有 `evaluations`，最後打包成 traces 陣列回傳
+   - 全部現有呼叫方 `.move` / `.score` / `.reason` 不受影響（向下相容）
 
-**測試**：`npm test` 71 項全通過；`npx tsc --noEmit` 無錯。
+3. **`tests/rules.test.ts`**（新增 3 個測試）：
+   - A：`recommendMove` 回傳 traces 並含正確欄位
+   - B：敵方為表牌炮且能壓制暗大子時 traces 含 `opening_cannon_hits_hidden_rook`
+   - C：敵方邊兵翻出 G/車時 traces 含 `opening_edge_rook_pawn_line_lock`
 
+**修改原則**：不改寫 `recommendMove` 邏輯，不調整評分/權重/UI，只增加 debug trace 輸出。
 
-### 2026-06-26 timeout 音效重複 + 雙 banner 修正（Claude）
-
-**問題 1 — timeout 後誤播「絕殺」**：timeout effect 呼叫 `setState({...s, status: 'black_win'})` 後，全域 endgame useEffect 偵測到 status 變化，接著播 `playEndgameSound()`（語音「絕殺」）。
-
-**修正**：新增 `isPlayTimeoutRef = useRef(false)`。timeout 發生時設為 `true`；`startNewPlayGame` 和 `enterMode` 進入 play 模式時重置為 `false`。全域 endgame effect 加 guard：`!isPlayTimeoutRef.current`，timeout 狀態下不播「絕殺」。
-
-**問題 2 — timeout 顯示兩個結束 banner**：同時出現標準 endgameFeedback banner（「絕殺」）與自訂紫色 timeout banner。
-
-**修正**：移除紫色獨立 banner；改為 inline 覆寫 `renderEndgameBanner` 的內容：timeout 時 title 顯示「時間到」，winnerText 加上「（超時）」，保留同一個 endgameBanner CSS class 樣式。
-
-**修改檔案**：僅 `src/App.tsx`。
-
-**測試**：`npm test` 80 項全通過；`npx tsc --noEmit` 無錯。
-
-
-### 2026-06-26 10 分鐘對弈鐘 + timeout 棋譜資料 6 項修正（Claude）
-
-**修正項目**：
-
-1. **timeout → 真實終局狀態**：逾時時呼叫 `setState(s => ({...s, status: 'black_win' / 'red_win'}))` 讓 header、endgameFeedback banner 直接由真實 state 驅動，不再靠 `playIsTimeout` 擋 UI；toolbar 按鈕也改用 `state.status !== 'playing'` 判斷。
-
-2. **GameRecord 加時間欄位**：`gameRecord.ts` 新增 `redTimeMs?: number`、`blackTimeMs?: number`；`createGameRecord` 接受並儲存；逾時存檔傳入 `redTimeMs: 0` 或 `blackTimeMs: 0`；每手自動存檔也傳入當前雙方剩餘時間。
-
-3. **自動存檔保留 createdAt/favorited**：`saveGameRecord` 更新既有記錄時，從 `existing` 取 `createdAt`、`favorited`、`note`，不再被新記錄覆蓋。
-
-4. **計時器位置改為棋盤角落 chips**：移除全寬橫列；Board 外包 `position:relative` div；黑方計時器 chip 絕對定位 `top:4px left:4px`，紅方計時器 `bottom:4px right:4px`；剩餘 ≤30 秒時閃爍 + 橙色警示；新增 `.playTimerChip`、`.playTimerBlack`、`.playTimerRed`、`.playTimerWarn` CSS。
-
-5. **首頁文案修正**：一般揭棋模式描述改為「不支援長按修正棋種」。
-
-6. **回放頁顯示 timeout 原因**：結果行改為 `resultText（時間到 / 絕殺）` 格式。
-
-**移除**：`playCreatedAtRef`（已無用）、紫色 timeout banner（由 endgameFeedback 標準 banner 取代）。
-
-**修改檔案**：`src/game/gameRecord.ts`、`src/App.tsx`、`src/style.css`。
-
-**測試**：`npm test` 80 項全通過；`npx tsc --noEmit` 無錯。
-
-
-### 2026-06-26 正式對局自動儲存 + 收藏定位調整 + 10 分鐘對弈鐘 MVP（Claude）
-
-**功能**：
-
-1. **10 分鐘對弈鐘**：進入「一般揭棋模式」或點「新局」時，紅黑各 10:00 倒計時，輪到誰走棋才扣時；時間到觸發逾時，顯示橙紫色 banner，語音播報，棋局終止。
-
-2. **自動存檔**：每走一手及對局結束自動儲存棋譜（含 initialState），同一局覆蓋更新；逾時時存 endReason: 'timeout'，timeoutSide 標記。
-
-3. **收藏定位**：棋譜庫首頁顯示真實收藏數；最近對局每筆新增收藏星號按鈕；收藏頁顯示真實收藏列表。
-
-4. **回放逾時音效**：回放到結束步若 endReason === 'timeout' 則播 playTimeoutSound，否則播 playEndgameSound。
-
-**修改**：僅 src/App.tsx。
-**測試**：npm test 80 項全通過；npx tsc --noEmit 無錯。
+**測試**：`npm test` 全部通過（含 3 個新 trace 測試）；`npx tsc --noEmit` 無錯。
 
 # Shared AI Status（Claude / Codex / ChatGPT 共用）
 

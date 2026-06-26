@@ -1502,3 +1502,42 @@ test('checkmate move sets status to win', () => {
   const next = applyMove(state, { row: 2, col: 4 }, { row: 0, col: 4 });
   assertEqual(next.status, 'red_win');
 });
+
+test('recommendMove returns traces with correct fields', () => {
+  const board = withKings();
+  place(board, 7, 1, piece('red', 'horse', 'horse', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const recommended = recommendMove(state);
+  assertOk(recommended.traces);
+  assertEqual(recommended.traces.length > 0, true);
+  const first = recommended.traces[0];
+  assertOk(typeof first.score === 'number');
+  assertOk(typeof first.reason === 'string');
+  assertOk(Array.isArray(first.patterns));
+  assertOk(typeof first.risk === 'number');
+  assertOk(typeof first.exchangeNet === 'number');
+  assertOk(typeof first.checking === 'boolean');
+  assertOk(typeof first.meaningless === 'boolean');
+});
+
+test('trace patterns include cannon threat when enemy cannon aims at hidden major', () => {
+  const board = withKings();
+  place(board, 2, 4, piece('black', 'pawn', 'cannon', true));
+  place(board, 7, 4, piece('red', 'pawn', 'rook', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const recommended = recommendMove(state);
+  assertOk(recommended.traces);
+  const allPatterns = recommended.traces.flatMap(t => t.patterns);
+  assertEqual(allPatterns.some(p => p === 'opening_cannon_hits_hidden_rook'), true);
+});
+
+test('trace patterns include rook line lock when enemy edge rook present', () => {
+  const board = withKings();
+  place(board, 2, 0, piece('black', 'pawn', 'rook', true));
+  place(board, 7, 1, piece('red', 'horse', 'horse', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const recommended = recommendMove(state);
+  assertOk(recommended.traces);
+  const allPatterns = recommended.traces.flatMap(t => t.patterns);
+  assertEqual(allPatterns.some(p => p === 'opening_edge_rook_pawn_line_lock'), true);
+});

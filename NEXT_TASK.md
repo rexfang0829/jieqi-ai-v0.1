@@ -9,13 +9,14 @@
 - 紅邊炮局與紅邊 G / 車局已分流，避免混用馬位。
 - 邊炮 / 邊 G 車同線壓制時，同路翻兵不再吃開局優先分。
 - 已補開局 AI 回歸測試。
+- **pattern 觸發紀錄 MVP**：`recommendMove` 回傳 `traces`，含每步 pattern / score / risk 等欄位。
 
 ## 建議下一步
 
 1. AI 開局棋理回歸測試擴充。
-2. pattern 觸發紀錄。
-3. AI VS AI 對局資料統計。
-4. 自我對弈調參。
+2. AI VS AI 對局資料統計（利用 traces 紀錄 pattern 觸發率）。
+3. pattern win rate 統計（哪些 pattern 對應勝局）。
+4. 自我對弈調參（根據 win rate 微調權重）。
 5. Belief State / 剩餘牌池機率。
 6. Threat Map 威脅圖最小版本。
 
