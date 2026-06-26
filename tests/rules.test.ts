@@ -14,7 +14,12 @@ import { isBasicLegalMove, kingsFace } from '../src/game/moveRules';
 import { realPieceName } from '../src/game/pieceText';
 import { remainingRealPieces } from '../src/game/pieceInventory';
 import { fromSavedPosition, loadPosition, POSITION_STORAGE_KEY, savePosition, toSavedPosition } from '../src/game/positionStorage';
-import { getPositionKey, wouldCauseThirdRepetition } from '../src/game/repetitionRules';
+import {
+  filterThirdRepetitionMoves,
+  getPositionKey,
+  getPositionKeyAfterMove,
+  wouldCauseThirdRepetition,
+} from '../src/game/repetitionRules';
 import { shouldPlayMoveSound, playMoveSound, playCaptureSound, playCheckSound } from '../src/game/soundEffects';
 import type { Board, GameState, Move, Piece, PieceType, Position, Side } from '../src/types/chess';
 
@@ -120,6 +125,28 @@ test('second repeated position is still allowed', () => {
   assertEqual(wouldCauseThirdRepetition(state, past, move), false);
 });
 
+test('position key includes side revealed realType and turn', () => {
+  const boardA = withKings();
+  const boardB = withKings();
+
+  boardA[4][0] = piece('red', 'pawn', 'rook', false);
+  boardB[4][0] = piece('black', 'pawn', 'rook', false);
+  const redSideKey = getPositionKey({ board: boardA, turn: 'red' });
+  const blackSideKey = getPositionKey({ board: boardB, turn: 'red' });
+  assertEqual(redSideKey === blackSideKey, false);
+
+  boardB[4][0] = piece('red', 'pawn', 'rook', true);
+  const revealedKey = getPositionKey({ board: boardB, turn: 'red' });
+  assertEqual(redSideKey === revealedKey, false);
+
+  boardB[4][0] = piece('red', 'pawn', 'horse', false);
+  const realTypeKey = getPositionKey({ board: boardB, turn: 'red' });
+  assertEqual(redSideKey === realTypeKey, false);
+
+  const blackTurnKey = getPositionKey({ board: boardA, turn: 'black' });
+  assertEqual(redSideKey === blackTurnKey, false);
+});
+
 test('same file back-and-forth third repetition is forbidden', () => {
   const past: GameState[] = [];
   let state = repetitionState();
@@ -132,6 +159,34 @@ test('same file back-and-forth third repetition is forbidden', () => {
   state = playAndRemember(state, past, { row: 6, col: 1 }, { row: 6, col: 0 });
   const move = legalMove(state, { row: 3, col: 7 }, { row: 3, col: 8 });
   assertEqual(wouldCauseThirdRepetition(state, past, move), true);
+});
+
+test('filterThirdRepetitionMoves removes third repetition moves', () => {
+  const past: GameState[] = [];
+  let state = repetitionState();
+  state = playAndRemember(state, past, { row: 6, col: 0 }, { row: 6, col: 1 });
+  state = playAndRemember(state, past, { row: 3, col: 8 }, { row: 3, col: 7 });
+  state = playAndRemember(state, past, { row: 6, col: 1 }, { row: 6, col: 0 });
+  state = playAndRemember(state, past, { row: 3, col: 7 }, { row: 3, col: 8 });
+  state = playAndRemember(state, past, { row: 6, col: 0 }, { row: 6, col: 1 });
+  state = playAndRemember(state, past, { row: 3, col: 8 }, { row: 3, col: 7 });
+  state = playAndRemember(state, past, { row: 6, col: 1 }, { row: 6, col: 0 });
+
+  const moves = getAllLegalMoves(state.board, state.turn);
+  const repeatMove = legalMove(state, { row: 3, col: 7 }, { row: 3, col: 8 });
+  const filtered = filterThirdRepetitionMoves(state, past, moves);
+  assertEqual(moves.some(move =>
+    move.from.row === repeatMove.from.row &&
+    move.from.col === repeatMove.from.col &&
+    move.to.row === repeatMove.to.row &&
+    move.to.col === repeatMove.to.col
+  ), true);
+  assertEqual(filtered.some(move =>
+    move.from.row === repeatMove.from.row &&
+    move.from.col === repeatMove.from.col &&
+    move.to.row === repeatMove.to.row &&
+    move.to.col === repeatMove.to.col
+  ), false);
 });
 
 test('detour returning to same position third repetition is forbidden', () => {
@@ -150,6 +205,13 @@ test('detour returning to same position third repetition is forbidden', () => {
   state = playAndRemember(state, past, { row: 6, col: 2 }, { row: 6, col: 0 });
   const move = legalMove(state, { row: 3, col: 6 }, { row: 3, col: 8 });
   assertEqual(wouldCauseThirdRepetition(state, past, move), true);
+});
+
+test('position key after move matches applyMove result', () => {
+  const state = repetitionState();
+  const move = legalMove(state, { row: 6, col: 0 }, { row: 6, col: 1 });
+  const next = applyMove(state, move.from, move.to);
+  assertEqual(getPositionKeyAfterMove(state, move), getPositionKey(next));
 });
 
 test('hidden pieces with different realType have different repetition keys', () => {

@@ -1,24 +1,8 @@
-import type { Board, GameState, Move, Side } from '../types/chess';
+import type { GameState, Move } from '../types/chess';
+import { applyMove } from './gameEngine';
 
 export const THIRD_REPETITION_MESSAGE = '此手會造成第三次重複局面';
 export const AI_REPEAT_END_MESSAGE = '無可避免重複，對局結束';
-
-function nextTurn(turn: Side): Side {
-  return turn === 'red' ? 'black' : 'red';
-}
-
-function cloneBoard(board: Board): Board {
-  return board.map(row => row.map(piece => piece ? { ...piece } : null));
-}
-
-function boardAfterMove(board: Board, move: Move): Board {
-  const next = cloneBoard(board);
-  const moving = next[move.from.row]?.[move.from.col];
-  if (!moving) return next;
-  next[move.to.row][move.to.col] = { ...moving, revealed: true };
-  next[move.from.row][move.from.col] = null;
-  return next;
-}
 
 export function getPositionKey(state: Pick<GameState, 'board' | 'turn'>): string {
   const rows = state.board.map(row =>
@@ -31,10 +15,7 @@ export function getPositionKey(state: Pick<GameState, 'board' | 'turn'>): string
 }
 
 export function getPositionKeyAfterMove(state: GameState, move: Move): string {
-  return getPositionKey({
-    board: boardAfterMove(state.board, move),
-    turn: nextTurn(state.turn),
-  });
+  return getPositionKey(applyMove(state, move.from, move.to));
 }
 
 export function countPositionKey(states: Pick<GameState, 'board' | 'turn'>[], key: string): number {

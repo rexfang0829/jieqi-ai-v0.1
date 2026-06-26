@@ -390,3 +390,22 @@ npm.cmd run build
 
 ### Push 狀態
 - 本輪完成後會 commit 並 push。
+## 2026-06-26 局面第三次重複禁止 MVP 收尾
+
+### 最新完成的工作
+- 補強「局面第三次重複禁止 MVP」交接紀錄。
+- `src/game/repetitionRules.ts` 已新增並維護局面 key、第三次重複判斷、候選步過濾。
+- 一般對局、同步上一手、AI VS AI 都已套用第三次重複禁止。
+- `recommendMove(state, candidateMoves?)` 已支援外部傳入候選 moves，AI VS AI 可先過濾重複步再評分。
+- `getPositionKeyAfterMove()` 改用實際 `applyMove()` 取得 next state key，降低未來規則分歧。
+
+### 測試補強
+- getPositionKey 包含 side / revealed / realType / turn。
+- 第二次同局面允許，第三次同局面禁止。
+- 暗子 realType 不同不誤判為同局面。
+- filterThirdRepetitionMoves 會排除造成第三次重複的 move。
+- repetition 判斷的 next key 與 `applyMove()` 結果一致。
+
+### 測試
+- `npm.cmd test` 通過。
+- `npx.cmd tsc --noEmit` 通過。
