@@ -1,11 +1,9 @@
-﻿# 已完成補充（2026-06-26 Codex）
-- AI 戰術層 MVP：直接絕殺優先、避免送對方一步絕殺、一層交換評估。
-- 棋譜變化線 MVP：可保存分析變化到 GameRecord.variations。
-- 開局翻兵 heuristic：開局優先翻己方兵卒起始位，邊兵與三七路有額外加分。
-
 # NEXT_TASK.md — 建議下一步
 
 ## 已完成 ✅
+- AI 戰術層 MVP：直接絕殺優先、避免送對方一步絕殺、一層交換評估
+- 棋譜變化線 MVP：可保存分析變化到 GameRecord.variations
+- 開局翻兵 heuristic：開局優先翻己方兵卒起始位，邊兵與三七路有額外加分
 - 棋盤視覺問題修正、全面介面重組
 - 天天象棋式被吃子 UI + 手機版對齊修正
 - 棋譜模式三層頁面 UX 重構
@@ -34,6 +32,7 @@
 - LocalStorage 容量管理（超限自動刪最舊）
 - PWA / 離線支援
 - Vercel 部署驗證
+
 # 下一輪建議：AI VS AI MVP 收斂
 
 ## 目標
@@ -61,6 +60,7 @@
 - `npx tsc --noEmit` 通過。
 - 更新 `CODEX_STATUS.md` 與 `NEXT_TASK.md`。
 - commit 並 push。
+
 # 下一輪建議：變化線 UX 與 AI 送殺測試收斂
 
 ## 目標
@@ -83,6 +83,3 @@
 - `npx tsc --noEmit` 通過。
 - 更新 `CODEX_STATUS.md` 與 `NEXT_TASK.md`。
 - commit 並 push。
-# 已完成補充（2026-06-26 Codex）
-- AI 戰術層 MVP：直接絕殺優先、避免送對方一步絕殺、補一層交換評估與安全吃高價子優先。
-- 棋譜變化線 MVP：可從回放分析局面保存後續變化線到 `GameRecord.variations`。

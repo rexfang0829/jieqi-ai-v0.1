@@ -489,3 +489,15 @@ npm.cmd run build
 ### 驗證
 - `npm.cmd test` 通過。
 - `npx.cmd tsc --noEmit` 通過。
+## 2026-06-26 AI 戰術層 + 棋譜變化線 + 開局翻兵 heuristic（Codex）
+
+### 完成內容
+- 直接絕殺優先：`recommendMove(state, candidateMoves?)` 會先檢查候選步是否能讓己方立即勝利，若可以就直接選。
+- 避免送對方一步絕殺：若某步會讓對方下一手直接勝，且仍有其他候選步，AI 會避開該步。
+- 一層交換評估：AI 評估吃子後，會檢查對方是否能吃回剛移動的棋，並估算我方是否能立刻反吃攻擊棋，避免高估虧交換。
+- 棋譜變化線 MVP：`GameRecord.variations` 已可保存從回放局面分析出的變化線。
+- 開局翻兵 heuristic：開局階段會對己方兵卒起始位置的未翻暗子給小幅加分，邊兵與三七路兵有額外 bonus。
+
+### 範圍限制
+- 本段只整理既有狀態，不新增功能。
+- 未做 Belief State、Monte Carlo、OCR、Ponder、Threat Map 或大型 AI 重寫。
