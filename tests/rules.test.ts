@@ -1,5 +1,6 @@
 import { getAllLegalMoves, isCheckmate, isInCheck } from '../src/game/checkRules';
 import { recommendMove } from '../src/ai/simpleAi';
+import { formatAiDebugReport } from '../src/ai/aiDebugReport';
 import { SIMPLE_AI_NOTE, SIMPLE_AI_TITLE } from '../src/ai/simpleAiText';
 import { applyMove, newGame } from '../src/game/gameState';
 import { clearBoard, clearSquare, correctSelectedRealType, editSquare, editSquareError, revealHotkeyType, revealSelectedByHotkey, setTurn } from '../src/game/boardEditing';
@@ -1989,7 +1990,6 @@ test('human vs AI: old records without moveAnnotations still load correctly', ()
 });
 
 // ─── formatAiDebugReport tests ───────────────────────────────────────────────
-import { formatAiDebugReport } from '../src/ai/aiDebugReport';
 
 test('formatAiDebugReport: contains header and mode name', () => {
   const state = newGame();

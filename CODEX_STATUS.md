@@ -490,3 +490,13 @@ npm.cmd run build
 
 ### 驗收
 - 全部測試通過，`npx tsc --noEmit` 清洁
+
+
+---
+
+### 2026-06-27 Last Move Highlight + Board Snapshot Report
+- Board 支援 lastMove
+- Square 顯示上一手 from 白點 / to 白圈
+- 一般揭棋、人 vs AI、AI VS AI、回放、輔助盤面已傳入 lastMove
+- AI 測試報告加入盤面快照
+- 補 formatAiDebugReport 測試：tests/rules.test.ts import 移至頂層 + 統整測試 (3 個)
