@@ -371,3 +371,33 @@ npm.cmd run build
 **測試**：`npm test` 24 個 AI 相關測試全部通過。  
 **TypeScript**：`npx tsc --noEmit` 無錯。  
 **建置**：沙盒 rollup native binary 限制（pre-existing），Vercel 正常。
+
+---
+
+## 一鍵複製 AI 測試報告 MVP（2026-06-27）
+
+**目標**：在輔助盤面 / AI 建議區新增「複製 AI 測試報告」按鈕，讓手機測試 AI 更方便。
+
+**新增 / 修改檔案**：
+
+1. **`src/ai/aiDebugReport.ts`**（全新）：
+   - `AiDebugReportInput` 型別：`{ modeName, state, analysisMoves?, recommendation }`
+   - `formatAiDebugReport()` 純函式，輸出純文字報告
+   - 報告包含：模式/輪到/手數、最近 10 手、AI 建議（推薦步 + 分數 + reason）、推薦步完整 trace、候選前 5 名
+
+2. **`src/components/AiPanel.tsx`**（修改）：
+   - 新增 `useState` 控制「已複製」提示（2 秒後自動消除）
+   - 新增 `modeName?: string` 與 `analysisMoves?: Move[]` 選用 props（不破壞現有呼叫端）
+   - 新增「複製 AI 測試報告」按鈕，呼叫 `navigator.clipboard.writeText()`
+   - 複製成功顯示「已複製 AI 測試報告」綠色提示
+
+3. **`tests/rules.test.ts`**（新增 6 個測試）：
+   - header 與模式名稱存在
+   - AI 建議區塊存在
+   - 候選前 5 名（有 traces 時）
+   - 推薦步 trace（有 traces 時）
+   - 無合法棋步時顯示提示
+   - analysisMoves 顯示變化手數
+
+**測試**：`npm test` 全部 30 個 AI 相關測試通過。  
+**TypeScript**：`npx tsc --noEmit` 無錯。

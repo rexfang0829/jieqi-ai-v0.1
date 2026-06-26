@@ -11,6 +11,7 @@
 - 天眼 AI 修正（revealTacticalSuppressed / effectiveCheck）
 - AI 收斂修正（edge cannon cap / safe capture priority / repetitive check penalty）
 - 人 vs AI 測試對局 MVP
+- 一鍵複製 AI 測試報告 MVP（formatAiDebugReport + 複製按鈕）
 
 ## 後續優先項目
 
