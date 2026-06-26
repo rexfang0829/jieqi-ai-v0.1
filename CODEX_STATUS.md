@@ -409,3 +409,22 @@ npm.cmd run build
 ### 測試
 - `npm.cmd test` 通過。
 - `npx.cmd tsc --noEmit` 通過。
+## 2026-06-26 局面第三次重複禁止 MVP（Codex）
+
+### 完成內容
+- 新增 `src/game/repetitionRules.ts`。
+- `getPositionKey(state)` 會把 `turn`、每格棋子的 `side`、`revealed`、`realType` 納入 key。
+- 暗子重複判斷使用 `realType`，避免只看表面棋種造成誤判。
+- `getPositionKeyAfterMove(state, move)` 使用正式 `applyMove()` 產生下一局面，再取 next state key，避免和實際走子流程分歧。
+- 一般對局、同步上一手、AI VS AI 都已套用第三次重複禁止。
+- `recommendMove(state, candidateMoves?)` 已支援候選 moves，AI VS AI 可先排除第三次重複步，再交給 simpleAi 評分。
+
+### 測試覆蓋
+- `getPositionKey` 會區分 realType 不同的暗子。
+- 第二次同局面允許。
+- 第三次同局面禁止。
+- `filterThirdRepetitionMoves` 會排除造成第三次重複的 move。
+
+### 驗證
+- `npm.cmd test` 通過。
+- `npx.cmd tsc --noEmit` 通過。
