@@ -1672,3 +1672,18 @@ test('edge cannon regression: move choice unaffected by threat delta patch', () 
   assertEqual(recommended.move === horseReleaseToEdge || recommended.move === elephantReleaseToEdge, true);
   assertEqual(recommended.move === horseReleaseToGuard, false);
 });
+
+test('each trace in recommended.traces has valid patterns, threatDelta, threatByMovedPiece, threatTargetType', () => {
+  const board = withKings();
+  place(board, 7, 1, piece('red', 'horse', 'horse', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const recommended = recommendMove(state);
+  assertOk(recommended.traces);
+  assertEqual(recommended.traces.length > 0, true);
+  for (const trace of recommended.traces) {
+    assertOk(Array.isArray(trace.patterns));
+    assertOk(typeof trace.threatDelta === 'number');
+    assertOk(typeof trace.threatByMovedPiece === 'boolean');
+    assertOk(trace.threatTargetType === null || typeof trace.threatTargetType === 'string');
+  }
+});
