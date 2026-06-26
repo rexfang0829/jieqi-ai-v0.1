@@ -15,6 +15,8 @@ const value: Record<PieceType, number> = {
 
 const meaninglessMovePenalty = -80;
 const lowQualityCheckPenalty = -60;
+const protectedMoveBonus = 20;
+const hangingMovePenalty = -50;
 
 const openingPawnStarts = createInitialBoard().flatMap((row, rowIndex) =>
   row.flatMap((piece, colIndex) =>
@@ -34,6 +36,11 @@ type MoveEvaluation = {
   threatValue: number;
   escapeBonus: number;
   pressureBonus: number;
+  targetGain: number;
+  protectedMove: boolean;
+  hangingMove: boolean;
+  capturedConnectedAdvisor: boolean;
+  capturedCrossedPawn: boolean;
   blocksImmediateWin: boolean;
   checking: boolean;
   effectiveCheck: boolean;
@@ -78,8 +85,48 @@ function winningStatus(side: Side): GameState['status'] {
   return side === 'red' ? 'red_win' : 'black_win';
 }
 
-function captureScore(move: Move): number {
-  return move.captured ? pieceValue(move.captured) : 0;
+function isConnectedAdvisor(piece: Piece, board: Board, position: Position): boolean {
+  if (publicType(piece) !== 'advisor') return false;
+
+  for (let row = 0; row < board.length; row++) {
+    for (let col = 0; col < board[row].length; col++) {
+      if (row === position.row && col === position.col) continue;
+      const other = board[row][col];
+      if (!other || other.side !== piece.side || publicType(other) !== 'advisor') continue;
+      const distance = Math.abs(row - position.row) + Math.abs(col - position.col);
+      if (distance <= 3) return true;
+    }
+  }
+  return false;
+}
+
+function isCrossedPawn(piece: Piece, position: Position): boolean {
+  if (publicType(piece) !== 'pawn') return false;
+  return piece.side === 'red' ? position.row <= 4 : position.row >= 5;
+}
+
+function isNearEnemyPalace(piece: Piece, position: Position): boolean {
+  if (piece.side === 'red') return position.row <= 2 && position.col >= 3 && position.col <= 5;
+  return position.row >= 7 && position.col >= 3 && position.col <= 5;
+}
+
+function targetValue(piece: Piece, board: Board, position: Position): number {
+  const type = publicType(piece);
+  if (type === 'king') return value.king;
+  if (type === 'rook') return value.rook;
+  if (type === 'cannon') return 360;
+  if (type === 'horse') return value.horse;
+  if (type === 'advisor') return isConnectedAdvisor(piece, board, position) ? 280 : 170;
+  if (type === 'elephant') return 140;
+  if (type === 'pawn') {
+    if (!isCrossedPawn(piece, position)) return 60;
+    return isNearEnemyPalace(piece, position) ? 145 : 120;
+  }
+  return pieceValue(piece);
+}
+
+function captureScore(board: Board, move: Move): number {
+  return move.captured ? targetValue(move.captured, board, move.to) : 0;
 }
 
 function revealScore(move: Move): number {
@@ -118,7 +165,7 @@ function bestRecaptureValue(board: Board, side: Side, target: Position): number 
   let best = 0;
   for (const reply of replies) {
     if (!reply.captured || !samePosition(reply.to, target)) continue;
-    best = Math.max(best, pieceValue(reply.captured));
+    best = Math.max(best, targetValue(reply.captured, board, reply.to));
   }
   return best;
 }
@@ -126,9 +173,21 @@ function bestRecaptureValue(board: Board, side: Side, target: Position): number 
 function maxCaptureValue(board: Board, side: Side): number {
   let best = 0;
   for (const move of getAllLegalMoves(board, side)) {
-    if (move.captured) best = Math.max(best, pieceValue(move.captured));
+    if (move.captured) best = Math.max(best, targetValue(move.captured, board, move.to));
   }
   return best;
+}
+
+function isSquareProtectedBySide(board: Board, side: Side, position: Position): boolean {
+  const probe = cloneBoard(board);
+  probe[position.row][position.col] = {
+    id: 'protection-probe',
+    side: opponent(side),
+    originalType: 'pawn',
+    realType: 'pawn',
+    revealed: true,
+  };
+  return getAllLegalMoves(probe, side).some(move => samePosition(move.to, position));
 }
 
 function isSquareAttacked(board: Board, bySide: Side, target: Position): boolean {
@@ -179,7 +238,7 @@ function opponentReplyPenalty(board: Board, side: Side, movedTo: Position, moved
 
   for (const reply of replies) {
     if (reply.captured) {
-      const gain = pieceValue(reply.captured);
+      const gain = targetValue(reply.captured, board, reply.to);
       if (gain > maxReplyGain) maxReplyGain = gain;
     }
 
@@ -214,13 +273,17 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean)
   const nextBoard = next === state ? applyMoveToBoard(state.board, move) : next.board;
   const moved = nextBoard[move.to.row][move.to.col]!;
   const reply = opponentReplyPenalty(nextBoard, state.turn, move.to, moved);
-  const captureGain = captureScore(move);
+  const targetGain = captureScore(state.board, move);
+  const captureGain = targetGain;
   const openingBonus = openingPawnRevealBonus(state, move);
   const threatValue = maxCaptureValue(nextBoard, state.turn);
   const importantThreat = threatValue >= value.horse;
   const wasUnderAttack = isSquareAttacked(state.board, opponent(state.turn), move.from);
   const escapeBonus = wasUnderAttack && !reply.immediateCapture && movedPieceValue(move.piece) >= value.horse ? 45 : 0;
   const pressureBonus = kingZonePressureBonus(nextBoard, state.turn, move.to);
+  const protectedMove = isSquareProtectedBySide(nextBoard, state.turn, move.to);
+  const capturedConnectedAdvisor = !!move.captured && publicType(move.captured) === 'advisor' && isConnectedAdvisor(move.captured, state.board, move.to);
+  const capturedCrossedPawn = !!move.captured && publicType(move.captured) === 'pawn' && isCrossedPawn(move.captured, move.to);
   const checking = next !== state && next.status === 'playing' && isInCheck(next.board, next.turn);
   const effectiveCheck = checking && (
     captureGain > 0 ||
@@ -240,11 +303,16 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean)
     effectiveCheck
   );
   const meaningless = !purposeful && !checking;
+  const highValueMover = movedPieceValue(move.piece) >= value.horse;
+  const hasClearGain = captureGain >= value.cannon || blocksImmediateWin || effectiveCheck;
+  const hangingMove = highValueMover && !protectedMove && !hasClearGain;
   const purposePenalty = meaningless ? meaninglessMovePenalty : 0;
   const checkPenalty = lowQualityCheck ? lowQualityCheckPenalty : 0;
   const checkBonus = effectiveCheck ? 35 : 0;
   const threatBonus = importantThreat ? Math.round(Math.min(threatValue, value.rook) * 0.12) : 0;
   const blockDangerBonus = blocksImmediateWin ? 70 : 0;
+  const protectionScore = protectedMove ? protectedMoveBonus : 0;
+  const hangingPenalty = hangingMove ? hangingMovePenalty : 0;
 
   const score =
     captureGain -
@@ -257,6 +325,8 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean)
     pressureBonus +
     blockDangerBonus +
     checkBonus +
+    protectionScore +
+    hangingPenalty +
     purposePenalty +
     checkPenalty -
     Math.round(reply.maxReplyGain * 0.25);
@@ -271,6 +341,11 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean)
     threatValue,
     escapeBonus,
     pressureBonus,
+    targetGain,
+    protectedMove,
+    hangingMove,
+    capturedConnectedAdvisor,
+    capturedCrossedPawn,
     blocksImmediateWin,
     checking,
     effectiveCheck,
@@ -281,6 +356,11 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean)
 
 function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: boolean): string {
   if (avoidedOpponentWin) return '避免送對方一步殺';
+  if (evaluation.hangingMove) return '高價子落點無保護，已扣分';
+  if (best.captured && evaluation.exchangeNet < 0) return '交換可能虧損，已扣分';
+  if (evaluation.capturedConnectedAdvisor) return '吃連得起來的士';
+  if (evaluation.capturedCrossedPawn) return '吃過河兵卒';
+  if (best.captured && evaluation.targetGain >= value.cannon) return '吃高價目標';
   if (best.captured && evaluation.exchangeNet >= 250) return '安全吃子';
   if (best.captured && evaluation.exchangeNet >= 0) return '交換不虧';
   if (evaluation.effectiveCheck) return '有效將軍';
@@ -289,6 +369,7 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (evaluation.threatValue >= value.horse) return '威脅對方重要棋子';
   if (evaluation.escapeBonus > 0) return '讓重要棋子脫離危險';
   if (evaluation.pressureBonus > 0) return '增加將區壓力';
+  if (evaluation.protectedMove) return '落點有保護';
   if (evaluation.openingBonus > 0) return '開局翻兵';
   if (evaluation.risk > 0 || evaluation.immediateCapture) return '此步有被吃風險，已扣分';
   return '簡易分數較佳';

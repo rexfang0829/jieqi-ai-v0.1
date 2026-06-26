@@ -517,3 +517,20 @@ npm.cmd run build
 ### 驗證
 - `npm.cmd test` 通過。
 - `npm.cmd run build` 通過（仍有既有 `.playbackMoveScroll` CSS minify warning，本輪未處理 CSS）。
+## 2026-06-26 AI 吃子目標價值與落點保護（Codex）
+
+### 本輪完成
+- AI 吃子評估改用 `targetValue(piece, board, position)`，不再只依固定棋種分數判斷吃子價值。
+- AI 可用 `isConnectedAdvisor()` 區分連得起來的士與普通士，連得起來的士價值提高但不超過炮。
+- AI 可用 `isCrossedPawn()` 區分過河兵卒與未過河兵卒，過河且接近九宮會略微加分。
+- AI 會用 `isSquareProtectedBySide()` 檢查走完後落點是否有己方保護，落點有保護給少量加分。
+- 高價子落到無保護位置且沒有明確收益時會套用 `hangingMovePenalty` 扣分。
+- 仍保留原本直接絕殺、避免送殺、一層交換評估、開局翻兵、無目的步扣分、無成果將軍降分與 candidateMoves 相容。
+
+### 修改檔案
+- `src/ai/simpleAi.ts`：新增 target value、連士、過河兵、落點保護與高價子無保護懲罰。
+- `CODEX_STATUS.md` / `NEXT_TASK.md`：同步本輪 AI 評分調整與後續待辦。
+
+### 驗證
+- `npm.cmd test` 通過。
+- `npm.cmd run build` 通過（仍有既有 `.playbackMoveScroll` CSS minify warning，本輪未處理 CSS）。
