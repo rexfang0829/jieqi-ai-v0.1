@@ -49,6 +49,8 @@ type MoveEvaluation = {
   effectiveCheck: boolean;
   lowQualityCheck: boolean;
   meaningless: boolean;
+  moveRevealsUnknown: boolean;
+  revealTacticalSuppressed: boolean;
   threatDelta: number;
   threatByMovedPiece: boolean;
   threatTargetType: PieceType | null;
@@ -734,7 +736,9 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
   const threatValue = afterThreat?.value ?? 0;
   const threatDelta = threatValue - (beforeThreat?.value ?? 0);
   const threatByMovedPiece = afterThreat?.byMovedPiece ?? false;
-  const importantThreat = threatValue >= weights.pieceValues.horse && (threatDelta > 0 || threatByMovedPiece);
+  const moveRevealsUnknown = !move.piece.revealed;
+  const revealDependentThreat = moveRevealsUnknown && threatByMovedPiece;
+  const importantThreat = threatValue >= weights.pieceValues.horse && (threatDelta > 0 || threatByMovedPiece) && !revealDependentThreat;
   const wasUnderAttack = isSquareAttacked(state.board, opponent(state.turn), move.from);
   const escapeBonus = wasUnderAttack && !reply.immediateCapture && movedPieceValue(move.piece, weights) >= weights.pieceValues.horse ? weights.escapeImportantPieceBonus : 0;
   const pressureBonus = kingZonePressureBonus(nextBoard, state.turn, move.to, weights);
@@ -745,7 +749,9 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
   const keySquareScore = openingBonus > 0 ? Math.min(rawKeySquareScore, weights.openingKeySquareMaxBonus) : rawKeySquareScore;
   const hiddenPressureScore = hiddenPiecePressureBonus(nextBoard, state.turn, weights);
   const controlsImportantHidden = hiddenPressureScore >= weights.hiddenPiecePressureBonus + weights.importantHiddenPiecePressureBonus;
-  const checking = next !== state && next.status === 'playing' && isInCheck(next.board, next.turn);
+  const rawChecking = next !== state && next.status === 'playing' && isInCheck(next.board, next.turn);
+  const checking = moveRevealsUnknown ? false : rawChecking;
+  const revealTacticalSuppressed = moveRevealsUnknown && (rawChecking || revealDependentThreat);
   const effectiveCheck = checking && (
     captureGain > 0 ||
     importantThreat ||
@@ -854,6 +860,8 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     effectiveCheck,
     lowQualityCheck,
     meaningless,
+    moveRevealsUnknown,
+    revealTacticalSuppressed,
     threatDelta,
     threatByMovedPiece,
     threatTargetType: afterThreat?.targetType ?? null,
@@ -872,6 +880,7 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (best.captured && evaluation.targetGain >= weights.pieceValues.cannon) return '吃高價目標';
   if (best.captured && evaluation.exchangeNet >= weights.safeCaptureExchangeNet) return '安全吃子';
   if (best.captured && evaluation.exchangeNet >= 0) return '交換不虧';
+  if (evaluation.revealTacticalSuppressed && !evaluation.effectiveCheck && !evaluation.releasedHorseFromPressure && !evaluation.releasedElephantFromPressure && !evaluation.preventsPawnLineLock) return '暗子翻開效果未知，未按確定將軍加分';
   if (evaluation.effectiveCheck) return '有效將軍';
   if (evaluation.lowQualityCheck) return '無成果將軍，已降分';
   if (evaluation.releasedHorseFromPressure) return '活馬解除邊炮壓制';
@@ -951,6 +960,8 @@ export function recommendMove(
     effectiveCheck: evaluation.effectiveCheck,
     lowQualityCheck: evaluation.lowQualityCheck,
     meaningless: evaluation.meaningless,
+    moveRevealsUnknown: evaluation.moveRevealsUnknown,
+    revealTacticalSuppressed: evaluation.revealTacticalSuppressed,
     threatValue: evaluation.threatValue,
     threatDelta: evaluation.threatDelta,
     threatByMovedPiece: evaluation.threatByMovedPiece,

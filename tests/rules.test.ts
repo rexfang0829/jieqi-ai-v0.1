@@ -1687,3 +1687,58 @@ test('each trace in recommended.traces has valid patterns, threatDelta, threatBy
     assertOk(trace.threatTargetType === null || typeof trace.threatTargetType === 'string');
   }
 });
+
+test('reveal-check suppression: unrevealed piece check is suppressed', () => {
+  // Unrevealed red pawn-disguised-rook at [2][4].
+  // Move [2][4]->[1][4]: piece reveals as rook, rawChecking=true (rook adjacent to black king [0][4]),
+  // but moveRevealsUnknown=true so checking is suppressed to false.
+  const board = withKings();
+  place(board, 2, 4, piece('red', 'pawn', 'rook', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const recommended = recommendMove(state);
+  assertOk(recommended.traces);
+  const t = recommended.traces.find(tr =>
+    tr.move.from.row === 2 && tr.move.from.col === 4 && tr.move.to.row === 1 && tr.move.to.col === 4
+  );
+  assertOk(t);
+  assertEqual(t.moveRevealsUnknown, true);
+  assertEqual(t.revealTacticalSuppressed, true);
+  assertEqual(t.effectiveCheck, false);
+  assertOk(t.reason !== '有效將軍');
+});
+
+test('reveal-check suppression: revealed piece check is not suppressed', () => {
+  // Revealed rook at [3][0]. Move [3][0]->[0][0]: rook arrives on row 0, checks black king at [0][4]
+  // (same row, path clear). Piece already revealed so moveRevealsUnknown=false, no suppression.
+  // Rook cannot directly capture king (different col) so no early-exit in recommendMove.
+  const board = withKings();
+  place(board, 3, 0, piece('red', 'rook', 'rook', true));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const recommended = recommendMove(state);
+  assertOk(recommended.traces);
+  const t = recommended.traces.find(tr =>
+    tr.move.from.row === 3 && tr.move.from.col === 0 && tr.move.to.row === 0 && tr.move.to.col === 0
+  );
+  assertOk(t);
+  assertEqual(t.moveRevealsUnknown, false);
+  assertEqual(t.revealTacticalSuppressed, false);
+});
+
+test('reveal-threat suppression: unrevealed cannon threat via screen is suppressed', () => {
+  // Unrevealed cannon at [5][0]. Screen=red pawn [5][4], target=black horse [5][8].
+  // Move [5][0]->[5][2]: cannon reveals and threatens horse via screen (revealDependentThreat=true).
+  // moveRevealsUnknown=true => revealTacticalSuppressed=true; reason must not be a threat reason.
+  const board = withKings();
+  place(board, 5, 0, piece('red', 'cannon', 'cannon', false));
+  place(board, 5, 8, piece('black', 'horse', 'horse', true));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const recommended = recommendMove(state);
+  assertOk(recommended.traces);
+  const t = recommended.traces.find(tr =>
+    tr.move.from.row === 5 && tr.move.from.col === 0 && tr.move.to.row === 5 && tr.move.to.col === 2
+  );
+  assertOk(t);
+  assertEqual(t.moveRevealsUnknown, true);
+  assertEqual(t.revealTacticalSuppressed, true);
+  assertOk(!t.reason.includes('威脅'));
+});

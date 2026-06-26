@@ -22,6 +22,8 @@ export type AiMoveTrace = {
   effectiveCheck: boolean;
   lowQualityCheck: boolean;
   meaningless: boolean;
+  moveRevealsUnknown: boolean;
+  revealTacticalSuppressed: boolean;
   threatValue: number;
   threatDelta: number;
   threatByMovedPiece: boolean;
