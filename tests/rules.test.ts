@@ -2456,3 +2456,28 @@ test('formatAiDebugReport: board snapshot shows revealed pieces and hidden piece
   // Empty cells show as ··
   assertOk(text.includes('··'));
 });
+
+test('formatAiDebugReport: board snapshot covers all 5 required criteria', () => {
+  // One consolidated test per task spec:
+  // (1) contains 盤面快照, (2) r0/r9, (3) col labels 0~8,
+  // (4) revealed piece text, (5) hidden piece text
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king', 'king', true));
+  place(board, 0, 4, piece('black', 'king', 'king', true));
+  place(board, 7, 0, piece('red', 'rook', 'rook', true));  // revealed -> 紅車
+  place(board, 2, 6, piece('black', 'horse', 'horse', false)); // hidden -> 黑暗馬
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const rec: import('../src/ai/aiTrace').AiRecommendation = { move: null, score: 0, reason: '' };
+  const text = formatAiDebugReport({ modeName: 'test', state, recommendation: rec });
+  // (1) snapshot section header
+  assertOk(text.includes('盤面快照'));
+  // (2) first and last row labels
+  assertOk(text.includes('r0:'));
+  assertOk(text.includes('r9:'));
+  // (3) column header 0~8
+  assertOk(text.includes('0    1    2    3    4    5    6    7    8'));
+  // (4) revealed piece
+  assertOk(text.includes('紅車'));
+  // (5) hidden piece
+  assertOk(text.includes('黑暗馬'));
+});
