@@ -587,3 +587,37 @@ npm.cmd run build
 ### 驗證
 - `npm.cmd test` 通過。
 - `npm.cmd run build` 通過（仍有既有 `.playbackMoveScroll` CSS minify warning，本輪未處理 CSS）。
+## 2026-06-26 AI 開局邊炮 / 邊 G pattern 分流修正（Codex）
+
+### 最新完成的工作
+- 修正 `src/ai/simpleAi.ts` 的開局結構評估，將「紅方邊兵翻出炮」與「紅方邊兵翻出 G / 車」拆成不同 pattern。
+- 紅邊炮局現在偏向馬八進九 / 象七進九，用來解除邊炮壓制。
+- 紅邊 G / 車局現在偏向馬八進七，用來守住兵線，避免敵方 G 壓兵線。
+- 修正前 AI 會把炮局錯套兵線防守，導致馬八進七拿到錯誤高分；這次已分流。
+- 更新 AI reason：`活馬解除邊炮壓制`、`活象解除邊炮壓制`、`守住兵線，避免敵方 G 壓兵線`、`活馬落點不符當前威脅，已扣分`。
+
+### 修改了哪些檔案
+- `src/ai/simpleAi.ts`
+  - 新增邊炮壓制與邊 G / 車壓兵線 helper。
+  - 調整 `structurePatternEvaluation()`，避免馬八進七在邊炮局吃到主要解壓分。
+- `tests/rules.test.ts`
+  - 新增紅邊炮局與紅邊 G / 車局的 AI 開局推薦回歸測試。
+- `CODEX_STATUS.md`
+  - 記錄本輪完成內容。
+- `NEXT_TASK.md`
+  - 將本輪 pattern 分流列入已完成，保留後續建議。
+
+### npm test 是否通過
+- 通過：`npm.cmd test`
+
+### npm run build 是否通過
+- 通過：`npm.cmd run build`
+- 備註：仍有既有 `.playbackMoveScroll` CSS minify warning，本輪未處理 CSS。
+
+### 目前還有哪些已知限制
+- 這仍是 simpleAi heuristic，不是 Belief State / Monte Carlo。
+- 開局棋理還需要更多回歸測試覆蓋不同邊、不同子力排列。
+- pattern 觸發紀錄、AI VS AI 對局資料統計、自我對弈調參尚未做。
+
+### 是否已經 push 到 GitHub
+- 本段更新完成後將 commit 並 push。

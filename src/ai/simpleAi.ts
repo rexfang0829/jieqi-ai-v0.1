@@ -363,6 +363,41 @@ function isBadHorseReleaseSquare(side: Side, position: Position): boolean {
   return position.row === advanceRow && (position.col === 0 || position.col === 8);
 }
 
+function hasOpeningEdgeCannonPressure(board: Board, side: Side): boolean {
+  const enemy = opponent(side);
+  return board.some(row => row.some((piece, col) =>
+    piece?.side === enemy &&
+    piece.revealed &&
+    piece.originalType === 'pawn' &&
+    piece.realType === 'cannon' &&
+    (col === 0 || col === 8)
+  ));
+}
+
+function hasOpeningEdgeRookPawnLineLockRisk(board: Board, side: Side): boolean {
+  const enemy = opponent(side);
+  return board.some((row, rowIndex) => row.some((piece, col) =>
+    piece?.side === enemy &&
+    piece.revealed &&
+    piece.originalType === 'pawn' &&
+    piece.realType === 'rook' &&
+    (col === 0 || col === 8 || Math.abs(rowIndex - ownPawnLineRow(side)) <= 2)
+  ));
+}
+
+function isHorseReleaseForCannonPressure(side: Side, to: Position): boolean {
+  return isBadHorseReleaseSquare(side, to);
+}
+
+function isHorseReleaseForPawnLineGuard(side: Side, to: Position): boolean {
+  return isGoodHorseGuardSquare(side, to);
+}
+
+function isElephantReleaseForCannonPressure(side: Side, to: Position): boolean {
+  const advanceRow = side === 'red' ? 7 : 2;
+  return to.row === advanceRow && (to.col === 0 || to.col === 8);
+}
+
 function guardsPawnLineKeyPoint(side: Side, position: Position): boolean {
   const guardRow = ownPawnLineRow(side) + forwardDirection(side);
   return position.row === guardRow && (position.col === 2 || position.col === 4 || position.col === 6);
@@ -475,21 +510,33 @@ function structurePatternEvaluation(state: GameState, move: Move, nextBoard: Boa
   const releasedHorse = isReleasedHorseMove(move);
   const releasedElephant = isReleasedElephantMove(move);
   const pawnLineDefense = guardsPawnLineKeyPoint(state.turn, move.to);
-  const preventsPawnLineLock = beforePawnLineRisk > 0 && afterPawnLineRisk <= beforePawnLineRisk && pawnLineDefense;
-  const badHorseRelease = releasedHorse && isBadHorseReleaseSquare(state.turn, move.to) && !pawnLineDefense;
+  const edgeCannonPressure = hasOpeningEdgeCannonPressure(state.board, state.turn) && beforeCannonThreat > 0;
+  const edgeRookPawnLineLockRisk = hasOpeningEdgeRookPawnLineLockRisk(state.board, state.turn) || beforePawnLineRisk > 0;
+  const horseCannonRelease = releasedHorse && edgeCannonPressure && isHorseReleaseForCannonPressure(state.turn, move.to);
+  const elephantCannonRelease = releasedElephant && edgeCannonPressure && isElephantReleaseForCannonPressure(state.turn, move.to);
+  const horsePawnLineGuard = releasedHorse && edgeRookPawnLineLockRisk && isHorseReleaseForPawnLineGuard(state.turn, move.to);
+  const threatMismatch =
+    releasedHorse &&
+    (
+      edgeCannonPressure && isHorseReleaseForPawnLineGuard(state.turn, move.to) ||
+      edgeRookPawnLineLockRisk && !edgeCannonPressure && isHorseReleaseForCannonPressure(state.turn, move.to)
+    );
+  const preventsPawnLineLock = horsePawnLineGuard && afterPawnLineRisk <= beforePawnLineRisk;
+  const badHorseRelease = threatMismatch || releasedHorse && isBadHorseReleaseSquare(state.turn, move.to) && !pawnLineDefense && !edgeCannonPressure;
   const preservesHiddenCannon = !isHiddenCannon(move.piece) && state.board.some(row => row.some(piece => piece?.side === state.turn && isHiddenCannon(piece)));
   const weakScreen = isHiddenCannon(move.piece) && beforeCannonThreat > 0 && afterCannonThreat >= beforeCannonThreat && !hasClearGain;
   const patterns = new Set<AiLearningPatternId>();
   let score = 0;
 
   if (beforeCannonThreat > 0) patterns.add('opening_cannon_hits_hidden_rook');
-  if (beforePawnLineRisk > 0) patterns.add('opening_edge_rook_pawn_line_lock');
+  if (edgeRookPawnLineLockRisk) patterns.add('opening_edge_rook_pawn_line_lock');
 
   if (releasedHorse) {
     patterns.add('opening_hidden_pawn_blocks_horse_foot');
     score += weights.openingHiddenPawnAssumptionBonus + weights.pawnFootBlockThreatBonus;
-    if (beforeCannonThreat > 0) score += weights.structureReleaseHorseBonus;
-    if (isGoodHorseGuardSquare(state.turn, move.to)) {
+    if (horseCannonRelease) score += weights.structureReleaseHorseBonus;
+    if (!edgeCannonPressure && beforeCannonThreat > 0) score += weights.structureReleaseHorseBonus;
+    if (horsePawnLineGuard || !edgeCannonPressure && isGoodHorseGuardSquare(state.turn, move.to)) {
       patterns.add('horse_release_to_guard_pawn_line');
       score += weights.pawnLineDefenseBonus;
     }
@@ -502,13 +549,13 @@ function structurePatternEvaluation(state: GameState, move: Move, nextBoard: Boa
   if (releasedElephant) {
     patterns.add('opening_hidden_pawn_blocks_elephant_eye');
     score += weights.openingHiddenPawnAssumptionBonus + weights.pawnElephantEyeBlockThreatBonus;
-    if (beforeCannonThreat > 0) {
+    if (elephantCannonRelease || !edgeCannonPressure && beforeCannonThreat > 0) {
       patterns.add('elephant_release_from_cannon_pressure');
       score += weights.structureReleaseElephantBonus;
     }
   }
 
-  if (pawnLineDefense) score += weights.pawnLineDefenseBonus;
+  if (pawnLineDefense && (!edgeCannonPressure || horsePawnLineGuard)) score += weights.pawnLineDefenseBonus;
   if (preventsPawnLineLock) score += weights.preventEnemyRookPawnLineLockBonus + weights.pawnLineLockThreatBonus;
   if (afterPawnLineRisk > beforePawnLineRisk) score += weights.enemyRookOnPawnLinePenalty;
   if (badHorseRelease) score += weights.badHorseReleaseSquarePenalty;
@@ -530,8 +577,8 @@ function structurePatternEvaluation(state: GameState, move: Move, nextBoard: Boa
   return {
     score,
     patterns: [...patterns],
-    releasedHorseFromPressure: releasedHorse && beforeCannonThreat > 0,
-    releasedElephantFromPressure: releasedElephant && beforeCannonThreat > 0,
+    releasedHorseFromPressure: horseCannonRelease || releasedHorse && !edgeCannonPressure && beforeCannonThreat > 0,
+    releasedElephantFromPressure: elephantCannonRelease || releasedElephant && !edgeCannonPressure && beforeCannonThreat > 0,
     weakScreen,
     preservesHiddenCannon: preservesHiddenCannon && !hasClearGain,
     pawnLineDefense,
@@ -709,13 +756,13 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (best.captured && evaluation.exchangeNet >= 0) return '交換不虧';
   if (evaluation.effectiveCheck) return '有效將軍';
   if (evaluation.lowQualityCheck) return '無成果將軍，已降分';
-  if (evaluation.releasedHorseFromPressure) return '活化馬，解除炮線壓制';
-  if (evaluation.releasedElephantFromPressure) return '活化象，解除象眼壓制';
+  if (evaluation.releasedHorseFromPressure) return '活馬解除邊炮壓制';
+  if (evaluation.releasedElephantFromPressure) return '活象解除邊炮壓制';
   if (evaluation.weakScreen) return '只是塞炮線但仍被卡馬腳，已扣分';
-  if (evaluation.preventsPawnLineLock) return '避免敵方 G 壓住兵線';
+  if (evaluation.badHorseRelease) return '活馬落點不符當前威脅，已扣分';
+  if (evaluation.preventsPawnLineLock) return '守住兵線，避免敵方 G 壓兵線';
   if (evaluation.pawnLineDefense && evaluation.structurePatterns.includes('hidden_rook_guard_point')) return '活馬並保護暗車控制點';
   if (evaluation.pawnLineDefense) return '守住兵線關鍵點';
-  if (evaluation.badHorseRelease) return '活馬落點不佳，未守住兵線，已扣分';
   if (evaluation.preservesHiddenCannon) return '保留暗炮威懾';
   if (evaluation.leaveKeySquareScore < 0) return '離開要點且收益不足，已扣分';
   if (evaluation.meaningless) return '此步缺乏明確目的，已扣分';

@@ -1181,6 +1181,68 @@ test('AI gives edge and third-seventh pawn starts extra opening priority', () =>
   assertEqual(recommendMove(thirdSeventhState, [centerPawnB, thirdSeventhPawn]).move, thirdSeventhPawn);
 });
 
+test('AI splits red edge cannon pressure from pawn line guard pattern', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn'));
+  place(board, 5, 0, piece('red', 'pawn', 'cannon', true));
+  place(board, 3, 0, piece('black', 'pawn', 'pawn', false));
+  place(board, 0, 0, piece('black', 'rook', 'rook', false));
+  place(board, 0, 1, piece('black', 'horse', 'horse', false));
+  place(board, 0, 2, piece('black', 'elephant', 'elephant', false));
+  place(board, 2, 1, piece('black', 'cannon', 'cannon', false));
+
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const horseReleaseToEdge = findMove(board, 'black', [0, 1], [2, 0]);
+  const horseReleaseToGuard = findMove(board, 'black', [0, 1], [2, 2]);
+  const elephantReleaseToEdge = findMove(board, 'black', [0, 2], [2, 0]);
+  const sameFilePawnGamble = findMove(board, 'black', [3, 0], [4, 0]);
+  const hiddenCannonSideShift = findMove(board, 'black', [2, 1], [2, 0]);
+
+  const recommended = recommendMove(state, [
+    horseReleaseToGuard,
+    sameFilePawnGamble,
+    hiddenCannonSideShift,
+    horseReleaseToEdge,
+    elephantReleaseToEdge,
+  ]);
+
+  assertOk(recommended.move);
+  assertEqual(recommended.move === horseReleaseToEdge || recommended.move === elephantReleaseToEdge, true);
+  assertEqual(recommended.move === horseReleaseToGuard, false);
+  assertEqual(recommended.move === sameFilePawnGamble, false);
+  assertEqual(recommended.move === hiddenCannonSideShift, false);
+  assertEqual(recommended.reason.includes('邊炮壓制'), true);
+});
+
+test('AI splits red edge rook pressure into pawn line guard pattern', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn'));
+  place(board, 5, 0, piece('red', 'pawn', 'rook', true));
+  place(board, 3, 0, piece('black', 'pawn', 'pawn', false));
+  place(board, 0, 1, piece('black', 'horse', 'horse', false));
+
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const horseReleaseToEdge = findMove(board, 'black', [0, 1], [2, 0]);
+  const horseReleaseToGuard = findMove(board, 'black', [0, 1], [2, 2]);
+  const sameFilePawnGamble = findMove(board, 'black', [3, 0], [4, 0]);
+
+  const recommended = recommendMove(state, [
+    horseReleaseToEdge,
+    sameFilePawnGamble,
+    horseReleaseToGuard,
+  ]);
+
+  assertOk(recommended.move);
+  assertEqual(recommended.move, horseReleaseToGuard);
+  assertEqual(recommended.move === horseReleaseToEdge, false);
+  assertEqual(recommended.move === sameFilePawnGamble, false);
+  assertEqual(recommended.reason.includes('守住兵線'), true);
+});
+
 test('AI opening pawn bonus does not override immediate checkmate', () => {
   const board = emptyBoard();
   place(board, 0, 4, piece('black', 'king'));
