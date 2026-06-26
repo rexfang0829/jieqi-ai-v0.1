@@ -500,3 +500,33 @@ npm.cmd run build
 - 一般揭棋、人 vs AI、AI VS AI、回放、輔助盤面已傳入 lastMove
 - AI 測試報告加入盤面快照
 - 補 formatAiDebugReport 測試：tests/rules.test.ts import 移至頂層 + 統整測試 (3 個)
+## 2026-06-27 Codex update
+
+### Latest completed work
+- Added post-move loose hidden piece evaluation to `simpleAi`.
+- AI now scans own hidden pieces after each candidate move.
+- If an own hidden piece is attacked by an opponent revealed piece and has no defender, the move is marked as leaving a loose hidden piece.
+- If the move truly gets that hidden piece out of revealed-piece attack, it receives the rescue bonus.
+- If the attacked hidden piece has a defender, it is tracked as protected under attack, not treated as a free loss.
+- Hidden enemy attackers still use public information only; unrevealed attackers do not count as revealed-piece loose-piece threats.
+- Pure activation / cannon-screen moves that ignore loose hidden pieces are capped and penalized.
+
+### Modified files
+- `src/ai/simpleAi.ts`: added post-move loose hidden piece scan, scoring, trace fields, and reasons.
+- `src/ai/aiWeights.ts`: added loose hidden piece / rescue / protected-under-attack weights.
+- `src/ai/aiTrace.ts`: added trace fields for loose hidden piece analysis.
+- `tests/rules.test.ts`: added regression tests for loose hidden piece rescue, protected under attack, and hidden-cannon fair-info behavior.
+- `CODEX_STATUS.md`: updated this handoff note.
+- `NEXT_TASK.md`: updated completed/current task notes.
+
+### Verification
+- `npm.cmd test`: passed.
+- `npx.cmd tsc --noEmit`: passed.
+- `npm.cmd run build`: passed.
+
+### Known limits
+- This is a one-ply heuristic, not Belief State or Monte Carlo.
+- Protected-under-attack is intentionally not treated as an urgent free-loss rescue.
+- The evaluator does not peek at unrevealed `realType`.
+
+---

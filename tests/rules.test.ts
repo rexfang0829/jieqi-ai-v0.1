@@ -1518,6 +1518,82 @@ test('recommendMove returns traces with correct fields', () => {
   assertOk(typeof first.risk === 'number');
   assertOk(typeof first.exchangeNet === 'number');
   assertOk(typeof first.structureScore === 'number');
+  assertOk(typeof first.postMoveLooseHiddenPiece === 'boolean');
+  assertOk(typeof first.postMoveLooseHiddenPieceCount === 'number');
+  assertOk(typeof first.postMoveProtectedUnderAttackCount === 'number');
+  assertOk(typeof first.postMoveLoosePiecePenalty === 'number');
+  assertOk(typeof first.rescuesLooseHiddenPiece === 'boolean');
+  assertOk(typeof first.ignoresLooseHiddenPiece === 'boolean');
+});
+
+test('AI prioritizes rescuing an unprotected hidden pawn attacked by a revealed elephant', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn'));
+  place(board, 5, 2, piece('red', 'elephant', 'elephant', true));
+  place(board, 3, 0, piece('black', 'pawn', 'pawn', false));
+  place(board, 0, 1, piece('black', 'horse', 'horse', false));
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const rescuePawn = findMove(board, 'black', [3, 0], [4, 0]);
+  const activateHorse = findMove(board, 'black', [0, 1], [2, 0]);
+  const rec = recommendMove(state, [activateHorse, rescuePawn]);
+  assertOk(rec.move);
+  assertEqual(rec.move.from.row, rescuePawn.from.row);
+  assertEqual(rec.move.from.col, rescuePawn.from.col);
+  assertEqual(rec.move.to.row, rescuePawn.to.row);
+  assertEqual(rec.move.to.col, rescuePawn.to.col);
+  assertOk(rec.traces);
+  const rescueTrace = rec.traces.find(t => t.move === rescuePawn);
+  const horseTrace = rec.traces.find(t => t.move === activateHorse);
+  assertOk(rescueTrace);
+  assertOk(horseTrace);
+  assertEqual(rescueTrace.rescuesLooseHiddenPiece, true);
+  assertEqual(rescueTrace.postMoveLooseHiddenPieceCount, 0);
+  assertEqual(horseTrace.ignoresLooseHiddenPiece, true);
+  assertEqual(horseTrace.postMoveLooseHiddenPiece, true);
+  assertEqual((horseTrace.postMoveLoosePiecePenalty ?? 0) < 0, true);
+  assertEqual(horseTrace.score < rescueTrace.score, true);
+});
+
+test('AI does not treat a defended attacked hidden pawn as loose', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn'));
+  place(board, 5, 2, piece('red', 'elephant', 'elephant', true));
+  place(board, 3, 0, piece('black', 'pawn', 'pawn', false));
+  place(board, 3, 8, piece('black', 'rook', 'rook', true));
+  place(board, 0, 1, piece('black', 'horse', 'horse', false));
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const activateHorse = findMove(board, 'black', [0, 1], [2, 2]);
+  const rec = recommendMove(state, [activateHorse]);
+  assertOk(rec.traces);
+  const trace = rec.traces[0];
+  assertEqual(trace.postMoveLooseHiddenPiece, false);
+  assertEqual(trace.postMoveLooseHiddenPieceCount, 0);
+  assertEqual(trace.postMoveProtectedUnderAttackCount, 1);
+  assertEqual((trace.postMoveLoosePiecePenalty ?? 0) === 0, true);
+});
+
+test('hidden cannon pressure on defended hidden horse is not loose hidden piece danger', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn'));
+  place(board, 7, 1, piece('red', 'cannon', 'cannon', false));
+  place(board, 2, 1, piece('red', 'pawn', 'pawn', true));
+  place(board, 0, 1, piece('black', 'horse', 'horse', false));
+  place(board, 0, 0, piece('black', 'rook', 'rook', true));
+  place(board, 3, 0, piece('black', 'pawn', 'pawn', false));
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const pawnMove = findMove(board, 'black', [3, 0], [4, 0]);
+  const rec = recommendMove(state, [pawnMove]);
+  assertOk(rec.traces);
+  const trace = rec.traces[0];
+  assertEqual(trace.postMoveLooseHiddenPiece, false);
+  assertEqual(trace.postMoveLooseHiddenPieceCount, 0);
+  assertEqual(trace.postMoveProtectedUnderAttackCount, 0);
 });
 
 test('trace for recommended move includes cannon pattern when edge cannon threatens hidden major', () => {

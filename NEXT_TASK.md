@@ -1,5 +1,31 @@
 # NEXT_TASK
 
+## Completed this round
+- Added post-move loose hidden piece evaluation.
+- Added trace fields for loose hidden piece count, protected-under-attack count, rescue, ignore, and penalty.
+- Added weights for loose-piece penalty, rescue bonus, protected-under-attack cap, and activation cap.
+- Added regression tests for unprotected hidden pawn rescue, protected attacked hidden piece, and hidden cannon fair-info behavior.
+
+## Suggested next tasks
+1. AI opening theory regression expansion.
+2. Pattern trigger logging / statistics.
+3. AI VS AI game data statistics.
+4. Self-play tuning experiments.
+5. Belief State / remaining pool probability.
+6. Threat Map MVP.
+
+## Do not do unless explicitly requested
+- Do not change Board UI.
+- Do not change moveNotation.
+- Do not change gameEngine / checkRules.
+- Do not weaken Fair AI permission boundaries.
+- Do not peek at unrevealed `realType`.
+- Do not add backend or database.
+
+---
+
+# NEXT_TASK
+
 ## 已完成
 
 - 音效系統（落子聲 + 吃子聲 + 將軍聲 + 絕殺語音）

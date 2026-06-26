@@ -85,6 +85,10 @@ export type AiWeights = {
   advisorRevealClogNearKingPenalty: number;
   deadMajorThreatHoldBonus: number;
   defendDoomedMajorPenalty: number;
+  postMoveLooseHiddenPiecePenalty: number;
+  rescueLooseHiddenPieceBonus: number;
+  protectedUnderAttackPenaltyCap: number;
+  activationOnlyCapWhenLoosePieceExists: number;
 };
 
 export const defaultAiWeights: AiWeights = {
@@ -180,4 +184,8 @@ export const defaultAiWeights: AiWeights = {
   advisorRevealClogNearKingPenalty: -110,
   deadMajorThreatHoldBonus: 70,
   defendDoomedMajorPenalty: -80,
+  postMoveLooseHiddenPiecePenalty: -110,
+  rescueLooseHiddenPieceBonus: 90,
+  protectedUnderAttackPenaltyCap: -20,
+  activationOnlyCapWhenLoosePieceExists: 20,
 };

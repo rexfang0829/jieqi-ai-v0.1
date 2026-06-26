@@ -46,6 +46,12 @@ export type AiMoveTrace = {
   deadMajorPressureScore?: number;
   defendsDoomedMajor?: boolean;
   forcedBadDefense?: boolean;
+  postMoveLooseHiddenPiece?: boolean;
+  postMoveLooseHiddenPieceCount?: number;
+  postMoveProtectedUnderAttackCount?: number;
+  postMoveLoosePiecePenalty?: number;
+  rescuesLooseHiddenPiece?: boolean;
+  ignoresLooseHiddenPiece?: boolean;
 };
 
 /**

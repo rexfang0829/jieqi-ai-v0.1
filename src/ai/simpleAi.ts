@@ -73,6 +73,12 @@ type MoveEvaluation = {
   deadMajorPressureScore: number;
   defendsDoomedMajor: boolean;
   forcedBadDefense: boolean;
+  postMoveLooseHiddenPiece: boolean;
+  postMoveLooseHiddenPieceCount: number;
+  postMoveProtectedUnderAttackCount: number;
+  postMoveLoosePiecePenalty: number;
+  rescuesLooseHiddenPiece: boolean;
+  ignoresLooseHiddenPiece: boolean;
 };
 
 type AiThreatInfo = {
@@ -82,6 +88,11 @@ type AiThreatInfo = {
   targetType: PieceType;
   targetRevealed: boolean;
   byMovedPiece: boolean;
+};
+
+type LooseHiddenPieceReport = {
+  loosePositions: Position[];
+  protectedUnderAttackPositions: Position[];
 };
 
 function detectRepetitiveCheck(state: GameState, move: Move, isCheck: boolean): boolean {
@@ -116,6 +127,10 @@ function applyMoveToBoard(board: Board, move: Move): Board {
 
 function samePosition(a: Position, b: Position): boolean {
   return a.row === b.row && a.col === b.col;
+}
+
+function includesPosition(positions: Position[], target: Position): boolean {
+  return positions.some(position => samePosition(position, target));
 }
 
 function pieceValue(piece: Piece, weights: AiWeights): number {
@@ -308,6 +323,44 @@ function isSquareAttacked(board: Board, bySide: Side, target: Position): boolean
   return getAllLegalMoves(board, bySide).some(move =>
     move.captured && samePosition(move.to, target)
   );
+}
+
+function isPositionAttackedByRevealedEnemy(board: Board, side: Side, target: Position): boolean {
+  const enemy = opponent(side);
+  return getAllLegalMoves(board, enemy).some(move =>
+    move.piece.revealed &&
+    move.captured &&
+    move.captured.side === side &&
+    samePosition(move.to, target)
+  );
+}
+
+function isHiddenPieceAttackedByRevealedEnemy(board: Board, side: Side, target: Position): boolean {
+  const piece = board[target.row][target.col];
+  return !!piece && !piece.revealed && isPositionAttackedByRevealedEnemy(board, side, target);
+}
+
+function analyzeLooseHiddenPieces(board: Board, side: Side): LooseHiddenPieceReport {
+  const loosePositions: Position[] = [];
+  const protectedUnderAttackPositions: Position[] = [];
+
+  for (let row = 0; row < board.length; row++) {
+    for (let col = 0; col < board[row].length; col++) {
+      const piece = board[row][col];
+      if (!piece || piece.side !== side || piece.revealed) continue;
+
+      const position = { row, col };
+      if (!isHiddenPieceAttackedByRevealedEnemy(board, side, position)) continue;
+
+      if (isSquareProtectedBySide(board, side, position)) {
+        protectedUnderAttackPositions.push(position);
+      } else {
+        loosePositions.push(position);
+      }
+    }
+  }
+
+  return { loosePositions, protectedUnderAttackPositions };
 }
 
 function isPrematureOpeningCannonStrike(state: GameState, move: Move): boolean {
@@ -1021,6 +1074,46 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     captureGain === 0 && !effectiveCheck && !blocksImmediateWin;
   const forcedBadDefense = defendsDoomedMajor;
 
+  // Post-move loose hidden piece scan: only revealed enemy attackers count.
+  const beforeLooseHiddenPieces = analyzeLooseHiddenPieces(state.board, state.turn);
+  const postMoveLooseHiddenPieces = analyzeLooseHiddenPieces(nextBoard, state.turn);
+  const postMoveLooseHiddenPieceCount = postMoveLooseHiddenPieces.loosePositions.length;
+  const postMoveProtectedUnderAttackCount = postMoveLooseHiddenPieces.protectedUnderAttackPositions.length;
+  const postMoveLooseHiddenPiece = postMoveLooseHiddenPieceCount > 0;
+  const rescuedLooseHiddenPieceCount = beforeLooseHiddenPieces.loosePositions.filter(position =>
+    !includesPosition(postMoveLooseHiddenPieces.loosePositions, position) &&
+    !includesPosition(postMoveLooseHiddenPieces.protectedUnderAttackPositions, position)
+  ).length;
+  const movedFromLooseHiddenPiece = includesPosition(beforeLooseHiddenPieces.loosePositions, move.from);
+  const movedPieceStillAttackedByRevealedEnemy =
+    movedFromLooseHiddenPiece && isPositionAttackedByRevealedEnemy(nextBoard, state.turn, move.to);
+  const rescuesLooseHiddenPiece = rescuedLooseHiddenPieceCount > 0 && !movedPieceStillAttackedByRevealedEnemy;
+  const ignoresLooseHiddenPiece =
+    beforeLooseHiddenPieces.loosePositions.length > 0 &&
+    rescuedLooseHiddenPieceCount === 0 &&
+    !rescuesLooseHiddenPiece;
+  const postMoveLoosePiecePenalty =
+    postMoveLooseHiddenPieceCount * weights.postMoveLooseHiddenPiecePenalty;
+  const rescueLooseHiddenPieceScore = rescuesLooseHiddenPiece ? weights.rescueLooseHiddenPieceBonus : 0;
+  const protectedUnderAttackPenalty = postMoveProtectedUnderAttackCount > 0
+    ? Math.max(
+      weights.protectedUnderAttackPenaltyCap,
+      -10 * postMoveProtectedUnderAttackCount
+    )
+    : 0;
+  const activationOnlyScore =
+    Math.max(0, structure.score) +
+    Math.max(0, majorActivationScore) +
+    Math.max(0, opponentRevealSuppressionScore);
+  const activationOnlyCapPenalty =
+    ignoresLooseHiddenPiece &&
+    captureGain === 0 &&
+    !effectiveCheck &&
+    !blocksImmediateWin &&
+    activationOnlyScore > weights.activationOnlyCapWhenLoosePieceExists
+      ? -(activationOnlyScore - weights.activationOnlyCapWhenLoosePieceExists)
+      : 0;
+
   const forcingReply =
     blocksImmediateWin ||
     effectiveCheck ||
@@ -1048,6 +1141,7 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     structure.releasedElephantFromPressure ||
     blocksImmediateWin ||
     effectiveCheck ||
+    rescuesLooseHiddenPiece ||
     forcingReply
   );
   const meaningless = !purposeful && !checking;
@@ -1092,6 +1186,10 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     repetitiveCheckPenaltyScore +
     advisorRevealClogPenalty +
     deadMajorPressureScore +
+    postMoveLoosePiecePenalty +
+    rescueLooseHiddenPieceScore +
+    protectedUnderAttackPenalty +
+    activationOnlyCapPenalty +
     forcedBadDefensePenalty -
     Math.round(reply.maxReplyGain * weights.maxReplyGainPenaltyRatio);
 
@@ -1153,11 +1251,19 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     deadMajorPressureScore,
     defendsDoomedMajor,
     forcedBadDefense,
+    postMoveLooseHiddenPiece,
+    postMoveLooseHiddenPieceCount,
+    postMoveProtectedUnderAttackCount,
+    postMoveLoosePiecePenalty,
+    rescuesLooseHiddenPiece,
+    ignoresLooseHiddenPiece,
   };
 }
 
 function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: boolean, weights: AiWeights): string {
   if (avoidedOpponentWin) return '避免對方一步殺';
+  if (evaluation.rescuesLooseHiddenPiece) return '暗子無保護受攻擊，優先脫離';
+  if (evaluation.postMoveLooseHiddenPiece && evaluation.postMoveLoosePiecePenalty < 0) return '下完仍有無保護暗子被抓，已扣分';
   if (evaluation.forcedBadDefense) return '暗士硬保死車，易卡陣，已扣分';
   if (evaluation.hangingMove) return '落點缺少保護，已扣分';
   if (evaluation.advisorRevealClogRisk && evaluation.advisorRevealClogPenalty < 0) return '暗士翻子易卡住將門，已扣分';
@@ -1278,6 +1384,12 @@ export function recommendMove(
     deadMajorPressureScore: evaluation.deadMajorPressureScore,
     defendsDoomedMajor: evaluation.defendsDoomedMajor,
     forcedBadDefense: evaluation.forcedBadDefense,
+    postMoveLooseHiddenPiece: evaluation.postMoveLooseHiddenPiece,
+    postMoveLooseHiddenPieceCount: evaluation.postMoveLooseHiddenPieceCount,
+    postMoveProtectedUnderAttackCount: evaluation.postMoveProtectedUnderAttackCount,
+    postMoveLoosePiecePenalty: evaluation.postMoveLoosePiecePenalty,
+    rescuesLooseHiddenPiece: evaluation.rescuesLooseHiddenPiece,
+    ignoresLooseHiddenPiece: evaluation.ignoresLooseHiddenPiece,
   }));
 
   return {
