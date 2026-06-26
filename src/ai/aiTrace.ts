@@ -3,7 +3,7 @@ import type { AiLearningPatternId } from './learningPatterns';
 
 /**
  * Per-candidate-move debug trace produced by recommendMove().
- * Does not affect scoring — purely for observation, statistics, and tuning.
+ * Does not affect scoring -- purely for observation, statistics, and tuning.
  */
 export type AiMoveTrace = {
   move: Move;
@@ -39,6 +39,13 @@ export type AiMoveTrace = {
   openingMajorGoal: boolean;
   majorActivation: boolean;
   opponentRevealSuppression: boolean;
+  advisorRevealClogRisk?: boolean;
+  advisorRevealClogPenalty?: number;
+  controlledDeadMajor?: boolean;
+  deadMajorThreatHold?: boolean;
+  deadMajorPressureScore?: number;
+  defendsDoomedMajor?: boolean;
+  forcedBadDefense?: boolean;
 };
 
 /**

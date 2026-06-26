@@ -66,6 +66,13 @@ type MoveEvaluation = {
   openingMajorGoal: boolean;
   majorActivation: boolean;
   opponentRevealSuppression: boolean;
+  advisorRevealClogRisk: boolean;
+  advisorRevealClogPenalty: number;
+  controlledDeadMajor: boolean;
+  deadMajorThreatHold: boolean;
+  deadMajorPressureScore: number;
+  defendsDoomedMajor: boolean;
+  forcedBadDefense: boolean;
 };
 
 type AiThreatInfo = {
@@ -847,6 +854,67 @@ function opponentReplyPenalty(board: Board, side: Side, movedTo: Position, moved
   };
 }
 
+// ─── 暗士翻子卡陣風險 ────────────────────────────────────────────────────────
+
+function isInOwnPalaceArea(side: Side, pos: Position): boolean {
+  if (side === 'red') return pos.row >= 7 && pos.col >= 3 && pos.col <= 5;
+  return pos.row <= 2 && pos.col >= 3 && pos.col <= 5;
+}
+
+function detectAdvisorRevealClogRisk(
+  move: Move,
+  captureGain: number,
+  effectiveCheck: boolean,
+  blocksImmediateWin: boolean,
+  weights: AiWeights
+): { isRisk: boolean; penalty: number } {
+  if (move.piece.revealed) return { isRisk: false, penalty: 0 };
+  if (move.piece.originalType !== 'advisor') return { isRisk: false, penalty: 0 };
+  // Only fire if this move will reveal the advisor (any move of unrevealed piece reveals it)
+  if (captureGain > 0 || effectiveCheck || blocksImmediateWin) return { isRisk: false, penalty: 0 };
+  const nearKing = isInOwnPalaceArea(move.piece.side, move.from) ||
+    isInOwnPalaceArea(move.piece.side, move.to);
+  const penalty = nearKing
+    ? weights.advisorRevealClogNearKingPenalty
+    : weights.advisorRevealClogPenalty;
+  return { isRisk: true, penalty };
+}
+
+// ─── 死車威脅保留 ──────────────────────────────────────────────────────────────
+
+function findControlledDeadMajors(board: Board, side: Side): Position[] {
+  const opp = side === 'red' ? 'black' : 'red';
+  const result: Position[] = [];
+  for (let row = 0; row < board.length; row++) {
+    for (let col = 0; col < board[row].length; col++) {
+      const piece = board[row][col];
+      if (!piece || piece.side !== opp) continue;
+      if (publicType(piece) !== 'rook') continue;
+      // If our side can attack that square, we "control" this rook
+      if (isSquareAttacked(board, side, { row, col })) {
+        result.push({ row, col });
+      }
+    }
+  }
+  return result;
+}
+
+function findOwnMajorsUnderAttack(board: Board, side: Side): Position[] {
+  const opp = side === 'red' ? 'black' : 'red';
+  const result: Position[] = [];
+  for (let row = 0; row < board.length; row++) {
+    for (let col = 0; col < board[row].length; col++) {
+      const piece = board[row][col];
+      if (!piece || piece.side !== side) continue;
+      if (publicType(piece) !== 'rook') continue;
+      if (isSquareAttacked(board, opp, { row, col })) {
+        result.push({ row, col });
+      }
+    }
+  }
+  return result;
+}
+
 function allowsOpponentWin(state: GameState, move: Move): boolean {
   const next = applyMove(state, move.from, move.to);
   if (next === state || next.status !== 'playing') return false;
@@ -936,6 +1004,23 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
   const majorActivationScore = openingMajorGoal ? weights.majorActivationBonus : 0;
   const opponentRevealSuppressionScore = opponentRevealSuppression ? weights.opponentRevealSuppressionBonus : 0;
 
+  // 暗士翻子卡陣風險
+  const { isRisk: advisorRevealClogRisk, penalty: advisorRevealClogPenalty } =
+    detectAdvisorRevealClogRisk(move, captureGain, effectiveCheck, blocksImmediateWin, weights);
+
+  // 死車威脅保留：對方車已被我方控制（hangingMove 後才能確定是否保留）
+  const controlledDeadMajorPositions = findControlledDeadMajors(state.board, state.turn);
+  const controlledDeadMajor = controlledDeadMajorPositions.length > 0;
+  const capturedControlledRook = controlledDeadMajor &&
+    !!move.captured && publicType(move.captured) === 'rook' &&
+    controlledDeadMajorPositions.some(p => p.row === move.to.row && p.col === move.to.col);
+
+  // 硬保死車扣分：暗士翻子保護己方已被對方控制的車
+  const ownMajorsUnderAttack = findOwnMajorsUnderAttack(state.board, state.turn);
+  const defendsDoomedMajor = advisorRevealClogRisk && ownMajorsUnderAttack.length > 0 &&
+    captureGain === 0 && !effectiveCheck && !blocksImmediateWin;
+  const forcedBadDefense = defendsDoomedMajor;
+
   const forcingReply =
     blocksImmediateWin ||
     effectiveCheck ||
@@ -968,6 +1053,9 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
   const meaningless = !purposeful && !checking;
   const highValueMover = defensiveTargetValue(move.piece, state.board, move.from, weights) >= weights.pieceValues.horse;
   const hangingMove = highValueMover && !protectedMove && !hasClearGain;
+  const deadMajorThreatHold = controlledDeadMajor && !capturedControlledRook && !hangingMove;
+  const deadMajorPressureScore = deadMajorThreatHold ? weights.deadMajorThreatHoldBonus : 0;
+  const forcedBadDefensePenalty = forcedBadDefense ? weights.defendDoomedMajorPenalty : 0;
   const purposePenalty = meaningless ? weights.meaninglessMovePenalty : 0;
   const checkPenalty = lowQualityCheck ? weights.lowQualityCheckPenalty : 0;
   const checkBonus = effectiveCheck ? weights.effectiveCheckBonus : 0;
@@ -1001,7 +1089,10 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     checkPenalty +
     safeCapturePriorityBonus +
     speculativeAttackPenalty +
-    repetitiveCheckPenaltyScore -
+    repetitiveCheckPenaltyScore +
+    advisorRevealClogPenalty +
+    deadMajorPressureScore +
+    forcedBadDefensePenalty -
     Math.round(reply.maxReplyGain * weights.maxReplyGainPenaltyRatio);
 
   return {
@@ -1055,12 +1146,21 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     openingMajorGoal,
     majorActivation,
     opponentRevealSuppression,
+    advisorRevealClogRisk,
+    advisorRevealClogPenalty,
+    controlledDeadMajor,
+    deadMajorThreatHold,
+    deadMajorPressureScore,
+    defendsDoomedMajor,
+    forcedBadDefense,
   };
 }
 
 function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: boolean, weights: AiWeights): string {
   if (avoidedOpponentWin) return '避免對方一步殺';
+  if (evaluation.forcedBadDefense) return '暗士硬保死車，易卡陣，已扣分';
   if (evaluation.hangingMove) return '落點缺少保護，已扣分';
+  if (evaluation.advisorRevealClogRisk && evaluation.advisorRevealClogPenalty < 0) return '暗士翻子易卡住將門，已扣分';
   if (evaluation.revealChoiceRisk) return '吃低價暗子後給對方選擇權，已降分';
   if (best.captured && evaluation.exchangeNet < 0) return '交換可能虧損，已扣分';
   if (evaluation.capturedConnectedAdvisor) return '吃掉連環士';
@@ -1082,6 +1182,7 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (evaluation.forcingReply) return '形成強制應手';
   if (evaluation.pawnLineDefense && evaluation.structurePatterns.includes('hidden_rook_guard_point')) return '活馬並保護暗車控制點';
   if (evaluation.pawnLineDefense) return '守住兵線關鍵點';
+  if (evaluation.deadMajorThreatHold) return '保留死車威脅，持續壓制';
   if (evaluation.preservesHiddenCannon) return '保留暗炮威懾';
   if (evaluation.leaveKeySquareScore < 0) return '離開關鍵點，價值下降';
   if (evaluation.meaningless) return '目的性不足，已扣分';
@@ -1097,7 +1198,7 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (evaluation.protectedMove) return '落點有保護';
   if (evaluation.openingMajorGoal && evaluation.opponentRevealSuppression) return '活出大子並壓制對方翻子';
   if (evaluation.openingMajorGoal) return '開局優先活出大子';
-  if (evaluation.openingBonus > 0) return '開局優先翻 1379 路兵';
+  if (evaluation.openingBonus > 0) return '開局優先翹 1379 路兵';
   if (evaluation.risk > 0 || evaluation.immediateCapture) return '避免明顯送子';
   return '簡單評分最佳';
 }
@@ -1170,6 +1271,13 @@ export function recommendMove(
     openingMajorGoal: evaluation.openingMajorGoal,
     majorActivation: evaluation.majorActivation,
     opponentRevealSuppression: evaluation.opponentRevealSuppression,
+    advisorRevealClogRisk: evaluation.advisorRevealClogRisk,
+    advisorRevealClogPenalty: evaluation.advisorRevealClogPenalty,
+    controlledDeadMajor: evaluation.controlledDeadMajor,
+    deadMajorThreatHold: evaluation.deadMajorThreatHold,
+    deadMajorPressureScore: evaluation.deadMajorPressureScore,
+    defendsDoomedMajor: evaluation.defendsDoomedMajor,
+    forcedBadDefense: evaluation.forcedBadDefense,
   }));
 
   return {
@@ -1180,10 +1288,8 @@ export function recommendMove(
   };
 }
 
-
 /**
- * Oracle AI 入口：完整資訊，用於 debug / 分析 / 輔助盤面。
- * 等同於原本的 recommendMove()，命名清楚表達天眼性質。
+ * Oracle AI: full info, for debug / analysis / assisted board.
  */
 export function recommendMoveOracle(
   state: GameState,
@@ -1194,9 +1300,8 @@ export function recommendMoveOracle(
 }
 
 /**
- * Fair AI 入口：正式下棋使用。
- * 自動建立公平資訊視圖，未翻棋子的 realType 不可見。
- * MVP 階段忽略外部 candidateMoves，避免帶入完整 realType。
+ * Fair AI: official game entry. Hides unrevealed realType via AiVisibleState.
+ * MVP ignores external candidateMoves to avoid leaking full realType via Move objects.
  */
 export function recommendMoveFair(
   stateOrView: GameState | AiVisibleState,

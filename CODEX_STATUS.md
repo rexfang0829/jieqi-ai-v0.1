@@ -451,35 +451,22 @@ npm.cmd run build
    - 新增 5 個 trace 欄位：`revealChoiceRisk` / `revealChoicePenalty` / `openingMajorGoal` / `majorActivation` / `opponentRevealSuppression`
 
 3. **`src/ai/simpleAi.ts`**（修改）：
-   - 新增 helper `computeRevealChoiceRisk()`：高價子吃低外觀暗子且落點被對方暗子看住 → 扣分（不偷看 realType）
-   - 新增 helper `computeOpeningMajorActivation()`：偵測開局大子活動（公平資訊：只用 piece.revealed / originalType / 初始位置，嚴禁用 unrevealed realType）
-   - `evaluateMove()` 整合兩個 helper，新增 `finalHiddenPressureScore`（非大子活動手限制壓制加分上限）
-   - `reasonFor()` 新增 3 個 reason：`吃低價暗子後給對方選擇權，已降分` / `活出大子並壓制對方翻子` / `開局優先活出大子`
-   - trace building 補齊 5 個新欄位
+   - 新增 helper `computeRevealChoiceRisk()`：高價子吃低外觀
 
-4. **`src/ai/aiDebugReport.ts`**（修改）：
-   - `fmtTrace()` 新增 5 個欄位輸出（用 `?? false` / `?? 0` 避免舊報告壞掉）
+---
 
-5. **`tests/rules.test.ts`**（新增 6 個測試 A~F）：
-   - A：暗車吃被暗車看著的未過河暗卒應被降分
-   - B：安全吃高價明子不誤扣
-   - C：吃高價外觀暗子不禁止
-   - D：開局活出大子優先於純暗卒壓制
-   - E：壓制對方翻子要服務於大子活動目標
-   - F：公平資訊防呆（unrevealed realType 不影響 majorActivation/score）
+## 2026-06-27 死車威脅保留 + 暗士翻子卡陣風險 MVP
 
-**公平資訊保證**：
-- `computeOpeningMajorActivation` 嚴禁用 `!piece.revealed && piece.realType === 'rook'` 加分
-- 只用 `piece.revealed === true` 後的 realType，或 `originalType`（公開資訊）
-- 測試 F 驗證兩個 realType 不同但公開資訊相同的盤面，分數必須相同
+### 功能概覽
+1. **advisorRevealClogRisk**：暗士翻子易卡住將門，扣分 (-70 基本 / -110 鄰近將軍)
+2. **deadMajorThreatHold**：保留對方死車威脅 (+70)，不须立即吃車
+3. **forcedBadDefense**：暗士翻子硬保已被控制的己方車，扣分 (-80)
 
-**測試**：`npm test` 全部通過（含所有既有測試）。
+### 修改檔案
+- `src/ai/aiWeights.ts`：新增 4 個權重（advisorRevealClogPenalty / advisorRevealClogNearKingPenalty / deadMajorThreatHoldBonus / defendDoomedMajorPenalty）
+- `src/ai/aiTrace.ts`：新增 7 個安全 trace 欄位
+- `src/ai/simpleAi.ts`：新增 helper functions + evaluateMove 整合 + reasonFor + trace 建立
+- `tests/rules.test.ts`：新增 3 個測試
 
-**grep 驗收**：
-- revealChoiceRisk: 7 次（tests）
-- revealChoicePenalty: 3 次
-- openingMajorGoal: 4 次
-- majorActivation: 11 次
-- 開局優先活出大子: 1 次
-- 選擇權: 3 次
-- realType: 34 次
+### 測試
+- 全部測試通過，`npx tsc --noEmit` 清洁

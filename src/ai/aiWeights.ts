@@ -81,6 +81,10 @@ export type AiWeights = {
   revealChoiceRiskPenaltyBase: number;
   revealChoiceRiskHighValueExtra: number;
   hiddenPressureNonActivationCap: number;
+  advisorRevealClogPenalty: number;
+  advisorRevealClogNearKingPenalty: number;
+  deadMajorThreatHoldBonus: number;
+  defendDoomedMajorPenalty: number;
 };
 
 export const defaultAiWeights: AiWeights = {
@@ -172,4 +176,8 @@ export const defaultAiWeights: AiWeights = {
   revealChoiceRiskPenaltyBase: 90,
   revealChoiceRiskHighValueExtra: 40,
   hiddenPressureNonActivationCap: 16,
+  advisorRevealClogPenalty: -70,
+  advisorRevealClogNearKingPenalty: -110,
+  deadMajorThreatHoldBonus: 70,
+  defendDoomedMajorPenalty: -80,
 };

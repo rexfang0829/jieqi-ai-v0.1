@@ -2356,3 +2356,77 @@ test('Oracle AI and Fair AI entrypoints both return recommendations', () => {
   assertOk(fair.move);
   assertOk(oracle.move);
 });
+
+// --- Dead Major Threat Hold + Advisor Reveal Clog Risk MVP tests ---------------
+
+test('hidden advisor reveal near king has clog risk', () => {
+  // Red hidden advisor at palace area (row 7, col 4), moving to reveal
+  // No capture, no effective check, no blocking win
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  // Red hidden advisor in palace area (originalType=advisor, revealed=false)
+  place(board, 7, 3, piece('red', 'advisor', 'advisor', false));
+  // Give red another move option (a pawn outside palace)
+  place(board, 5, 0, piece('red', 'pawn', 'pawn', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const rec = recommendMove(state);
+  assertOk(rec.traces);
+  // Find the advisor move trace
+  const advisorTrace = rec.traces.find(t =>
+    t.move.piece.originalType === 'advisor' && !t.move.piece.revealed
+  );
+  assertOk(advisorTrace);
+  assertEqual(advisorTrace.advisorRevealClogRisk, true);
+  assertOk((advisorTrace.advisorRevealClogPenalty ?? 0) < 0);
+  assertOk(advisorTrace.reason.includes('士') || advisorTrace.reason.includes('卡'));
+});
+
+test('controlled dead rook can be held instead of immediately captured', () => {
+  // Red can capture black's rook, but there's also a non-capturing move
+  // deadMajorThreatHold should be true for the non-capturing move
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  // Red revealed rook at (5,0) can attack black revealed rook at (5,4)
+  place(board, 5, 0, piece('red', 'rook', 'rook', true));
+  place(board, 5, 4, piece('black', 'rook', 'rook', true));
+  // Give red a non-capturing pawn move
+  place(board, 6, 2, piece('red', 'pawn', 'pawn', true));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const rec = recommendMove(state);
+  assertOk(rec.traces);
+  // Find a non-capturing trace that should have controlledDeadMajor=true
+  const holdTrace = rec.traces.find(t => !t.move.captured && t.controlledDeadMajor === true);
+  assertOk(holdTrace);
+  assertEqual(holdTrace.deadMajorThreatHold, true);
+  assertOk((holdTrace.deadMajorPressureScore ?? 0) > 0);
+});
+
+test('forced hidden advisor defense of doomed rook is penalized', () => {
+  // Red has a rook under attack by black, and only a hidden advisor can "defend"
+  // That advisor move should get forcedBadDefense=true and advisorRevealClogRisk=true
+  // Unrevealed advisor rule: can only move diagonally to palace center (8,4) for red.
+  // Placing advisor at (9,3) gives it exactly one legal move: (9,3)→(8,4).
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  // Red revealed rook at (7,0) - under attack by black rook at (7,7)
+  place(board, 7, 0, piece('red', 'rook', 'rook', true));
+  place(board, 7, 7, piece('black', 'rook', 'rook', true));
+  // Red hidden advisor at (9,3): only legal move is diagonal to palace center (8,4)
+  place(board, 9, 3, piece('red', 'advisor', 'advisor', false));
+  // Pawn on col 4 to prevent kings-facing, and gives an alternative move
+  place(board, 5, 4, piece('red', 'pawn', 'pawn', true));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const rec = recommendMove(state);
+  assertOk(rec.traces);
+  const advisorTrace = rec.traces.find(t =>
+    t.move.piece.originalType === 'advisor' && !t.move.piece.revealed
+  );
+  assertOk(advisorTrace);
+  assertEqual(advisorTrace.advisorRevealClogRisk, true);
+  assertEqual(advisorTrace.forcedBadDefense, true);
+  // reason should not say "preserve hidden cannon" - should be about advisor/doomed
+  assertOk(advisorTrace.reason !== '保留暗炮威懾');
+});
