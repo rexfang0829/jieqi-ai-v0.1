@@ -7,7 +7,11 @@ export type AiLearningPatternId =
   | 'preserve_hidden_cannon_threat'
   | 'horse_release_to_guard_pawn_line'
   | 'elephant_release_from_cannon_pressure'
-  | 'hidden_rook_guard_point';
+  | 'hidden_rook_guard_point'
+  | 'opening_edge_cannon_structure_pressure'
+  | 'opening_edge_rook_line_lock_defense'
+  | 'horse_release_from_cannon_pressure'
+  | 'horse_release_to_pawn_line_guard';
 
 export type AiLearningPattern = {
   id: AiLearningPatternId;
@@ -70,5 +74,54 @@ export const aiLearningPatterns: Record<AiLearningPatternId, AiLearningPattern> 
     label: '暗車守控制點',
     description: '暗車尚未公開時仍可能控制前方關鍵點，活馬或守線手應考慮保留此威懾。',
     futureSignals: ['patternTriggered', 'guardPointControlled', 'hiddenRookPreserved', 'finalResult'],
+  },
+
+  /* ── 邊炮 / 邊 G 分流 patterns（對應 simpleAi.ts 邊炮 / 邊車分流邏輯） ── */
+
+  opening_edge_cannon_structure_pressure: {
+    id: 'opening_edge_cannon_structure_pressure',
+    label: '邊炮炮架壓制結構',
+    description: [
+      '場景：敵方邊兵翻出炮，炮透過炮架（通常是己方或對方暗子）壓制暗車或暗大子。',
+      '威脅核心是炮線貫穿壓制，而非直接吃兵線。',
+      '標準應對方向：偏馬八進九（活馬靠邊解除炮線壓力）或象七進九（堵炮架）。',
+      '此 pattern 不應套用兵線封鎖防守邏輯（兵線封鎖屬於 opening_edge_rook_line_lock_defense）。',
+    ].join(' '),
+    futureSignals: ['patternTriggered', 'cannonLinePressureDelta', 'chosenMove', 'finalResult'],
+  },
+
+  opening_edge_rook_line_lock_defense: {
+    id: 'opening_edge_rook_line_lock_defense',
+    label: '邊路車 / G 封鎖兵線',
+    description: [
+      '場景：敵方邊兵翻出 G（車）或高價暗子，風險是直接吃進兵線、封鎖己方兵卒翻子權。',
+      '威脅核心是兵線主動權喪失，而非炮線壓制。',
+      '標準應對方向：偏馬八進七（守兵線、保持翻子空間）。',
+      '此 pattern 不應套用邊炮壓制的象 / 馬靠邊邏輯（邊炮邏輯屬於 opening_edge_cannon_structure_pressure）。',
+    ].join(' '),
+    futureSignals: ['patternTriggered', 'pawnLineLockDelta', 'chosenMove', 'finalResult'],
+  },
+
+  horse_release_from_cannon_pressure: {
+    id: 'horse_release_from_cannon_pressure',
+    label: '活馬解除邊炮壓制',
+    description: [
+      '對應 opening_edge_cannon_structure_pressure 的活馬回應。',
+      '馬往邊路（馬八進九方向）活出，目的是解除炮線對後方大子的壓制、或搶占邊路控制點。',
+      '應記錄活馬後炮線壓力是否實際下降，作為後續自我對弈調參依據。',
+    ].join(' '),
+    futureSignals: ['patternTriggered', 'cannonLinePressureDelta', 'horseMobilityDelta', 'finalResult'],
+  },
+
+  horse_release_to_pawn_line_guard: {
+    id: 'horse_release_to_pawn_line_guard',
+    label: '活馬守兵線',
+    description: [
+      '對應 opening_edge_rook_line_lock_defense 的活馬回應。',
+      '馬往內側（馬八進七方向）活出，目的是守兵線翻子點、防止敵方車 / G 直接吃入兵線。',
+      '與 horse_release_to_guard_pawn_line（舊版 pattern，語義相同）保持相容；新紀錄建議優先用此 id。',
+      '應記錄守線後兵線翻子安全度是否實際提升。',
+    ].join(' '),
+    futureSignals: ['patternTriggered', 'pawnLineLockDelta', 'guardedPawnLine', 'finalResult'],
   },
 };
