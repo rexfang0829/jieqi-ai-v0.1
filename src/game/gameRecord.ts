@@ -33,18 +33,9 @@ export type GameRecord = {
   redTimeMs?: number;
   blackTimeMs?: number;
   variations?: GameVariation[];
-  /**
-   * The true initial GameState at game start (before move 1), including all
-   * hidden-piece realType values. Playback starts from this state and applies
-   * moves in order, giving an exact reproduction without randomisation.
-   * Old records without this field fall back to snapshots or newGame() replay.
-   */
   initialState?: GameState;
-  /**
-   * @deprecated Kept for backward compatibility with records saved before
-   * the initialState strategy. New records use initialState instead.
-   */
   snapshots?: GameState[];
+  moveAnnotations?: ({ score: number; reason: string } | null)[];
 };
 
 type GameRecordList = {
@@ -65,7 +56,6 @@ function safeStatus(status: GameStatus): GameRecord['finalStatus'] {
   return status === 'red_win' || status === 'black_win' ? status : 'playing';
 }
 
-/** Format a stored ISO date string as a local date string for display. */
 function fmtLocalDate(iso: string): string {
   try {
     const d = new Date(iso);
@@ -95,7 +85,7 @@ export function createGameRecord(input: {
   const now = nowIso();
   return {
     version: GAME_RECORD_VERSION,
-    id: input.id ?? `record-${Date.now()}`,
+    id: input.id ?? 'record-' + Date.now(),
     createdAt: input.createdAt ?? now,
     updatedAt: input.updatedAt ?? now,
     title: input.title?.trim() || '未命名棋譜',
@@ -121,15 +111,15 @@ export function resultText(status: GameRecord['finalStatus']): string {
 
 export function recordToText(record: GameRecord): string {
   const lines = [
-    `局名：${record.title}`,
-    `時間：${fmtLocalDate(record.createdAt)}`,
-    `紅方：${record.redPlayer ?? '紅方'}`,
-    `黑方：${record.blackPlayer ?? '黑方'}`,
-    `結果：${resultText(record.finalStatus)}${record.endReason === 'timeout' ? `（${record.timeoutSide === 'red' ? '紅方' : '黑方'}時間到）` : ''}`,
+    '局名：' + record.title,
+    '時間：' + fmtLocalDate(record.createdAt),
+    '紅方：' + (record.redPlayer ?? '紅方'),
+    '黑方：' + (record.blackPlayer ?? '黑方'),
+    '結果：' + resultText(record.finalStatus) + (record.endReason === 'timeout' ? '（' + (record.timeoutSide === 'red' ? '紅方' : '黑方') + '時間到）' : ''),
     '',
-    ...record.moves.map((move, index) => `${index + 1}. ${moveText(move)}`),
+    ...record.moves.map((move, index) => (index + 1) + '. ' + moveText(move)),
   ];
-  if (record.note) lines.push('', `備註：${record.note}`);
+  if (record.note) lines.push('', '備註：' + record.note);
   return lines.join('\n');
 }
 

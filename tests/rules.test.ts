@@ -1883,3 +1883,107 @@ test('safe capture: direct checkmate still takes priority despite repetitive che
   assertEqual(rec.score, 999999);
   assertEqual(rec.reason, '此步直接形成絕殺');
 });
+
+// ══════════════════════════════════════════════════════════════
+// 人 vs AI 測試模式 — 基本功能驗證
+// ══════════════════════════════════════════════════════════════
+
+test('human vs AI: AI produces a legal response after a human move', () => {
+  // Simulate human (red) making a move, then AI (black) responding
+  const initial = newGame();
+  // Human (red) reveals first piece by making any legal move
+  const redMoves = getAllLegalMoves(initial.board, 'red');
+  assertOk(redMoves.length > 0);
+  const humanMove = redMoves[0];
+  const afterHuman = applyMove(initial, humanMove.from, humanMove.to);
+  assertEqual(afterHuman.turn, 'black');
+
+  // AI (black) responds
+  const aiResult = recommendMove(afterHuman);
+  assertOk(aiResult.move !== null);
+  // AI move must be a legal black move
+  const blackLegal = getAllLegalMoves(afterHuman.board, 'black');
+  const aiMoveIsLegal = blackLegal.some(m =>
+    m.from.row === aiResult.move!.from.row && m.from.col === aiResult.move!.from.col &&
+    m.to.row === aiResult.move!.to.row && m.to.col === aiResult.move!.to.col
+  );
+  assertOk(aiMoveIsLegal);
+});
+
+test('human vs AI: AI move enters history', () => {
+  // After human move + AI move, history has 2 entries
+  const initial = newGame();
+  const redMoves = getAllLegalMoves(initial.board, 'red');
+  const humanMove = redMoves[0];
+  const afterHuman = applyMove(initial, humanMove.from, humanMove.to);
+  const aiResult = recommendMove(afterHuman);
+  assertOk(aiResult.move !== null);
+  const afterAi = applyMove(afterHuman, aiResult.move!.from, aiResult.move!.to);
+  assertEqual(afterAi.history.length, 2);
+  assertEqual(afterAi.turn, 'red');
+});
+
+test('human vs AI: can create a human-vs-AI game record with moveAnnotations', () => {
+  // Build a 2-move game (human red, AI black) and save as record
+  const initial = newGame();
+  const redMoves = getAllLegalMoves(initial.board, 'red');
+  const humanMove = redMoves[0];
+  const afterHuman = applyMove(initial, humanMove.from, humanMove.to);
+  const aiResult = recommendMove(afterHuman);
+  assertOk(aiResult.move !== null);
+  const afterAi = applyMove(afterHuman, aiResult.move!.from, aiResult.move!.to);
+
+  // Build annotation array: null for human move (index 0), AI info for index 1
+  const annotations: ({ score: number; reason: string } | null)[] = [
+    null,
+    { score: aiResult.score, reason: aiResult.reason },
+  ];
+
+  const record = {
+    ...createGameRecord({
+      title: '人 vs AI 測試',
+      moves: afterAi.history,
+      finalStatus: afterAi.status,
+      redPlayer: '玩家（紅）',
+      blackPlayer: 'AI（黑）',
+    }),
+    initialState: initial,
+    moveAnnotations: annotations,
+  };
+
+  assertEqual(record.moves.length, 2);
+  assertEqual(record.moveAnnotations?.length, 2);
+  assertEqual(record.moveAnnotations?.[0], null);
+  assertOk(typeof record.moveAnnotations?.[1]?.score === 'number');
+  assertOk(typeof record.moveAnnotations?.[1]?.reason === 'string');
+  assertEqual(record.redPlayer, '玩家（紅）');
+  assertEqual(record.blackPlayer, 'AI（黑）');
+});
+
+test('human vs AI: old records without moveAnnotations still load correctly', () => {
+  const mockStorage = {
+    data: {} as Record<string, string>,
+    getItem(k: string) { return this.data[k] ?? null; },
+    setItem(k: string, v: string) { this.data[k] = v; },
+  };
+  // Save an old-style record (no moveAnnotations)
+  const initial = newGame();
+  const redMoves = getAllLegalMoves(initial.board, 'red');
+  const afterOne = applyMove(initial, redMoves[0].from, redMoves[0].to);
+  const oldRecord = createGameRecord({
+    title: '舊棋譜',
+    moves: afterOne.history,
+    finalStatus: afterOne.status,
+    redPlayer: '紅方',
+    blackPlayer: '黑方',
+  });
+  // No moveAnnotations — simulate old schema
+  saveGameRecord(mockStorage, oldRecord);
+
+  const loaded = loadGameRecords(mockStorage);
+  assertEqual(loaded.length, 1);
+  assertEqual(loaded[0].title, '舊棋譜');
+  // moveAnnotations should be absent (undefined), not crash
+  assertEqual(loaded[0].moveAnnotations, undefined);
+  assertEqual(loaded[0].moves.length, 1);
+});

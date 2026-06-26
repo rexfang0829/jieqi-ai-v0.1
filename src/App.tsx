@@ -5,6 +5,7 @@ import { MoveList } from './components/MoveList';
 import { AiPanel } from './components/AiPanel';
 import { WisdomPanel } from './components/WisdomPanel';
 import { PositionEditor } from './components/PositionEditor';
+import { HumanVsAiPanel } from './components/HumanVsAiPanel';
 import {
   clearBoard, clearSquare, correctSelectedRealType, editSquare, editSquareError,
   revealHotkeyType, revealSelectedByHotkey, setTurn, type PieceDraft,
@@ -30,16 +31,17 @@ import {
 } from './game/gameRecord';
 
 type CorrectionAnchor = { x: number; y: number };
-type AppMode = 'home' | 'play' | 'records' | 'ai-master' | 'ai-vs-ai' | 'editor';
+type AppMode = 'home' | 'play' | 'records' | 'ai-master' | 'ai-vs-ai' | 'editor' | 'human-vs-ai';
 type RecordsPage = 'library' | 'recent' | 'favorites' | 'masters' | 'playback';
 type AnalysisSource = { recordId: string; baseStep: number; baseState: GameState };
 
 const modeCards: { mode: Exclude<AppMode, 'home'>; title: string; body: string }[] = [
-  { mode: 'play',      title: '一般揭棋模式',      body: '棋盤對弈主介面：翻子、落子、吃子、將軍、絕殺一氣呵成；含 10 分鐘對弈鐘，自動儲存棋譜（不支援長按修正棋種）。' },
-  { mode: 'records',   title: '打譜模式',           body: '棋譜庫管理與回放：儲存對局、逐步回放、檢視棋譜。' },
-  { mode: 'ai-master', title: '輔助盤面模式',       body: '輸入盤面讓 AI 找出最佳解，分析最強後續着法。' },
-  { mode: 'ai-vs-ai',  title: 'AI VS AI 模式',        body: '讓紅黑雙方都由 AI 自動對弈，可單步 / 自動播放，並儲存棋譜。' },
-  { mode: 'editor',    title: '局面編輯 / 測試模式', body: '清空棋盤、手動擺子、換手方、儲存與載入局面。' },
+  { mode: 'play',         title: '一般揭棋模式',      body: '棋盤對弈主介面：翻子、落子、吃子、將軍、絕殺一氣呵成；含 10 分鐘對弈鐘，自動儲存棋譜（不支援長按修正棋種）。' },
+  { mode: 'records',      title: '打譜模式',           body: '棋譜庫管理與回放：儲存對局、逐步回放、檢視棋譜。' },
+  { mode: 'human-vs-ai',  title: '人 vs AI 測試',      body: '選擇執紅或執黑，與 AI 對弈。AI 每步自動走棋並顯示思考理由，可儲存棋譜至打譜模式。' },
+  { mode: 'ai-master',    title: '輔助盤面模式',       body: '輸入盤面讓 AI 找出最佳解，分析最強後續着法。' },
+  { mode: 'ai-vs-ai',     title: 'AI VS AI 模式',      body: '讓紅黑雙方都由 AI 自動對弈，可單步 / 自動播放，並儲存棋譜。' },
+  { mode: 'editor',       title: '局面編輯 / 測試模式', body: '清空棋盤、手動擺子、換手方、儲存與載入局面。' },
 ];
 
 function storage() {
@@ -918,6 +920,13 @@ export default function App() {
         <WisdomPanel />
       </main>
     );
+  }
+
+  /* ══════════════════════════════════════════
+     人 vs AI 測試模式
+  ══════════════════════════════════════════ */
+  if (mode === 'human-vs-ai') {
+    return <HumanVsAiPanel onHome={goHome} storage={storage()} />;
   }
 
   /* ══════════════════════════════════════════

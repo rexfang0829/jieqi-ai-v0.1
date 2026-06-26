@@ -335,3 +335,39 @@ npm.cmd run build
    - `setState(snapshot)`、`setPast([])`、`setSelected(null)`、`closeCorrection()`、`cancelSync()`。
    - `setAiMasterNote(\`已載入棋譜第 ${playbackStep} 手局面\`)`。
    - `setMode('ai-master')`（�
+---
+
+### 2026-06-27 人 vs AI 測試對局 MVP（Claude）
+
+**目標**：新增可測試 AI 棋力的人機對弈模式，支援 AI 步法理由顯示與棋譜儲存。
+
+**新增 / 修改檔案**：
+
+1. **`src/components/HumanVsAiPanel.tsx`**（全新）：
+   - 自帶完整遊戲狀態（`gameState`、`past`、`initialState`、`aiAnnotations`）
+   - 選色畫面：執紅先手 / 執黑後手
+   - 人類走棋：點擊棋子 → 顯示合法落點 → 點目標落子
+   - AI 自動走棋：`gameState.turn === aiSide` 時 `setTimeout(400ms)` 觸發 `recommendMove()`
+   - AI 上一步面板：顯示棋步文字、分數、reason
+   - 重新開始 / 儲存棋譜 按鈕
+   - endgame banner + `playEndgameSound()`
+
+2. **`src/game/gameRecord.ts`**（修改）：
+   - `GameRecord` 加 `moveAnnotations?: ({ score: number; reason: string } | null)[]`
+   - index 與 `moves[]` 對齊，`null` = 人類走步，物件 = AI 走步
+   - optional 欄位，不破壞舊棋譜
+
+3. **`src/App.tsx`**（修改）：
+   - `AppMode` 加 `'human-vs-ai'`
+   - `modeCards` 加入「人 vs AI 測試」卡片（排在打譜模式後）
+   - `mode === 'human-vs-ai'` 渲染 `<HumanVsAiPanel onHome={goHome} storage={storage()} />`
+
+4. **`tests/rules.test.ts`**（新增 4 個測試）：
+   - A：AI 在人類走棋後產生合法回應
+   - B：AI 回應進入 history（共 2 手）
+   - C：可建立含 moveAnnotations 的人 vs AI 棋譜 record
+   - D：舊棋譜（無 moveAnnotations）仍可正常載入
+
+**測試**：`npm test` 24 個 AI 相關測試全部通過。  
+**TypeScript**：`npx tsc --noEmit` 無錯。  
+**建置**：沙盒 rollup native binary 限制（pre-existing），Vercel 正常。
