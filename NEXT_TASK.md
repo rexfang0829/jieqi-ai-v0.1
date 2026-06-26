@@ -56,3 +56,25 @@
 - `npx tsc --noEmit` 通過。
 - 更新 `CODEX_STATUS.md` 與 `NEXT_TASK.md`。
 - commit 並 push。
+# 下一輪建議：變化線 UX 與 AI 送殺測試收斂
+
+## 目標
+在不做大型重構的前提下，讓剛加入的棋譜變化線更好檢查，也讓 AI 戰術層有更多回歸測試。
+
+## 建議工作
+- 補一個明確的「避免送對方下一手絕殺」AI 回歸測試局面。
+- 變化線列表增加刪除或重新命名之前，先確認現有儲存 / 回放流程穩定。
+- 檢查回放變化後返回原棋譜的操作是否足夠清楚。
+
+## 不要做
+- 不做完整 minimax。
+- 不做 Threat Map。
+- 不做 Belief State / Monte Carlo / OCR / Ponder。
+- 不做多層巢狀 variation。
+- 不加後端、資料庫、登入系統。
+
+## 完成標準
+- `npm test` 通過。
+- `npx tsc --noEmit` 通過。
+- 更新 `CODEX_STATUS.md` 與 `NEXT_TASK.md`。
+- commit 並 push。

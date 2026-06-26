@@ -26,12 +26,13 @@ import { playBoardSoundFeedback } from './game/soundEffects';
 import { recommendMove } from './ai/simpleAi';
 import {
   createGameRecord, deleteGameRecord, loadGameRecords, resultText,
-  saveGameRecord, toggleFavoriteRecord, type GameRecord,
+  saveGameRecord, toggleFavoriteRecord, type GameRecord, type GameVariation,
 } from './game/gameRecord';
 
 type CorrectionAnchor = { x: number; y: number };
 type AppMode = 'home' | 'play' | 'records' | 'ai-master' | 'ai-vs-ai' | 'editor';
 type RecordsPage = 'library' | 'recent' | 'favorites' | 'masters' | 'playback';
+type AnalysisSource = { recordId: string; baseStep: number; baseState: GameState };
 
 const modeCards: { mode: Exclude<AppMode, 'home'>; title: string; body: string }[] = [
   { mode: 'play',      title: '一般揭棋模式',      body: '棋盤對弈主介面：翻子、落子、吃子、將軍、絕殺一氣呵成；含 10 分鐘對弈鐘，自動儲存棋譜（不支援長按修正棋種）。' },
@@ -59,6 +60,23 @@ function resultClass(status: GameRecord['finalStatus']): string {
   if (status === 'red_win') return 'red';
   if (status === 'black_win') return 'black';
   return 'playing';
+}
+
+function stateAtRecordStep(record: GameRecord, step: number): GameState {
+  function applyUpTo(start: GameState, moves: GameRecord['moves'], upTo: number) {
+    let s = start;
+    for (let i = 0; i < upTo && i < moves.length; i++) {
+      const m = moves[i];
+      const next = applyMove(s, m.from, m.to);
+      if (next !== s) s = next;
+    }
+    return s;
+  }
+
+  if (record.initialState) return applyUpTo(record.initialState, record.moves, step);
+  const snap = record.snapshots?.[step];
+  if (snap) return snap;
+  return applyUpTo(newGame(), record.moves, step);
 }
 
 function fmtMs(ms: number): string {
@@ -122,6 +140,9 @@ export default function App() {
   const [saveBlackPlayer, setSaveBlackPlayer] = useState('黑方');
   const [playbackRecord, setPlaybackRecord] = useState<GameRecord | null>(null);
   const [playbackStep, setPlaybackStep] = useState(0);
+  const [analysisSource, setAnalysisSource] = useState<AnalysisSource | null>(null);
+  const [analysisMoves, setAnalysisMoves] = useState<Move[]>([]);
+  const [analysisMsg, setAnalysisMsg] = useState('');
 
   /* ── 衍生值 ── */
   const legalMoves = useMemo(
@@ -205,6 +226,9 @@ export default function App() {
     setRepeatError('');
     closeCorrection();
     cancelSync();
+    setAnalysisSource(null);
+    setAnalysisMoves([]);
+    setAnalysisMsg('');
   }
 
   function enterMode(nextMode: Exclude<AppMode, 'home'>) {
@@ -265,6 +289,10 @@ export default function App() {
         setState(next);
         setRepeatError('');
         const lastMove = next.history[next.history.length - 1];
+        if (analysisSource && lastMove) {
+          setAnalysisMoves(moves => [...moves, lastMove]);
+          setAnalysisMsg('');
+        }
         playBoardSoundFeedback({
           captured: !!lastMove?.captured,
           check: isInCheck(next.board, next.turn),
@@ -306,6 +334,7 @@ export default function App() {
       if (!h.length) return h;
       const previous = h[h.length - 1];
       setState(previous); setSelected(null); setRepeatError(''); closeCorrection(); setEditorError('');
+      if (analysisSource) setAnalysisMoves(moves => moves.slice(0, -1));
       return h.slice(0, -1);
     });
   }
@@ -421,6 +450,9 @@ export default function App() {
   function openPlayback(record: GameRecord) {
     setPlaybackRecord(record);
     setPlaybackStep(0);
+    setAnalysisSource(null);
+    setAnalysisMoves([]);
+    setAnalysisMsg('');
     setRecordsPage('playback');
   }
 
@@ -443,12 +475,60 @@ export default function App() {
     setSelected(null);
     closeCorrection();
     cancelSync();
+    if (playbackRecord) {
+      setAnalysisSource({ recordId: playbackRecord.id, baseStep: playbackStep, baseState: snapshot });
+      setAnalysisMoves([]);
+      setAnalysisMsg('');
+    }
     const title = playbackRecord?.title ?? '棋譜';
     setAiMasterNote(`已載入「${title}」第 ${playbackStep} 手局面`);
     setMode('ai-master');  // 直接切換，不走 enterMode（避免清掉 aiMasterNote）
   }
 
   /* ── 一般揭棋模式：新局 + 收藏 ── */
+  function saveAnalysisVariation() {
+    if (!analysisSource || analysisMoves.length === 0) return;
+    const records = loadGameRecords(storage());
+    const sourceRecord = records.find(record => record.id === analysisSource.recordId);
+    if (!sourceRecord) { setAnalysisMsg('找不到原棋譜，無法儲存變化'); return; }
+    const existing = sourceRecord.variations ?? [];
+    const sameStepCount = existing.filter(variation => variation.baseStep === analysisSource.baseStep).length;
+    const now = new Date().toISOString();
+    const variation: GameVariation = {
+      id: `variation-${Date.now()}`,
+      baseStep: analysisSource.baseStep,
+      title: `第 ${analysisSource.baseStep} 手變化 ${sameStepCount + 1}`,
+      moves: analysisMoves,
+      createdAt: now,
+      updatedAt: now,
+      source: 'manual-analysis',
+    };
+    const nextRecord = { ...sourceRecord, variations: [...existing, variation] };
+    const ok = saveGameRecord(storage(), nextRecord);
+    if (!ok) { setAnalysisMsg('變化儲存失敗'); return; }
+    setAnalysisMoves([]);
+    setAnalysisMsg('變化已儲存');
+    setRecordsList(loadGameRecords(storage()));
+    if (playbackRecord?.id === sourceRecord.id) setPlaybackRecord(nextRecord);
+  }
+
+  function openVariationPlayback(variation: GameVariation) {
+    if (!playbackRecord) return;
+    const baseState = stateAtRecordStep(playbackRecord, variation.baseStep);
+    setPlaybackRecord({
+      ...playbackRecord,
+      id: `${playbackRecord.id}:${variation.id}`,
+      title: variation.title,
+      moves: variation.moves,
+      initialState: baseState,
+      snapshots: undefined,
+      variations: [],
+      finalStatus: 'playing',
+      moveCount: variation.moves.length,
+    });
+    setPlaybackStep(0);
+  }
+
   function startNewPlayGame() {
     const initial = newGame();
     setState(initial); setPast([]); setSelected(null);
@@ -823,6 +903,17 @@ export default function App() {
           <button onClick={() => setAnalyzeVersion(v => v + 1)}>重新分析</button>
           {aiMasterNote && <button onClick={() => setAiMasterNote(null)}>清除提示</button>}
         </div>
+        {analysisSource && analysisMoves.length > 0 && (
+          <div className="toolbar" style={{marginTop:6}}>
+            <button onClick={saveAnalysisVariation}>儲存為變化</button>
+          </div>
+        )}
+        {analysisSource && (
+          <p style={{textAlign:'center',color:'#94a3b8',fontSize:12,margin:'4px 0'}}>
+            第 {analysisSource.baseStep} 手變化：{analysisMoves.length} 手
+          </p>
+        )}
+        {analysisMsg && <p style={{textAlign:'center',color:'#86efac',fontSize:13,margin:'4px 0'}}>{analysisMsg}</p>}
         <AiPanel version={analyzeVersion} state={state} />
         <WisdomPanel />
       </main>
@@ -1081,6 +1172,7 @@ export default function App() {
     /* ── 棋譜回放頁 ── */
     if (recordsPage === 'playback' && playbackRecord) {
       const totalSteps = playbackRecord.moves.length;
+      const stepVariations = playbackRecord.variations?.filter(variation => variation.baseStep === playbackStep) ?? [];
       return (
         <main>
           <header>
@@ -1137,6 +1229,25 @@ export default function App() {
 
             {/* 右欄（桌機）/ 下方（手機）：步驟捲動列 */}
             <div className="playbackSide">
+              {stepVariations.length > 0 && (
+                <div className="panel" style={{maxHeight:'none',padding:'10px 12px',marginBottom:10}}>
+                  <h3 style={{marginBottom:8}}>變化線</h3>
+                  {stepVariations.map(variation => (
+                    <button
+                      key={variation.id}
+                      className="recordLibCard"
+                      style={{width:'100%',marginBottom:6}}
+                      onClick={() => openVariationPlayback(variation)}
+                    >
+                      <div>
+                        <strong>{variation.title}</strong>
+                        <br />
+                        <em>{variation.moves.length} 手</em>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="panel" style={{maxHeight:'none',padding:'10px 12px'}}>
                 <h3 style={{marginBottom:8}}>棋譜導航</h3>
                 <MoveList

@@ -636,6 +636,34 @@ test('AI scoring does not peek at hidden captured real type', () => {
   assertEqual(recommendMove(stateA).score, recommendMove(stateB).score);
 });
 
+test('AI chooses immediate checkmate before simple material scoring', () => {
+  const board = emptyBoard();
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 1, 3, piece('red', 'rook'));
+  place(board, 0, 3, piece('red', 'rook'));
+  place(board, 0, 5, piece('red', 'rook'));
+  place(board, 6, 0, piece('red', 'pawn'));
+  place(board, 5, 0, piece('black', 'pawn'));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const mate = {
+    from: { row: 1, col: 3 },
+    to: { row: 1, col: 4 },
+    piece: board[1][3]!,
+  };
+  const nonMate = {
+    from: { row: 6, col: 0 },
+    to: { row: 5, col: 0 },
+    piece: board[6][0]!,
+    captured: board[5][0],
+  };
+  assertEqual(applyMove(state, mate.from, mate.to).status, 'red_win');
+  const recommended = recommendMove(state, [nonMate, mate]);
+  assertOk(recommended.move);
+  assertEqual(recommended.reason, '此步直接形成絕殺');
+  assertEqual(recommended.move, mate);
+});
+
 test('checkmate after a move updates status to red_win', () => {
   const board = emptyBoard();
   place(board, 0, 4, piece('black', 'king'));
@@ -1090,6 +1118,37 @@ test('game record storage can save load overwrite and delete records', () => {
 
   assertEqual(deleteGameRecord(storage, 'record-1'), true);
   assertEqual(loadGameRecords(storage).length, 0);
+});
+
+test('game record storage preserves variations', () => {
+  const storage = fakeStorage();
+  const board = withKings();
+  place(board, 6, 0, piece('red', 'pawn'));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const next = applyMove(state, { row: 6, col: 0 }, { row: 5, col: 0 });
+  const variationMove = next.history[0];
+  const record = createGameRecord({
+    id: 'record-var',
+    title: '變化測試',
+    moves: [],
+    finalStatus: 'playing',
+    variations: [{
+      id: 'variation-1',
+      baseStep: 3,
+      title: '第 3 手變化 1',
+      moves: [variationMove],
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      source: 'manual-analysis',
+    }],
+  });
+  assertEqual(saveGameRecord(storage, record), true);
+  const loaded = loadGameRecords(storage)[0];
+  assertEqual(loaded.variations?.length, 1);
+  assertEqual(loaded.variations?.[0].baseStep, 3);
+  assertEqual(loaded.variations?.[0].moves.length, 1);
+  const exported = JSON.parse(recordToJson(loaded));
+  assertEqual(exported.variations[0].title, '第 3 手變化 1');
 });
 
 test('last move sync applies a legal from-to move', () => {

@@ -4,6 +4,17 @@ import { moveText } from './moveNotation';
 export const GAME_RECORD_VERSION = 1;
 export const GAME_RECORD_STORAGE_KEY = 'jieqi.gameRecords.v1';
 
+export type GameVariation = {
+  id: string;
+  baseStep: number;
+  title: string;
+  moves: Move[];
+  createdAt: string;
+  updatedAt: string;
+  source?: 'manual-analysis' | 'ai-analysis';
+  note?: string;
+};
+
 export type GameRecord = {
   version: 1;
   id: string;
@@ -21,6 +32,7 @@ export type GameRecord = {
   timeoutSide?: 'red' | 'black';
   redTimeMs?: number;
   blackTimeMs?: number;
+  variations?: GameVariation[];
   /**
    * The true initial GameState at game start (before move 1), including all
    * hidden-piece realType values. Playback starts from this state and applies
@@ -78,6 +90,7 @@ export function createGameRecord(input: {
   timeoutSide?: 'red' | 'black';
   redTimeMs?: number;
   blackTimeMs?: number;
+  variations?: GameVariation[];
 }): GameRecord {
   const now = nowIso();
   return {
@@ -96,6 +109,7 @@ export function createGameRecord(input: {
     timeoutSide: input.timeoutSide,
     redTimeMs: input.redTimeMs,
     blackTimeMs: input.blackTimeMs,
+    variations: input.variations,
   };
 }
 
@@ -153,6 +167,7 @@ export function saveGameRecord(storage: RecordStorage | undefined, record: GameR
         createdAt: existing.createdAt,
         favorited: existing.favorited,
         note: nextRecord.note ?? existing.note,
+        variations: nextRecord.variations ?? existing.variations,
       };
     } else records.unshift(nextRecord);
     storage.setItem(GAME_RECORD_STORAGE_KEY, JSON.stringify({ ...emptyList(), records }));

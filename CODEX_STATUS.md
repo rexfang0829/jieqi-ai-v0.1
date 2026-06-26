@@ -428,3 +428,28 @@ npm.cmd run build
 ### 驗證
 - `npm.cmd test` 通過。
 - `npx.cmd tsc --noEmit` 通過。
+## 2026-06-26 AI 戰術層 + 棋譜變化線 MVP（Codex）
+
+### 最新完成的工作
+- `recommendMove(state, candidateMoves?)` 先檢查候選步是否能直接形成己方勝利，若能直接選並回傳「此步直接形成絕殺」。
+- 若沒有直接絕殺，AI 會過濾掉會讓對方下一手直接勝利的候選步；仍保留 `candidateMoves`，不破壞 AI VS AI 第三次重複過濾。
+- `GameRecord` 新增 `variations?: GameVariation[]`，支援棋譜變化線 MVP。
+- 從棋譜回放按「分析目前局面」會建立 analysisSource，輔助盤後續走法會記錄為 analysisMoves。
+- 輔助盤可將 analysisMoves 儲存為變化，寫回原 GameRecord 的 `variations` 並保存到 localStorage。
+- 回放頁會在目前 step 顯示 variations 列表，可點開回放該變化。
+
+### 修改檔案
+- `src/ai/simpleAi.ts`：加入直接絕殺優先與避免送對方一步勝。
+- `src/game/gameRecord.ts`：新增 `GameVariation` 型別與 variations 保存。
+- `src/App.tsx`：串接 analysisSource、analysisMoves、儲存變化與變化列表回放。
+- `tests/rules.test.ts`：補 AI 直接絕殺優先與 GameRecord variations 保存測試。
+- `CODEX_STATUS.md` / `NEXT_TASK.md`：更新本輪交接內容。
+
+### 測試
+- `npm.cmd test` 通過。
+- `npx.cmd tsc --noEmit` 通過。
+
+### 已知限制
+- 戰術層仍是 MVP，沒有完整 minimax。
+- 變化線只有一層，不做多層巢狀 variation。
+- 未做 Threat Map、Belief State、Monte Carlo、後端或資料庫。
