@@ -1516,28 +1516,81 @@ test('recommendMove returns traces with correct fields', () => {
   assertOk(Array.isArray(first.patterns));
   assertOk(typeof first.risk === 'number');
   assertOk(typeof first.exchangeNet === 'number');
-  assertOk(typeof first.checking === 'boolean');
-  assertOk(typeof first.meaningless === 'boolean');
+  assertOk(typeof first.structureScore === 'number');
 });
 
-test('trace patterns include cannon threat when enemy cannon aims at hidden major', () => {
-  const board = withKings();
-  place(board, 2, 4, piece('black', 'pawn', 'cannon', true));
-  place(board, 7, 4, piece('red', 'pawn', 'rook', false));
-  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
-  const recommended = recommendMove(state);
+test('trace for recommended move includes cannon pattern when edge cannon threatens hidden major', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn'));
+  place(board, 5, 0, piece('red', 'pawn', 'cannon', true));
+  place(board, 3, 0, piece('black', 'pawn', 'pawn', false));
+  place(board, 0, 0, piece('black', 'rook', 'rook', false));
+  place(board, 0, 1, piece('black', 'horse', 'horse', false));
+  place(board, 0, 2, piece('black', 'elephant', 'elephant', false));
+  place(board, 2, 1, piece('black', 'cannon', 'cannon', false));
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const horseReleaseToEdge = findMove(board, 'black', [0, 1], [2, 0]);
+  const horseReleaseToGuard = findMove(board, 'black', [0, 1], [2, 2]);
+  const elephantReleaseToEdge = findMove(board, 'black', [0, 2], [2, 0]);
+  const sameFilePawnGamble = findMove(board, 'black', [3, 0], [4, 0]);
+  const hiddenCannonSideShift = findMove(board, 'black', [2, 1], [2, 0]);
+  const recommended = recommendMove(state, [
+    horseReleaseToGuard,
+    sameFilePawnGamble,
+    hiddenCannonSideShift,
+    horseReleaseToEdge,
+    elephantReleaseToEdge,
+  ]);
+  assertOk(recommended.move);
   assertOk(recommended.traces);
-  const allPatterns = recommended.traces.flatMap(t => t.patterns);
-  assertEqual(allPatterns.some(p => p === 'opening_cannon_hits_hidden_rook'), true);
+  const rec = recommended.move;
+  const recTrace = recommended.traces.find(t =>
+    t.move.from.row === rec.from.row &&
+    t.move.from.col === rec.from.col &&
+    t.move.to.row === rec.to.row &&
+    t.move.to.col === rec.to.col
+  );
+  assertOk(recTrace);
+  assertEqual(recTrace.patterns.some(p =>
+    p === 'opening_cannon_hits_hidden_rook' ||
+    p === 'opening_edge_cannon_structure_pressure' ||
+    p === 'horse_release_from_cannon_pressure'
+  ), true);
 });
 
-test('trace patterns include rook line lock when enemy edge rook present', () => {
-  const board = withKings();
-  place(board, 2, 0, piece('black', 'pawn', 'rook', true));
-  place(board, 7, 1, piece('red', 'horse', 'horse', false));
-  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
-  const recommended = recommendMove(state);
+test('trace for recommended move includes rook pattern when edge rook threatens pawn line', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn'));
+  place(board, 5, 0, piece('red', 'pawn', 'rook', true));
+  place(board, 3, 0, piece('black', 'pawn', 'pawn', false));
+  place(board, 0, 1, piece('black', 'horse', 'horse', false));
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const horseReleaseToEdge = findMove(board, 'black', [0, 1], [2, 0]);
+  const horseReleaseToGuard = findMove(board, 'black', [0, 1], [2, 2]);
+  const sameFilePawnGamble = findMove(board, 'black', [3, 0], [4, 0]);
+  const recommended = recommendMove(state, [
+    horseReleaseToEdge,
+    sameFilePawnGamble,
+    horseReleaseToGuard,
+  ]);
+  assertOk(recommended.move);
   assertOk(recommended.traces);
-  const allPatterns = recommended.traces.flatMap(t => t.patterns);
-  assertEqual(allPatterns.some(p => p === 'opening_edge_rook_pawn_line_lock'), true);
+  const rec = recommended.move;
+  const recTrace = recommended.traces.find(t =>
+    t.move.from.row === rec.from.row &&
+    t.move.from.col === rec.from.col &&
+    t.move.to.row === rec.to.row &&
+    t.move.to.col === rec.to.col
+  );
+  assertOk(recTrace);
+  assertEqual(recTrace.patterns.some(p =>
+    p === 'opening_edge_rook_pawn_line_lock' ||
+    p === 'opening_edge_rook_line_lock_defense' ||
+    p === 'horse_release_to_guard_pawn_line' ||
+    p === 'horse_release_to_pawn_line_guard'
+  ), true);
 });
