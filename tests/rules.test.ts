@@ -1987,3 +1987,63 @@ test('human vs AI: old records without moveAnnotations still load correctly', ()
   assertEqual(loaded[0].moveAnnotations, undefined);
   assertEqual(loaded[0].moves.length, 1);
 });
+
+// ─── formatAiDebugReport tests ───────────────────────────────────────────────
+import { formatAiDebugReport } from '../src/ai/aiDebugReport';
+
+test('formatAiDebugReport: contains header and mode name', () => {
+  const state = newGame();
+  const r = recommendMove(state);
+  const text = formatAiDebugReport({ modeName: '輔助盤面', state, recommendation: r });
+  assertOk(text.includes('=== AI 測試報告 ==='));
+  assertOk(text.includes('模式：輔助盤面'));
+  assertOk(text.includes('輪到：紅方'));
+  assertOk(text.includes('手數：0'));
+});
+
+test('formatAiDebugReport: includes AI recommendation block', () => {
+  const state = newGame();
+  const r = recommendMove(state);
+  const text = formatAiDebugReport({ modeName: 'test', state, recommendation: r });
+  assertOk(text.includes('--- AI 建議 ---'));
+  if (r.move) {
+    assertOk(text.includes('推薦棋步：'));
+    assertOk(text.includes('分數：'));
+  }
+});
+
+test('formatAiDebugReport: includes top-5 candidates when traces present', () => {
+  const state = newGame();
+  const r = recommendMove(state);
+  if (!r.traces || r.traces.length === 0) return;
+  const text = formatAiDebugReport({ modeName: 'test', state, recommendation: r });
+  assertOk(text.includes('--- 候選前 5 名 ---'));
+  assertOk(/1\. .+\｜.+\｜/.test(text));
+});
+
+test('formatAiDebugReport: includes recommended trace when traces present', () => {
+  const state = newGame();
+  const r = recommendMove(state);
+  if (!r.traces || r.traces.length === 0) return;
+  const text = formatAiDebugReport({ modeName: 'test', state, recommendation: r });
+  assertOk(text.includes('--- 推薦步 trace ---'));
+  assertOk(text.includes('structureScore：'));
+  assertOk(text.includes('patterns：'));
+});
+
+test('formatAiDebugReport: handles no-move case gracefully', () => {
+  const state = newGame();
+  const r: import('../src/ai/aiTrace').AiRecommendation = { move: null, score: 0, reason: 'test', traces: [] };
+  const text = formatAiDebugReport({ modeName: 'test', state, recommendation: r });
+  assertOk(text.includes('（無合法棋步）'));
+  assertOk(text.includes('=================='));
+});
+
+test('formatAiDebugReport: includes analysis move count when analysisMoves provided', () => {
+  const state = newGame();
+  const legalMoves = getAllLegalMoves(state.board, 'red');
+  const r = recommendMove(state);
+  const am = [{ from: legalMoves[0].from, to: legalMoves[0].to, piece: legalMoves[0].piece, captured: null as null, revealed: null as null }];
+  const text = formatAiDebugReport({ modeName: 'test', state, analysisMoves: am, recommendation: r });
+  assertOk(text.includes('變化手'));
+});
