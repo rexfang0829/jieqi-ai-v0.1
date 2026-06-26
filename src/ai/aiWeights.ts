@@ -72,6 +72,10 @@ export type AiWeights = {
   hiddenHorseValueNoRevealed: number;
   hiddenHorseValueOneRevealed: number;
   hiddenHorseValueTwoRevealed: number;
+  edgeCannonPressureHiddenPressureCap: number;
+  safeCapturePriorityBonus: number;
+  speculativeHiddenAttackPenalty: number;
+  repetitiveCheckPenalty: number;
 };
 
 export const defaultAiWeights: AiWeights = {
@@ -154,4 +158,8 @@ export const defaultAiWeights: AiWeights = {
   hiddenHorseValueNoRevealed: 280,
   hiddenHorseValueOneRevealed: 230,
   hiddenHorseValueTwoRevealed: 170,
+  edgeCannonPressureHiddenPressureCap: 8,
+  safeCapturePriorityBonus: 35,
+  speculativeHiddenAttackPenalty: -15,
+  repetitiveCheckPenalty: -45,
 };

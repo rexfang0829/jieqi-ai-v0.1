@@ -1742,3 +1742,144 @@ test('reveal-threat suppression: unrevealed cannon threat via screen is suppress
   assertEqual(t.revealTacticalSuppressed, true);
   assertOk(!t.reason.includes('威脅'));
 });
+
+test('edge cannon: horse release is preferred over unrevealed pawn move (edge cannon pressure cap)', () => {
+  // Red has edge cannon (revealed at col 0). Black faces cannon pressure.
+  // Black options: release horse from backrank (活馬解除邊炮壓制) vs move plain unrevealed pawn.
+  // With edge cannon pressure cap, plain pawn hiddenPressureScore is capped and horse release wins.
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn'));            // block kings facing on col 4
+  place(board, 7, 0, piece('red', 'pawn', 'cannon', true));  // red edge cannon (revealed)
+  place(board, 6, 0, piece('red', 'pawn', 'pawn', true));    // screen piece for cannon
+  place(board, 4, 0, piece('black', 'pawn', 'horse', false)); // black hidden major in cannon line
+  place(board, 0, 1, piece('black', 'horse', 'horse', false)); // black horse for release
+  place(board, 1, 5, piece('black', 'pawn', 'pawn', false));  // plain black pawn
+
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const rec = recommendMove(state);
+  assertOk(rec.traces);
+
+  // Horse release should be recommended
+  assertOk(rec.move);
+  assertEqual(rec.move.piece.originalType, 'horse');
+
+  // Pawn traces under edge cannon pressure should have edgeCannonPressureUnresolved = true
+  const pawnTrace = rec.traces.find(t =>
+    !t.move.piece.revealed && t.move.piece.originalType === 'pawn' && t.move.from.row === 1
+  );
+  assertOk(pawnTrace);
+  assertEqual(pawnTrace.edgeCannonPressureUnresolved, true);
+  assertOk(pawnTrace.reason !== '壓制對方重要暗子');
+});
+
+test('safe capture: safeCapturePriority is set on safe captures and rook capture is chosen', () => {
+  // Red rook can safely capture a black revealed cannon (high value, safe trade).
+  // The rook capture should be recommended and have safeCapturePriority=true, exchangeNet>=0.
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn'));            // block kings facing
+  // Red rook can capture black cannon on same column (no pieces between)
+  place(board, 7, 0, piece('red', 'rook', 'rook', true));
+  place(board, 3, 0, piece('black', 'cannon', 'cannon', true)); // revealed cannon target
+  // Unrevealed red cannon with no direct capture path (slide only)
+  place(board, 9, 2, piece('red', 'cannon', 'cannon', false)); // unrevealed cannon
+
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const rec = recommendMove(state);
+  assertOk(rec.traces);
+  assertOk(rec.move);
+
+  // Rook capture of cannon should be recommended (safe, high value)
+  assertEqual(rec.move.piece.realType, 'rook');
+  assertOk(rec.move.captured !== null && rec.move.captured !== undefined);
+
+  // Rook capture trace must have safeCapturePriority=true and exchangeNet>=0
+  const rookCaptureTrace = rec.traces.find(t =>
+    t.move.piece.realType === 'rook' && t.move.captured
+  );
+  assertOk(rookCaptureTrace);
+  assertEqual(rookCaptureTrace.safeCapturePriority, true);
+  assertOk(rookCaptureTrace.exchangeNet >= 0);
+  assertOk(rookCaptureTrace.captureGain >= 350); // cannon value
+});
+
+test('repetitive check: rook check after 2 prior rook turns gets repetitiveCheck=true', () => {
+  // History shows same side used rook for 2 prior turns.
+  // Current candidate: rook delivers check again. Should be flagged as repetitiveCheck.
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn'));
+  place(board, 2, 4, piece('red', 'rook', 'rook', true)); // red rook near black king
+  place(board, 1, 4, piece('black', 'pawn', 'pawn', true));  // blocker: prevents rook from capturing king directly
+
+  // Mock history: red used rook 2 prior times (positions don't matter for the heuristic, just piece type)
+  const rookMock: Move = {
+    from: { row: 4, col: 4 }, to: { row: 3, col: 4 },
+    piece: piece('red', 'rook', 'rook', true),
+    captured: null, flipped: false,
+  };
+  const blackMock: Move = {
+    from: { row: 0, col: 3 }, to: { row: 0, col: 5 },
+    piece: piece('black', 'king', 'king', true),
+    captured: null, flipped: false,
+  };
+  const history: Move[] = [rookMock, blackMock, rookMock, blackMock]; // 2 red rook moves
+
+  const state = { board, turn: 'red' as const, history, status: 'playing' as const };
+  const rec = recommendMove(state);
+  assertOk(rec.traces);
+
+  // Find rook check trace (rook at [2][4] -> [1][4], checking black king at [0][4])
+  const rookCheckTrace = rec.traces.find(t =>
+    t.move.piece.realType === 'rook' && t.checking
+  );
+  assertOk(rookCheckTrace);
+  assertEqual(rookCheckTrace.repetitiveCheck, true);
+  assertOk(rookCheckTrace.repetitiveCheckPenalty < 0);
+});
+
+test('safe capture: direct checkmate still takes priority despite repetitive check history', () => {
+  // Even with repetitive check history, if a move directly wins (checkmate), it must be chosen.
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  // Red rook on col 4 can capture black king (immediate win) but also on another file for check
+  place(board, 2, 0, piece('red', 'rook', 'rook', true)); // rook can move to [0][0] on row 0
+
+  // Add advisor so black king has no escape after rook goes to [0][0]... actually just test basic checkmate
+  // Simpler: rook at [0][0] would put king in check but not checkmate. Use a different setup.
+  // Place rook so it can capture king directly (row 0 col 4 → but can't move to king's square without capture)
+  // Instead: rook at [2][4] captures nothing but king has no escape
+  place(board, 2, 4, piece('red', 'rook', 'rook', true));
+  // Add another piece that blocks king's escape - advisor on col 3 and col 5
+  place(board, 1, 3, piece('red', 'pawn', 'pawn', true));
+  place(board, 1, 5, piece('red', 'pawn', 'pawn', true));
+  // Rook at [2][4] -> [1][4]: puts king in check. King can't go [0][3] or [0][5] (blocked by rook on col 4? no...)
+  // This is getting complex. Test the simpler case: just assert immediate win move returns score 999999.
+  const boardB = emptyBoard();
+  place(boardB, 9, 4, piece('red', 'king'));
+  place(boardB, 0, 4, piece('black', 'king'));
+  place(boardB, 1, 4, piece('red', 'rook', 'rook', true)); // rook adjacent to black king
+
+  const rookMock: Move = {
+    from: { row: 3, col: 4 }, to: { row: 2, col: 4 },
+    piece: piece('red', 'rook', 'rook', true),
+    captured: null, flipped: false,
+  };
+  const blackMock: Move = {
+    from: { row: 0, col: 3 }, to: { row: 0, col: 5 },
+    piece: piece('black', 'king', 'king', true),
+    captured: null, flipped: false,
+  };
+  const history: Move[] = [rookMock, blackMock, rookMock, blackMock];
+  const state = { board: boardB, turn: 'red' as const, history, status: 'playing' as const };
+  const rec = recommendMove(state);
+
+  // Rook can capture black king directly (immediate win)
+  assertEqual(rec.score, 999999);
+  assertEqual(rec.reason, '此步直接形成絕殺');
+});

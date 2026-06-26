@@ -55,6 +55,11 @@ type MoveEvaluation = {
   threatByMovedPiece: boolean;
   threatTargetType: PieceType | null;
   threatTargetRevealed: boolean | null;
+  edgeCannonPressureUnresolved: boolean;
+  speculativeAttack: boolean;
+  safeCapturePriority: boolean;
+  repetitiveCheck: boolean;
+  repetitiveCheckPenaltyScore: number;
 };
 
 type AiThreatInfo = {
@@ -65,6 +70,19 @@ type AiThreatInfo = {
   targetRevealed: boolean;
   byMovedPiece: boolean;
 };
+
+function detectRepetitiveCheck(state: GameState, move: Move, isCheck: boolean): boolean {
+  if (!isCheck) return false;
+  const h = state.history;
+  if (h.length < 4) return false;
+  if (publicType(move.piece) !== 'rook') return false;
+  const prev1 = h[h.length - 2]; // same side 1 turn ago
+  const prev2 = h[h.length - 4]; // same side 2 turns ago
+  if (!prev1 || !prev2) return false;
+  if (prev1.piece.side !== state.turn || prev2.piece.side !== state.turn) return false;
+  if (publicType(prev1.piece) !== 'rook' || publicType(prev2.piece) !== 'rook') return false;
+  return true; // 3 consecutive rook moves from same side → repetitive check
+}
 
 function publicType(piece: { originalType: PieceType; realType: PieceType; revealed: boolean }): PieceType {
   return piece.revealed ? piece.realType : piece.originalType;
@@ -763,6 +781,29 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
   const hasClearGain = captureGain >= weights.pieceValues.cannon || blocksImmediateWin || effectiveCheck || (captureGain > 0 && exchangeNet >= 0) || escapeBonus > 0;
   const leaveKeySquareScore = leaveKeySquarePenalty(state.board, state.turn, move.from, move.to, hasClearGain, weights);
   const structure = structurePatternEvaluation(state, move, nextBoard, hasClearGain, weights);
+  // Edge cannon pressure: cap hiddenPressureScore for plain pawn moves that don't resolve pressure
+  const edgeCannonPressure = isOpeningPhase(state, weights) && hasOpeningEdgeCannonPressure(state.board, state.turn);
+  const isPlainUnrevealedPawnMove = !move.piece.revealed && move.piece.originalType === 'pawn' &&
+    !structure.releasedHorseFromPressure && !structure.releasedElephantFromPressure &&
+    !structure.preventsPawnLineLock && !structure.pawnLineDefense && captureGain === 0;
+  const edgeCannonPressureUnresolved = edgeCannonPressure && isPlainUnrevealedPawnMove;
+  const cappedHiddenPressureScore = edgeCannonPressureUnresolved
+    ? Math.min(hiddenPressureScore, weights.edgeCannonPressureHiddenPressureCap)
+    : hiddenPressureScore;
+
+  // Safe capture priority: boost definite captures over speculative pressure
+  const safeCapturePriority = captureGain > 0 && exchangeNet >= 0;
+  const safeCapturePriorityBonus = safeCapturePriority ? weights.safeCapturePriorityBonus : 0;
+
+  // Speculative hidden cannon attack: penalize unrevealed cannon threatening unrevealed target (no capture)
+  const speculativeAttack = !move.piece.revealed && move.piece.originalType === 'cannon' &&
+    captureGain === 0 && (afterThreat?.byMovedPiece ?? false) && !(afterThreat?.targetRevealed ?? true);
+  const speculativeAttackPenalty = speculativeAttack ? weights.speculativeHiddenAttackPenalty : 0;
+
+  // Repetitive check: penalize same side using rook for checks multiple turns in a row
+  const repetitiveCheck = detectRepetitiveCheck(state, move, checking);
+  const repetitiveCheckPenaltyScore = repetitiveCheck ? weights.repetitiveCheckPenalty : 0;
+
   const forcingReply =
     blocksImmediateWin ||
     effectiveCheck ||
@@ -813,7 +854,7 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     escapeBonus +
     pressureBonus +
     keySquareScore +
-    hiddenPressureScore +
+    cappedHiddenPressureScore +
     leaveKeySquareScore +
     structure.score +
     openingTempoPenalty +
@@ -822,7 +863,10 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     protectionScore +
     hangingPenalty +
     purposePenalty +
-    checkPenalty -
+    checkPenalty +
+    safeCapturePriorityBonus +
+    speculativeAttackPenalty +
+    repetitiveCheckPenaltyScore -
     Math.round(reply.maxReplyGain * weights.maxReplyGainPenaltyRatio);
 
   return {
@@ -866,6 +910,11 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     threatByMovedPiece,
     threatTargetType: afterThreat?.targetType ?? null,
     threatTargetRevealed: afterThreat?.targetRevealed ?? null,
+    edgeCannonPressureUnresolved,
+    speculativeAttack,
+    safeCapturePriority,
+    repetitiveCheck,
+    repetitiveCheckPenaltyScore,
   };
 }
 
@@ -881,6 +930,7 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (best.captured && evaluation.exchangeNet >= weights.safeCaptureExchangeNet) return '安全吃子';
   if (best.captured && evaluation.exchangeNet >= 0) return '交換不虧';
   if (evaluation.revealTacticalSuppressed && !evaluation.effectiveCheck && !evaluation.releasedHorseFromPressure && !evaluation.releasedElephantFromPressure && !evaluation.preventsPawnLineLock) return '暗子翻開效果未知，未按確定將軍加分';
+  if (evaluation.repetitiveCheck) return '無成果連將，改尋求增援';
   if (evaluation.effectiveCheck) return '有效將軍';
   if (evaluation.lowQualityCheck) return '無成果將軍，已降分';
   if (evaluation.releasedHorseFromPressure) return '活馬解除邊炮壓制';
@@ -900,8 +950,8 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (newThreat && evaluation.threatDelta > 0) return '形成新的高價威脅';
   if (evaluation.escapeBonus > 0) return '脫離重要子力危險';
   if (evaluation.pressureBonus > 0) return '形成攻擊壓力';
-  if (evaluation.controlsImportantHidden) return '壓制對方重要暗子';
-  if (evaluation.hiddenPressureScore > 0) return '壓制對方暗子';
+  if (evaluation.controlsImportantHidden && !evaluation.edgeCannonPressureUnresolved) return '壓制對方重要暗子';
+  if (evaluation.hiddenPressureScore > 0 && !evaluation.edgeCannonPressureUnresolved) return '壓制對方暗子';
   if (evaluation.keySquareScore >= weights.keySquareEnemyPalaceBonus) return '佔住關鍵點';
   if (evaluation.protectedMove) return '落點有保護';
   if (evaluation.openingBonus > 0) return '開局優先翻 1379 路兵';
@@ -967,6 +1017,11 @@ export function recommendMove(
     threatByMovedPiece: evaluation.threatByMovedPiece,
     threatTargetType: evaluation.threatTargetType,
     threatTargetRevealed: evaluation.threatTargetRevealed,
+    edgeCannonPressureUnresolved: evaluation.edgeCannonPressureUnresolved,
+    speculativeAttack: evaluation.speculativeAttack,
+    safeCapturePriority: evaluation.safeCapturePriority,
+    repetitiveCheck: evaluation.repetitiveCheck,
+    repetitiveCheckPenalty: evaluation.repetitiveCheckPenaltyScore,
   }));
 
   return {

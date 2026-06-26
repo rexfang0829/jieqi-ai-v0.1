@@ -29,6 +29,11 @@ export type AiMoveTrace = {
   threatByMovedPiece: boolean;
   threatTargetType: PieceType | null;
   threatTargetRevealed: boolean | null;
+  edgeCannonPressureUnresolved: boolean;
+  speculativeAttack: boolean;
+  safeCapturePriority: boolean;
+  repetitiveCheck: boolean;
+  repetitiveCheckPenalty: number;
 };
 
 /**
