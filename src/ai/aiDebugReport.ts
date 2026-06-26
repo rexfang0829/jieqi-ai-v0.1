@@ -40,6 +40,11 @@ function fmtTrace(t: AiMoveTrace): string {
     '  speculativeAttack：' + bool(t.speculativeAttack),
     '  safeCapturePriority：' + bool(t.safeCapturePriority),
     '  repetitiveCheck：' + bool(t.repetitiveCheck),
+    '  revealChoiceRisk：' + bool(t.revealChoiceRisk ?? false),
+    '  revealChoicePenalty：' + num(t.revealChoicePenalty ?? 0),
+    '  openingMajorGoal：' + bool(t.openingMajorGoal ?? false),
+    '  majorActivation：' + bool(t.majorActivation ?? false),
+    '  opponentRevealSuppression：' + bool(t.opponentRevealSuppression ?? false),
   ];
   return lines.join('\n');
 }

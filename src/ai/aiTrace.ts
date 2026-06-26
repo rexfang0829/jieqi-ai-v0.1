@@ -34,6 +34,11 @@ export type AiMoveTrace = {
   safeCapturePriority: boolean;
   repetitiveCheck: boolean;
   repetitiveCheckPenalty: number;
+  revealChoiceRisk: boolean;
+  revealChoicePenalty: number;
+  openingMajorGoal: boolean;
+  majorActivation: boolean;
+  opponentRevealSuppression: boolean;
 };
 
 /**

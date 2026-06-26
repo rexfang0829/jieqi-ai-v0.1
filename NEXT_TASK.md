@@ -12,6 +12,8 @@
 - AI 收斂修正（edge cannon cap / safe capture priority / repetitive check penalty）
 - 人 vs AI 測試對局 MVP
 - 一鍵複製 AI 測試報告 MVP（formatAiDebugReport + 複製按鈕）
+- 後手翻棋選擇權懲罰（revealChoiceRisk / revealChoicePenalty）
+- 公平資訊開局大子活化（majorActivation / openingMajorGoal / opponentRevealSuppression）
 
 ## 後續優先項目
 
@@ -19,9 +21,9 @@
    - 在人 vs AI 模式或輔助盤面模式中，顯示每個候選步的 trace 詳情
    - 方便調棋力時觀察 score breakdown
 
-2. **AI 對局資料統計**
-   - 統計 AI 在各 pattern 下的勝率
-   - 統計 reason 分布（`壓制`、`進攻`、`解危` 等）
+2. **開局大子活化擴充**
+   - 目前只偵測馬/象活出 + 已翻大子走動
+   - 可考慮偵測「暗兵移動後解放後排大子活動空間」的 pattern
 
 3. **forcing reply / forced exchange MVP**
    - 偵測對方攻擊後，AI 優先回防或反將

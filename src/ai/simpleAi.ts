@@ -60,6 +60,11 @@ type MoveEvaluation = {
   safeCapturePriority: boolean;
   repetitiveCheck: boolean;
   repetitiveCheckPenaltyScore: number;
+  revealChoiceRisk: boolean;
+  revealChoicePenalty: number;
+  openingMajorGoal: boolean;
+  majorActivation: boolean;
+  opponentRevealSuppression: boolean;
 };
 
 type AiThreatInfo = {
@@ -698,6 +703,98 @@ function structurePatternEvaluation(state: GameState, move: Move, nextBoard: Boa
   };
 }
 
+/**
+ * 後手翻棋選擇權風險評估。
+ * 觸發條件：我方高價子吃對方低外觀暗子，且落點被對方高價暗子看住。
+ * 對方可依我方翻出結果決定是否交換 → 我方承擔翻子風險。
+ * 不使用 unrevealed piece.realType 做加分，只用 hiddenPieceValue heuristic 估值。
+ */
+function computeRevealChoiceRisk(
+  board: Board,
+  side: Side,
+  move: Move,
+  weights: AiWeights
+): { isRisk: boolean; penalty: number } {
+  // 只在有吃子且吃的是暗子時觸發
+  if (!move.captured || move.captured.revealed) return { isRisk: false, penalty: 0 };
+
+  // 被吃的暗子必須是低外觀（pawn / advisor / elephant）
+  const capturedOrig = move.captured.originalType;
+  const isLowAppearance =
+    capturedOrig === 'pawn' || capturedOrig === 'advisor' || capturedOrig === 'elephant';
+  if (!isLowAppearance) return { isRisk: false, penalty: 0 };
+
+  // 我方走子必須是高價子（使用 publicType = 公開資訊）
+  const moverPubType = publicType(move.piece);
+  const isHighValueMover =
+    moverPubType === 'rook' || moverPubType === 'cannon' || moverPubType === 'horse';
+  if (!isHighValueMover) return { isRisk: false, penalty: 0 };
+
+  // 吃完後盤面，檢查落點是否被對方暗子看住
+  const nextBoard = applyMoveToBoard(board, move);
+  const opp = opponent(side);
+  const oppMoves = getAllLegalMoves(nextBoard, opp);
+
+  let maxHiddenThreat = 0;
+  for (const reply of oppMoves) {
+    if (!samePosition(reply.to, move.to)) continue;
+    // 估計該回擊棋子的價值（使用 hiddenPieceValue heuristic，不直接判斷 realType）
+    const replyEst = hiddenPieceValue(reply.piece, nextBoard, weights);
+    maxHiddenThreat = Math.max(maxHiddenThreat, replyEst);
+  }
+
+  // 只有對方有高價值棋子看住落點才觸發
+  if (maxHiddenThreat < weights.pieceValues.horse) return { isRisk: false, penalty: 0 };
+
+  // 扣分：車吃重扣，炮/馬吃中扣
+  const isRookMover = moverPubType === 'rook';
+  const penalty = -(weights.revealChoiceRiskPenaltyBase + (isRookMover ? weights.revealChoiceRiskHighValueExtra : 0));
+  return { isRisk: true, penalty };
+}
+
+/**
+ * 開局大子活動目標（公平資訊）。
+ * 判斷一手是否具有「活出大子」或「壓制對方翻子」的開局價值。
+ * 嚴禁使用 unrevealed piece.realType 做加分判斷。
+ * 只使用：piece.revealed、piece.originalType、初始位置、已翻出棋子、合法走法。
+ */
+function computeOpeningMajorActivation(
+  state: GameState,
+  move: Move,
+  hiddenPressureScore: number,
+  weights: AiWeights
+): { majorActivation: boolean; openingMajorGoal: boolean; opponentRevealSuppression: boolean } {
+  if (!isOpeningPhase(state, weights)) {
+    return { majorActivation: false, openingMajorGoal: false, opponentRevealSuppression: false };
+  }
+
+  // 大子活動：已翻出的大子（rook/horse/cannon）在移動
+  // 已翻出的棋子 realType 是公開資訊，可以使用
+  const moverRevealed = move.piece.revealed;
+  const moverRealMajor =
+    moverRevealed &&
+    (move.piece.realType === 'rook' ||
+      move.piece.realType === 'horse' ||
+      move.piece.realType === 'cannon');
+
+  // 活馬：從初始後排位置活出馬（originalType='horse'，初始後排，公開資訊）
+  const releasingHorse = isReleasedHorseMove(move);
+
+  // 活象：從初始後排位置活出象（公開資訊）
+  const releasingElephant = isReleasedElephantMove(move);
+
+  const majorActivation = moverRealMajor || releasingHorse || releasingElephant;
+
+  // 開局大子目標：majorActivation，或未翻開兵從初始位置移動釋放後排大子空間
+  const openingMajorGoal = majorActivation;
+
+  // 壓制對方翻子：同時達成大子活動且有暗子壓制
+  const opponentRevealSuppression =
+    majorActivation && hiddenPressureScore >= weights.hiddenPiecePressureBonus;
+
+  return { majorActivation, openingMajorGoal, opponentRevealSuppression };
+}
+
 function opponentReplyPenalty(board: Board, side: Side, movedTo: Position, movedPiece: Piece, weights: AiWeights): {
   risk: number;
   immediateCapture: boolean;
@@ -804,6 +901,23 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
   const repetitiveCheck = detectRepetitiveCheck(state, move, checking);
   const repetitiveCheckPenaltyScore = repetitiveCheck ? weights.repetitiveCheckPenalty : 0;
 
+  // 後手翻棋選擇權懲罰（揭棋核心：主動吃低價暗子後給對方選擇權）
+  const { isRisk: revealChoiceRisk, penalty: revealChoicePenalty } =
+    computeRevealChoiceRisk(state.board, state.turn, move, weights);
+
+  // 開局大子活動目標（公平資訊，不偷看 realType）
+  const { majorActivation, openingMajorGoal, opponentRevealSuppression } =
+    computeOpeningMajorActivation(state, move, hiddenPressureScore, weights);
+
+  // 開局非大子活動手的 hiddenPressureScore 上限（避免純壓制蓋過活馬/活炮）
+  const isOpeningNonActivation = isOpeningPhase(state, weights) && !majorActivation && !edgeCannonPressureUnresolved;
+  const finalHiddenPressureScore = isOpeningNonActivation
+    ? Math.min(cappedHiddenPressureScore, weights.hiddenPressureNonActivationCap)
+    : cappedHiddenPressureScore;
+
+  const majorActivationScore = openingMajorGoal ? weights.majorActivationBonus : 0;
+  const opponentRevealSuppressionScore = opponentRevealSuppression ? weights.opponentRevealSuppressionBonus : 0;
+
   const forcingReply =
     blocksImmediateWin ||
     effectiveCheck ||
@@ -854,10 +968,13 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     escapeBonus +
     pressureBonus +
     keySquareScore +
-    cappedHiddenPressureScore +
+    finalHiddenPressureScore +
     leaveKeySquareScore +
     structure.score +
     openingTempoPenalty +
+    majorActivationScore +
+    opponentRevealSuppressionScore +
+    revealChoicePenalty +
     blockDangerBonus +
     checkBonus +
     protectionScore +
@@ -915,12 +1032,18 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     safeCapturePriority,
     repetitiveCheck,
     repetitiveCheckPenaltyScore,
+    revealChoiceRisk,
+    revealChoicePenalty,
+    openingMajorGoal,
+    majorActivation,
+    opponentRevealSuppression,
   };
 }
 
 function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: boolean, weights: AiWeights): string {
   if (avoidedOpponentWin) return '避免對方一步殺';
   if (evaluation.hangingMove) return '落點缺少保護，已扣分';
+  if (evaluation.revealChoiceRisk) return '吃低價暗子後給對方選擇權，已降分';
   if (best.captured && evaluation.exchangeNet < 0) return '交換可能虧損，已扣分';
   if (evaluation.capturedConnectedAdvisor) return '吃掉連環士';
   if (evaluation.capturedCrossedPawn) return '吃過河兵';
@@ -954,6 +1077,8 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (evaluation.hiddenPressureScore > 0 && !evaluation.edgeCannonPressureUnresolved) return '壓制對方暗子';
   if (evaluation.keySquareScore >= weights.keySquareEnemyPalaceBonus) return '佔住關鍵點';
   if (evaluation.protectedMove) return '落點有保護';
+  if (evaluation.openingMajorGoal && evaluation.opponentRevealSuppression) return '活出大子並壓制對方翻子';
+  if (evaluation.openingMajorGoal) return '開局優先活出大子';
   if (evaluation.openingBonus > 0) return '開局優先翻 1379 路兵';
   if (evaluation.risk > 0 || evaluation.immediateCapture) return '避免明顯送子';
   return '簡單評分最佳';
@@ -1022,6 +1147,11 @@ export function recommendMove(
     safeCapturePriority: evaluation.safeCapturePriority,
     repetitiveCheck: evaluation.repetitiveCheck,
     repetitiveCheckPenalty: evaluation.repetitiveCheckPenaltyScore,
+    revealChoiceRisk: evaluation.revealChoiceRisk,
+    revealChoicePenalty: evaluation.revealChoicePenalty,
+    openingMajorGoal: evaluation.openingMajorGoal,
+    majorActivation: evaluation.majorActivation,
+    opponentRevealSuppression: evaluation.opponentRevealSuppression,
   }));
 
   return {

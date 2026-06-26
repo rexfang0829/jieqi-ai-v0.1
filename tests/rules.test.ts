@@ -2047,3 +2047,197 @@ test('formatAiDebugReport: includes analysis move count when analysisMoves provi
   const text = formatAiDebugReport({ modeName: 'test', state, analysisMoves: am, recommendation: r });
   assertOk(text.includes('變化手'));
 });
+
+// === 後手翻棋選擇權 + 開局大子活化 ===
+
+test('reveal choice risk A: 暗車吃被暗車看著的未過河暗卒，應被降分', () => {
+  // 盤面：
+  // 紅隱藏車(4,2) 可橫吃 黑隱藏卒(4,4)
+  // 黑隱藏車(3,4) 看住 col4 → revealChoiceRisk 應觸發
+  // 紅隱藏馬(9,1) 可活出 → 分數應高於車吃卒
+  // 紅明兵(5,4) 隔開雙王 + 保護 (4,4) 落點
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn', 'pawn', true));     // 隔王 + 保護 (4,4)
+  place(board, 4, 2, piece('red', 'rook', 'rook', false));    // 紅隱藏車（走子方）
+  place(board, 4, 4, piece('black', 'pawn', 'pawn', false));  // 黑隱藏卒（被吃，低外觀）
+  place(board, 3, 4, piece('black', 'rook', 'rook', false));  // 黑隱藏車（看住 col4）
+  place(board, 9, 1, piece('red', 'horse', 'horse', false));  // 紅隱藏馬（備選活大子）
+
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const rec = recommendMove(state);
+  assertOk(rec.traces);
+
+  // 車吃卒的 trace 應有 revealChoiceRisk=true 和 revealChoicePenalty<0
+  const rookCaptureTrace = rec.traces.find(t =>
+    t.move.piece.originalType === 'rook' &&
+    t.move.from.col === 2 &&
+    t.move.captured !== null &&
+    t.move.captured?.originalType === 'pawn'
+  );
+  assertOk(rookCaptureTrace);
+  assertEqual(rookCaptureTrace.revealChoiceRisk, true);
+  assertOk(rookCaptureTrace.revealChoicePenalty < 0);
+  assertOk(rookCaptureTrace.reason.includes('選擇權') || rookCaptureTrace.reason.includes('翻子結果'));
+
+  // 推薦手不應是車吃卒（馬活出應勝出）
+  const recIsRookCapture =
+    rec.move?.piece.originalType === 'rook' &&
+    rec.move?.captured !== null;
+  assertEqual(recIsRookCapture, false);
+});
+
+test('reveal choice risk B: 安全吃高價明子不應被誤扣', () => {
+  // 紅明車安全吃黑明炮（已翻，高價）→ revealChoiceRisk 不應觸發
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn', 'pawn', true));
+  place(board, 7, 0, piece('red', 'rook', 'rook', true));          // 紅明車
+  place(board, 3, 0, piece('black', 'cannon', 'cannon', true));    // 黑明炮（目標，已翻）
+
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const rec = recommendMove(state);
+  assertOk(rec.traces);
+
+  const rookCapTrace = rec.traces.find(t =>
+    t.move.piece.realType === 'rook' && t.move.captured?.realType === 'cannon'
+  );
+  assertOk(rookCapTrace);
+  assertEqual(rookCapTrace.revealChoiceRisk, false);
+  assertEqual(rookCapTrace.revealChoicePenalty, 0);
+});
+
+test('reveal choice risk C: 吃高價外觀暗子不應完全禁止', () => {
+  // 紅明車吃 黑隱藏炮（originalType='cannon'，高外觀）
+  // isLowAppearance=false → revealChoiceRisk 不觸發
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn', 'pawn', true));
+  place(board, 7, 0, piece('red', 'rook', 'rook', true));           // 紅明車
+  place(board, 3, 0, piece('black', 'cannon', 'cannon', false));    // 黑隱藏炮（高外觀）
+
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const rec = recommendMove(state);
+  assertOk(rec.traces);
+
+  const rookCapTrace = rec.traces.find(t =>
+    t.move.piece.realType === 'rook' && t.move.captured?.originalType === 'cannon'
+  );
+  assertOk(rookCapTrace);
+  // 高外觀暗子不觸發後手選擇權懲罰
+  assertEqual(rookCapTrace.revealChoiceRisk, false);
+});
+
+test('開局大子 D: 活出大子優先於普通暗卒壓制', () => {
+  // 開局：紅隱藏馬(9,1) 可活出 → majorActivation=true
+  // 其他候選多為無活大子的走法
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn', 'pawn', true));
+  place(board, 9, 1, piece('red', 'horse', 'horse', false));    // 初始後排馬
+  place(board, 2, 0, piece('black', 'pawn', 'pawn', false));    // 對方暗子（供壓制）
+  place(board, 2, 2, piece('black', 'pawn', 'pawn', false));
+
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const rec = recommendMove(state);
+  assertOk(rec.traces);
+
+  // 馬活出的 trace 應有 majorActivation=true
+  const horseTrace = rec.traces.find(t =>
+    t.move.piece.originalType === 'horse' &&
+    t.move.from.row === 9 && t.move.from.col === 1
+  );
+  assertOk(horseTrace);
+  assertEqual(horseTrace.majorActivation, true);
+  assertOk(horseTrace.openingMajorGoal);
+
+  // 馬活出應勝過最佳純壓制手
+  const bestNonActivationTrace = rec.traces
+    .filter(t => !t.majorActivation && !t.move.captured)
+    .sort((a, b) => b.score - a.score)[0];
+  if (bestNonActivationTrace) {
+    assertOk(horseTrace.score > bestNonActivationTrace.score);
+  }
+});
+
+test('開局大子 E: 壓制對方翻子要服務於大子活動目標', () => {
+  // 馬活出（majorActivation）比純暗兵壓制（無 majorActivation）分數高
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn', 'pawn', true));
+  place(board, 9, 1, piece('red', 'horse', 'horse', false));   // 初始後排馬
+  place(board, 3, 0, piece('black', 'pawn', 'pawn', false));   // 對方暗卒（壓制目標）
+
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const rec = recommendMove(state);
+  assertOk(rec.traces);
+
+  const horseTrace = rec.traces.find(t =>
+    t.move.piece.originalType === 'horse' &&
+    t.move.from.row === 9 && t.move.from.col === 1
+  );
+  assertOk(horseTrace);
+  assertEqual(horseTrace.majorActivation, true);
+
+  // reason 應與大子活動相關
+  // reason 可為：'開局優先活出大子' 或 '活出大子並壓制對方翻子'
+  assertOk(
+    horseTrace.reason.includes('活出大子') ||
+    horseTrace.reason.includes('大子') ||
+    horseTrace.majorActivation === true
+  );
+
+  // 馬活出分數 >= 所有非活大子純壓制手
+  const pawnPressureTraces = rec.traces.filter(t =>
+    t.move.piece.originalType === 'pawn' && !t.majorActivation && !t.move.captured
+  );
+  for (const pt of pawnPressureTraces) {
+    assertOk(horseTrace.score >= pt.score);
+  }
+});
+
+test('公平資訊防呆 F: AI 不可因未翻 realType 不同而改變 openingMajorGoal', () => {
+  // 兩盤面公開資訊完全相同，只有某一暗子的 realType 不同
+  // 馬活出的 majorActivation / openingMajorGoal / score 不應因此改變
+
+  function makeState(hiddenRealType: PieceType): GameState {
+    const board = emptyBoard();
+    place(board, 9, 4, piece('red', 'king'));
+    place(board, 0, 4, piece('black', 'king'));
+    place(board, 5, 4, piece('red', 'pawn', 'pawn', true));
+    place(board, 9, 1, piece('red', 'horse', 'horse', false));
+    // 同一位置、同 originalType='pawn'、同 revealed=false，只有 realType 不同
+    place(board, 8, 0, piece('red', 'pawn', hiddenRealType, false));
+    return { board, turn: 'red', history: [], status: 'playing' };
+  }
+
+  const state1 = makeState('rook');
+  const state2 = makeState('pawn');
+
+  const rec1 = recommendMove(state1);
+  const rec2 = recommendMove(state2);
+  assertOk(rec1.traces);
+  assertOk(rec2.traces);
+
+  // 馬活出 trace 在兩個盤面應完全相同
+  const horseTrace1 = rec1.traces.find(t =>
+    t.move.piece.originalType === 'horse' &&
+    t.move.from.row === 9 && t.move.from.col === 1
+  );
+  const horseTrace2 = rec2.traces.find(t =>
+    t.move.piece.originalType === 'horse' &&
+    t.move.from.row === 9 && t.move.from.col === 1
+  );
+  assertOk(horseTrace1);
+  assertOk(horseTrace2);
+  // 公平資訊：majorActivation 不可因 unrevealed realType 不同而改變
+  assertEqual(horseTrace1.majorActivation, horseTrace2.majorActivation);
+  assertEqual(horseTrace1.openingMajorGoal, horseTrace2.openingMajorGoal);
+  // 分數也應相同（不偷看 realType）
+  assertEqual(horseTrace1.score, horseTrace2.score);
+});

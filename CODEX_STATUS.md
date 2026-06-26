@@ -401,3 +401,51 @@ npm.cmd run build
 
 **測試**：`npm test` 全部 30 個 AI 相關測試通過。  
 **TypeScript**：`npx tsc --noEmit` 無錯。
+
+---
+
+## 後手翻棋選擇權 + 公平資訊開局大子活化（2026-06-27）
+
+**目標**：修正兩個揭棋 AI 核心邏輯，不動 UI、不改 GameRecord schema。
+
+**新增 / 修改檔案**：
+
+1. **`src/ai/aiWeights.ts`**（修改）：
+   - 新增 5 個 weight：`majorActivationBonus(45)` / `opponentRevealSuppressionBonus(12)` / `revealChoiceRiskPenaltyBase(90)` / `revealChoiceRiskHighValueExtra(40)` / `hiddenPressureNonActivationCap(16)`
+
+2. **`src/ai/aiTrace.ts`**（修改）：
+   - 新增 5 個 trace 欄位：`revealChoiceRisk` / `revealChoicePenalty` / `openingMajorGoal` / `majorActivation` / `opponentRevealSuppression`
+
+3. **`src/ai/simpleAi.ts`**（修改）：
+   - 新增 helper `computeRevealChoiceRisk()`：高價子吃低外觀暗子且落點被對方暗子看住 → 扣分（不偷看 realType）
+   - 新增 helper `computeOpeningMajorActivation()`：偵測開局大子活動（公平資訊：只用 piece.revealed / originalType / 初始位置，嚴禁用 unrevealed realType）
+   - `evaluateMove()` 整合兩個 helper，新增 `finalHiddenPressureScore`（非大子活動手限制壓制加分上限）
+   - `reasonFor()` 新增 3 個 reason：`吃低價暗子後給對方選擇權，已降分` / `活出大子並壓制對方翻子` / `開局優先活出大子`
+   - trace building 補齊 5 個新欄位
+
+4. **`src/ai/aiDebugReport.ts`**（修改）：
+   - `fmtTrace()` 新增 5 個欄位輸出（用 `?? false` / `?? 0` 避免舊報告壞掉）
+
+5. **`tests/rules.test.ts`**（新增 6 個測試 A~F）：
+   - A：暗車吃被暗車看著的未過河暗卒應被降分
+   - B：安全吃高價明子不誤扣
+   - C：吃高價外觀暗子不禁止
+   - D：開局活出大子優先於純暗卒壓制
+   - E：壓制對方翻子要服務於大子活動目標
+   - F：公平資訊防呆（unrevealed realType 不影響 majorActivation/score）
+
+**公平資訊保證**：
+- `computeOpeningMajorActivation` 嚴禁用 `!piece.revealed && piece.realType === 'rook'` 加分
+- 只用 `piece.revealed === true` 後的 realType，或 `originalType`（公開資訊）
+- 測試 F 驗證兩個 realType 不同但公開資訊相同的盤面，分數必須相同
+
+**測試**：`npm test` 全部通過（含所有既有測試）。
+
+**grep 驗收**：
+- revealChoiceRisk: 7 次（tests）
+- revealChoicePenalty: 3 次
+- openingMajorGoal: 4 次
+- majorActivation: 11 次
+- 開局優先活出大子: 1 次
+- 選擇權: 3 次
+- realType: 34 次

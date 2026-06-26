@@ -76,6 +76,11 @@ export type AiWeights = {
   safeCapturePriorityBonus: number;
   speculativeHiddenAttackPenalty: number;
   repetitiveCheckPenalty: number;
+  majorActivationBonus: number;
+  opponentRevealSuppressionBonus: number;
+  revealChoiceRiskPenaltyBase: number;
+  revealChoiceRiskHighValueExtra: number;
+  hiddenPressureNonActivationCap: number;
 };
 
 export const defaultAiWeights: AiWeights = {
@@ -162,4 +167,9 @@ export const defaultAiWeights: AiWeights = {
   safeCapturePriorityBonus: 35,
   speculativeHiddenAttackPenalty: -15,
   repetitiveCheckPenalty: -45,
+  majorActivationBonus: 45,
+  opponentRevealSuppressionBonus: 12,
+  revealChoiceRiskPenaltyBase: 90,
+  revealChoiceRiskHighValueExtra: 40,
+  hiddenPressureNonActivationCap: 16,
 };
