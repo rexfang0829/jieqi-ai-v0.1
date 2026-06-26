@@ -70,6 +70,17 @@ function hasMove(board: Board, side: Side, from: [number, number], to: [number, 
   );
 }
 
+function findMove(board: Board, side: Side, from: [number, number], to: [number, number]): Move {
+  const move = getAllLegalMoves(board, side).find(candidate =>
+    candidate.from.row === from[0] &&
+    candidate.from.col === from[1] &&
+    candidate.to.row === to[0] &&
+    candidate.to.col === to[1]
+  );
+  assertOk(move);
+  return move;
+}
+
 function repetitionState(): GameState {
   const board = emptyBoard();
   place(board, 9, 4, piece('red', 'king'));
@@ -1116,6 +1127,94 @@ test('AI prefers a safe high-value capture', () => {
   const recommended = recommendMove(state, [quietMove, safeCapture]);
   assertOk(recommended.move);
   assertEqual(recommended.move, safeCapture);
+});
+
+test('AI prefers opening reveal on own pawn starting point when there is no tactic', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn'));
+  place(board, 6, 0, piece('red', 'pawn', 'rook', false));
+  place(board, 7, 1, piece('red', 'horse', 'cannon', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const pawnReveal = findMove(board, 'red', [6, 0], [5, 0]);
+  const horseReveal = findMove(board, 'red', [7, 1], [5, 2]);
+  const recommended = recommendMove(state, [horseReveal, pawnReveal]);
+  assertOk(recommended.move);
+  assertEqual(recommended.move, pawnReveal);
+});
+
+test('AI opening pawn bonus supports black pawn starting points', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 3, 4, piece('black', 'pawn'));
+  place(board, 3, 0, piece('black', 'pawn', 'rook', false));
+  place(board, 2, 1, piece('black', 'horse', 'cannon', false));
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const pawnReveal = findMove(board, 'black', [3, 0], [4, 0]);
+  const horseReveal = findMove(board, 'black', [2, 1], [4, 2]);
+  const recommended = recommendMove(state, [horseReveal, pawnReveal]);
+  assertOk(recommended.move);
+  assertEqual(recommended.move, pawnReveal);
+});
+
+test('AI gives edge and third-seventh pawn starts extra opening priority', () => {
+  const edgeBoard = emptyBoard();
+  place(edgeBoard, 9, 4, piece('red', 'king'));
+  place(edgeBoard, 0, 4, piece('black', 'king'));
+  place(edgeBoard, 6, 0, piece('red', 'pawn', 'rook', false));
+  place(edgeBoard, 6, 4, piece('red', 'pawn', 'cannon', false));
+  const edgeState = { board: edgeBoard, turn: 'red' as const, history: [], status: 'playing' as const };
+  const edgePawn = findMove(edgeBoard, 'red', [6, 0], [5, 0]);
+  const centerPawnA = findMove(edgeBoard, 'red', [6, 4], [5, 4]);
+  assertEqual(recommendMove(edgeState, [centerPawnA, edgePawn]).move, edgePawn);
+
+  const thirdSeventhBoard = emptyBoard();
+  place(thirdSeventhBoard, 9, 4, piece('red', 'king'));
+  place(thirdSeventhBoard, 0, 4, piece('black', 'king'));
+  place(thirdSeventhBoard, 6, 2, piece('red', 'pawn', 'rook', false));
+  place(thirdSeventhBoard, 6, 4, piece('red', 'pawn', 'cannon', false));
+  const thirdSeventhState = { board: thirdSeventhBoard, turn: 'red' as const, history: [], status: 'playing' as const };
+  const thirdSeventhPawn = findMove(thirdSeventhBoard, 'red', [6, 2], [5, 2]);
+  const centerPawnB = findMove(thirdSeventhBoard, 'red', [6, 4], [5, 4]);
+  assertEqual(recommendMove(thirdSeventhState, [centerPawnB, thirdSeventhPawn]).move, thirdSeventhPawn);
+});
+
+test('AI opening pawn bonus does not override immediate checkmate', () => {
+  const board = emptyBoard();
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 1, 3, piece('red', 'rook'));
+  place(board, 0, 3, piece('red', 'rook'));
+  place(board, 0, 5, piece('red', 'rook'));
+  place(board, 6, 0, piece('red', 'pawn', 'rook', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const mate = findMove(board, 'red', [1, 3], [1, 4]);
+  const pawnReveal = {
+    from: { row: 6, col: 0 },
+    to: { row: 5, col: 0 },
+    piece: board[6][0]!,
+  };
+  const recommended = recommendMove(state, [pawnReveal, mate]);
+  assertOk(recommended.move);
+  assertEqual(recommended.move, mate);
+});
+
+test('AI does not force an opening pawn reveal that allows opponent one-move mate', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 0, 0, piece('black', 'rook'));
+  place(board, 5, 4, piece('red', 'advisor'));
+  place(board, 6, 6, piece('red', 'pawn', 'rook', false));
+  place(board, 8, 4, piece('red', 'rook'));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const pawnReveal = findMove(board, 'red', [6, 6], [5, 6]);
+  const safeMove = findMove(board, 'red', [5, 4], [4, 3]);
+  const recommended = recommendMove(state, [pawnReveal, safeMove]);
+  assertOk(recommended.move);
+  assertEqual(recommended.move, safeMove);
 });
 
 test('game record can be created and converted to text and json', () => {

@@ -1,6 +1,7 @@
 import type { Board, GameState, Move, Piece, PieceType, Position, Side } from '../types/chess';
 import { getAllLegalMoves } from '../game/checkRules';
 import { applyMove } from '../game/gameEngine';
+import { createInitialBoard } from '../game/initialBoard';
 
 const value: Record<PieceType, number> = {
   king: 10000,
@@ -11,6 +12,14 @@ const value: Record<PieceType, number> = {
   advisor: 150,
   pawn: 80,
 };
+
+const openingPawnStarts = createInitialBoard().flatMap((row, rowIndex) =>
+  row.flatMap((piece, colIndex) =>
+    piece?.originalType === 'pawn'
+      ? [{ side: piece.side, row: rowIndex, col: colIndex }]
+      : []
+  )
+);
 
 function publicType(piece: { originalType: PieceType; realType: PieceType; revealed: boolean }): PieceType {
   return piece.revealed ? piece.realType : piece.originalType;
@@ -63,6 +72,27 @@ function positionScore(move: Move): number {
   return score;
 }
 
+function isOpeningPawnStart(side: Side, position: Position): boolean {
+  return openingPawnStarts.some(start =>
+    start.side === side &&
+    start.row === position.row &&
+    start.col === position.col
+  );
+}
+
+function openingPawnRevealBonus(state: GameState, move: Move): number {
+  if (state.history.length > 8) return 0;
+  if (move.piece.side !== state.turn) return 0;
+  if (move.piece.originalType !== 'pawn') return 0;
+  if (move.piece.revealed) return 0;
+  if (!isOpeningPawnStart(state.turn, move.from)) return 0;
+
+  let bonus = 40;
+  if (move.from.col === 0 || move.from.col === 8) bonus += 10;
+  else if (move.from.col === 2 || move.from.col === 6) bonus += 8;
+  return bonus;
+}
+
 function bestRecaptureValue(board: Board, side: Side, target: Position): number {
   const replies = getAllLegalMoves(board, side);
   let best = 0;
@@ -107,8 +137,8 @@ function opponentReplyPenalty(board: Board, side: Side, movedTo: Position, moved
   };
 }
 
-function baseScore(move: Move, possibleLoss: number, maxReplyGain: number): number {
-  return captureScore(move) - possibleLoss + revealScore(move) + positionScore(move) - Math.round(maxReplyGain * 0.25);
+function baseScore(state: GameState, move: Move, possibleLoss: number, maxReplyGain: number): number {
+  return captureScore(move) - possibleLoss + revealScore(move) + openingPawnRevealBonus(state, move) + positionScore(move) - Math.round(maxReplyGain * 0.25);
 }
 
 function allowsOpponentWin(state: GameState, move: Move): boolean {
@@ -145,7 +175,7 @@ export function recommendMove(state: GameState, candidateMoves?: Move[]): { move
     const nextBoard = applyMoveToBoard(state.board, move);
     const moved = nextBoard[move.to.row][move.to.col]!;
     const reply = opponentReplyPenalty(nextBoard, state.turn, move.to, moved);
-    const score = baseScore(move, reply.possibleLoss, reply.maxReplyGain);
+    const score = baseScore(state, move, reply.possibleLoss, reply.maxReplyGain);
 
     if (reply.risk > 0) sawRiskyMove = true;
     if (score > bestScore) {

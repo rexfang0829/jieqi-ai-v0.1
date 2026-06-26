@@ -471,3 +471,21 @@ npm.cmd run build
 ### 驗證
 - `npm.cmd test` 通過。
 - `npx.cmd tsc --noEmit` 通過。
+## 2026-06-26 開局翻兵 heuristic 收尾（Codex）
+
+### 本輪完成
+- AI 戰術層 MVP 保留：直接絕殺優先、避免送對方一步絕殺。
+- 一層交換評估保留：吃子分會扣除對方吃回後、我方可反吃的簡化交換損失。
+- 棋譜變化線 MVP 保留：`GameRecord.variations` 可保存分析變化線。
+- 新增開局翻兵 heuristic：`state.history.length <= 8` 時，只對己方兵卒起始位置、尚未翻開、`originalType === 'pawn'` 的暗子走法加分。
+- 翻兵卒起始位 +40；邊兵額外 +10；三七路兵額外 +8。兵卒起始位置由 `createInitialBoard()` 推導，不硬寫紅黑座標。
+- 開局翻兵 bonus 只進入一般評分，不會蓋過直接絕殺與避免送一步殺；安全吃高價子仍因 material / exchange 分數高於翻兵 bonus。
+
+### 修改檔案
+- `src/ai/simpleAi.ts`：加入開局翻兵 bonus 與由初始盤面推導兵卒起始點的 helper。
+- `tests/rules.test.ts`：補紅黑開局翻兵、邊兵/三七路加分、絕殺優先不被翻兵蓋過、翻兵若送對方一步絕殺則不硬翻的測試。
+- `CODEX_STATUS.md` / `NEXT_TASK.md`：整理本輪完成內容與已完成補充位置。
+
+### 驗證
+- `npm.cmd test` 通過。
+- `npx.cmd tsc --noEmit` 通過。
