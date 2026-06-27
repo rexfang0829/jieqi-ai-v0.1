@@ -1,5 +1,48 @@
 ## 最新完成的工作
 
+
+## Task #122 — 修正 AI VS AI 來回連將 / 重複殺卡死問題
+**Status**: ✅ Done  
+**Files changed**:
+- `src/game/repetitionRules.ts` — 修正 getPositionKey 未翻暗子用 originalType；新增 isRepetitionDraw
+- `src/ai/aiWeights.ts` — 新增 repeatedCheckingCyclePenalty / repeatedPositionPenalty
+- `src/ai/aiTrace.ts` — 新增 4 個 trace 欄位
+- `src/ai/simpleAi.ts` — 擴充 detectRepetitiveCheck；新增 detectRepeatedCheckingCycle；Need B 硬性抑制
+- `src/ai/aiDebugReport.ts` — 補充 4 個新 trace 欄位輸出
+- `src/App.tsx` — AI VS AI 第 4 次重複局面判定和棋
+- `tests/rules.test.ts` — 新增 8 個測試
+
+### 2026-06-27 暗兵卒白送偵測（Claude）
+
+**目標**：修正 AI 推薦暗兵卒走入已翻敵方兵卒攻擊範圍（白送）的問題。
+
+**新增/修改檔案**：
+
+1. **`src/ai/aiWeights.ts`**：
+   - 新增 2 個權重：`pawnSoldierWalksIntoRevealedPawnAttackPenalty: -120` / `pawnSoldierDevelopmentSuppressedByPawnAttackPenalty: -80`
+
+2. **`src/ai/aiTrace.ts`**：
+   - 新增 4 個 trace 欄位：`pawnSoldierWalksIntoRevealedPawnAttack` / `pawnSoldierSelfSacrifice` / `pawnSoldierProtectedAfterAdvance` / `pawnSoldierDevelopmentSuppressedByPawnAttack`
+
+3. **`src/ai/simpleAi.ts`**：
+   - 新增 helper `isSquareAttackedByRevealedPawn(board, bySide, target)`：遍歷 bySide 已翻兵卒的合法棋步，判斷 target 格是否在攻擊範圍內
+   - 評分：暗兵卒走入已翻敵方兵卒攻擊 → 扣 -120（基本）+ -80（開發延後）
+   - 有己方棋子保護目標格時 (`pawnSoldierProtectedAfterAdvance`) 不扣分
+   - reason strings：`'暗兵卒走入已翻兵卒攻擊，已降分'` / `'暗兵卒白送，開發延後'`
+
+4. **`src/ai/aiDebugReport.ts`**：
+   - `fmtTrace` 補免 4 個新欄位輸出
+
+5. **`tests/rules.test.ts`**：
+   - 修正舊測試「象相 follow-up 偏好中兵」blocker 從 row 5 改 row 6（避免新懲罰誤觸發）
+   - 新增 3 個測試：暗兵卒走入攻擊計分 / 有保護則不扣分 / debug report 含新欄位名稱
+
+**測試**：`npm test` 全部通過；`npx tsc --noEmit` 無錯。
+
+---
+
+## 最新完成的工作
+
 ### 2026-06-27 明大子戰術優先級修正（Claude）
 
 **目標**：修正 AI 優先級，確保安全吃明大子 > 暗兵卒開發 > 死車保留威脅。

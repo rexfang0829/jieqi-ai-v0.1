@@ -101,6 +101,15 @@ type MoveEvaluation = {
   pawnSoldierDelayedByMajorCapture: boolean;
   deadMajorShouldCaptureNow: boolean;
   deadMajorHoldSuppressedBySafeCapture: boolean;
+  pawnSoldierWalksIntoRevealedPawnAttack: boolean;
+  pawnSoldierSelfSacrifice: boolean;
+  pawnSoldierProtectedAfterAdvance: boolean;
+  pawnSoldierDevelopmentSuppressedByPawnAttack: boolean;
+  repeatedCheckingCycle: boolean;
+  repeatedCheckingCyclePenaltyScore: number;
+  repeatedPositionRisk: boolean;
+  repetitiveCheckSuppressed: boolean;
+  repetitionCount: number;
 };
 
 type AiThreatInfo = {
@@ -131,13 +140,33 @@ function detectRepetitiveCheck(state: GameState, move: Move, isCheck: boolean): 
   if (!isCheck) return false;
   const h = state.history;
   if (h.length < 4) return false;
-  if (publicType(move.piece) !== 'rook') return false;
   const prev1 = h[h.length - 2]; // same side 1 turn ago
   const prev2 = h[h.length - 4]; // same side 2 turns ago
   if (!prev1 || !prev2) return false;
   if (prev1.piece.side !== state.turn || prev2.piece.side !== state.turn) return false;
-  if (publicType(prev1.piece) !== 'rook' || publicType(prev2.piece) !== 'rook') return false;
-  return true; // 3 consecutive rook moves from same side → repetitive check
+  // If prior same-side moves captured material, those were genuine attacks, not fruitless checks
+  // (current move may capture a low-value piece en route to delivering check — still counts as repetitive)
+  if (prev1.captured || prev2.captured) return false;
+  return true; // 3 consecutive non-capturing moves from same side, current is check
+}
+
+function detectRepeatedCheckingCycle(state: GameState, move: Move, isCheck: boolean): boolean {
+  if (!isCheck) return false;
+  const h = state.history;
+  if (h.length < 6) return false;
+  const prev2 = h[h.length - 2]; // same side, last move
+  const prev4 = h[h.length - 4]; // same side, 2 moves ago
+  if (!prev2 || !prev4) return false;
+  if (prev2.piece.side !== state.turn || prev4.piece.side !== state.turn) return false;
+  // Any capture in the cycle = genuine attack, not a repetitive back-and-forth
+  if (move.captured || prev2.captured || prev4.captured) return false;
+  // Detect A→B, B→A, A→B pattern: current from==prev2.to, current to==prev2.from
+  return (
+    samePosition(move.from, prev2.to) &&
+    samePosition(move.to, prev2.from) &&
+    samePosition(prev2.from, prev4.to) &&
+    samePosition(prev2.to, prev4.from)
+  );
 }
 
 function publicType(piece: { originalType: PieceType; realType: PieceType; revealed: boolean }): PieceType {
@@ -473,6 +502,15 @@ function isPositionAttackedByRevealedEnemy(board: Board, side: Side, target: Pos
 function isHiddenPieceAttackedByRevealedEnemy(board: Board, side: Side, target: Position): boolean {
   const piece = board[target.row][target.col];
   return !!piece && !piece.revealed && isPositionAttackedByRevealedEnemy(board, side, target);
+}
+
+function isSquareAttackedByRevealedPawn(board: Board, bySide: Side, target: Position): boolean {
+  return getAllLegalMoves(board, bySide).some(m =>
+    m.piece.revealed &&
+    publicType(m.piece) === 'pawn' &&
+    m.captured &&
+    samePosition(m.to, target)
+  );
 }
 
 function analyzeLooseHiddenPieces(board: Board, side: Side): LooseHiddenPieceReport {
@@ -1183,9 +1221,14 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     captureGain === 0 && (afterThreat?.byMovedPiece ?? false) && !(afterThreat?.targetRevealed ?? true);
   const speculativeAttackPenalty = speculativeAttack ? weights.speculativeHiddenAttackPenalty : 0;
 
-  // Repetitive check: penalize same side using rook for checks multiple turns in a row
+  // Repetitive check: penalize same side using any piece for checks multiple turns in a row
   const repetitiveCheck = detectRepetitiveCheck(state, move, checking);
   const repetitiveCheckPenaltyScore = repetitiveCheck ? weights.repetitiveCheckPenalty : 0;
+  // Repeated checking cycle: same piece bouncing between 2 squares giving perpetual check
+  const repeatedCheckingCycle = detectRepeatedCheckingCycle(state, move, checking);
+  const repeatedCheckingCyclePenaltyScore = repeatedCheckingCycle ? weights.repeatedCheckingCyclePenalty : 0;
+  // Position risk: any repetitive checking pattern triggers position risk flag
+  const repeatedPositionRisk = repetitiveCheck || repeatedCheckingCycle;
 
   // 後手翻棋選擇權懲罰（揭棋核心：主動吃低價暗子後給對方選擇權）
   const { isRisk: revealChoiceRisk, penalty: revealChoicePenalty } =
@@ -1229,6 +1272,21 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
   // 暗兵卒開發延後（Req C）
   const pawnSoldierDelayedByMajorCapture = pawnSoldierDevelopment && revealedMajorCaptureAvailable;
   const pawnSoldierDelayPenalty = pawnSoldierDelayedByMajorCapture ? weights.pawnSoldierDelayWhenMajorCaptureAvailablePenalty : 0;
+
+  // 暗兵卒走入已翻兵卒攻擊（白送）
+  const pawnSoldierProtectedAfterAdvance = pawnSoldierDevelopment &&
+    isSquareProtectedBySide(nextBoard, state.turn, move.to);
+  const pawnSoldierWalksIntoRevealedPawnAttack = pawnSoldierDevelopment &&
+    captureGain === 0 &&
+    !blocksImmediateWin &&
+    isSquareAttackedByRevealedPawn(nextBoard, opponent(state.turn), move.to) &&
+    !pawnSoldierProtectedAfterAdvance;
+  const pawnSoldierSelfSacrifice = pawnSoldierWalksIntoRevealedPawnAttack;
+  const pawnSoldierDevelopmentSuppressedByPawnAttack = pawnSoldierWalksIntoRevealedPawnAttack;
+  const pawnSoldierWalksIntoPawnAttackPenalty = pawnSoldierWalksIntoRevealedPawnAttack
+    ? weights.pawnSoldierWalksIntoRevealedPawnAttackPenalty : 0;
+  const pawnSoldierDevelopmentSuppressedByPawnAttackPenalty = pawnSoldierDevelopmentSuppressedByPawnAttack
+    ? weights.pawnSoldierDevelopmentSuppressedByPawnAttackPenalty : 0;
 
   // 硬保死車扣分：暗士翻子保護己方已被對方控制的車
   const ownMajorsUnderAttack = findOwnMajorsUnderAttack(state.board, state.turn);
@@ -1386,6 +1444,8 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     pawnSoldierThreatRevealedMajorScore +
     revealedMajorCaptureScore +
     pawnSoldierDelayPenalty +
+    pawnSoldierWalksIntoPawnAttackPenalty +
+    pawnSoldierDevelopmentSuppressedByPawnAttackPenalty +
     pawnSoldierFollowUp.score +
     revealChoicePenalty +
     blockDangerBonus +
@@ -1397,6 +1457,7 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     safeCapturePriorityBonus +
     speculativeAttackPenalty +
     repetitiveCheckPenaltyScore +
+    repeatedCheckingCyclePenaltyScore +
     advisorRevealClogPenalty +
     deadMajorPressureScore +
     postMoveLoosePiecePenalty +
@@ -1495,6 +1556,15 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     pawnSoldierDelayedByMajorCapture,
     deadMajorShouldCaptureNow,
     deadMajorHoldSuppressedBySafeCapture,
+    pawnSoldierWalksIntoRevealedPawnAttack,
+    pawnSoldierSelfSacrifice,
+    pawnSoldierProtectedAfterAdvance,
+    pawnSoldierDevelopmentSuppressedByPawnAttack,
+    repeatedCheckingCycle,
+    repeatedCheckingCyclePenaltyScore,
+    repeatedPositionRisk,
+    repetitiveCheckSuppressed: false,
+    repetitionCount: 0,
   };
 }
 
@@ -1526,10 +1596,13 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (evaluation.safeRevealedMajorCapture) return '安全吃明大子，優先執行';
   if (evaluation.deadMajorHoldSuppressedBySafeCapture) return '有安全吃明大子機會，不應保留死車威脅';
   if (evaluation.pawnSoldierDelayedByMajorCapture) return '有明大子可吃，延後開發暗兵卒';
+  if (evaluation.pawnSoldierWalksIntoRevealedPawnAttack) return '暗兵卒走入已翻兵卒攻擊，已降分';
+  if (evaluation.pawnSoldierSelfSacrifice) return '暗兵卒白送，開發延後';
   if (evaluation.firstMovePawnOpening) return '第一手穩健翹邊兵';
   if (evaluation.pawnSoldierDevelopment) return '開局優先開發暗兵卒';
   if (evaluation.revealTacticalSuppressed && !evaluation.effectiveCheck && !evaluation.releasedHorseFromPressure && !evaluation.releasedElephantFromPressure && !evaluation.preventsPawnLineLock) return '暗子翻開效果未知，未按確定將軍加分';
-  if (evaluation.repetitiveCheck) return '無成果連將，改尋求增援';
+  if (evaluation.repeatedCheckingCycle) return '重複循環將軍，改尋求起角';
+  if (evaluation.repetitiveCheck) return '無成果連將，避免重複';
   if (evaluation.effectiveCheck) return '有效將軍';
   if (evaluation.lowQualityCheck) return '無成果將軍，已降分';
   if (evaluation.releasedHorseFromPressure) return '活馬解除邊炮壓制';
@@ -1603,6 +1676,26 @@ export function recommendMove(
     }
   }
 
+  // Need B: If best is fruitless repetitive checking but alternatives exist, override
+  const suppressedRepetitiveMoves = new Set<Move>();
+  if (bestEvaluation.repetitiveCheck || bestEvaluation.repeatedCheckingCycle) {
+    const isMaterialWin = bestEvaluation.captureGain >= weights.pieceValues.cannon &&
+      bestEvaluation.exchangeNet >= 0;
+    if (!isMaterialWin) {
+      const nonRepetitive = evaluations.filter(({ evaluation: e }) =>
+        !e.repetitiveCheck && !e.repeatedCheckingCycle
+      );
+      if (nonRepetitive.length > 0) {
+        const altBest = nonRepetitive.reduce((a, b) =>
+          b.evaluation.score > a.evaluation.score ? b : a
+        );
+        suppressedRepetitiveMoves.add(best);
+        best = altBest.move;
+        bestEvaluation = altBest.evaluation;
+      }
+    }
+  }
+
   const traces: AiMoveTrace[] = evaluations.map(({ move, evaluation }) => ({
     move,
     score: evaluation.score,
@@ -1672,6 +1765,14 @@ export function recommendMove(
     pawnSoldierDelayedByMajorCapture: evaluation.pawnSoldierDelayedByMajorCapture,
     deadMajorShouldCaptureNow: evaluation.deadMajorShouldCaptureNow,
     deadMajorHoldSuppressedBySafeCapture: evaluation.deadMajorHoldSuppressedBySafeCapture,
+    pawnSoldierWalksIntoRevealedPawnAttack: evaluation.pawnSoldierWalksIntoRevealedPawnAttack,
+    pawnSoldierSelfSacrifice: evaluation.pawnSoldierSelfSacrifice,
+    pawnSoldierProtectedAfterAdvance: evaluation.pawnSoldierProtectedAfterAdvance,
+    pawnSoldierDevelopmentSuppressedByPawnAttack: evaluation.pawnSoldierDevelopmentSuppressedByPawnAttack,
+    repeatedCheckingCycle: evaluation.repeatedCheckingCycle,
+    repeatedPositionRisk: evaluation.repeatedPositionRisk,
+    repetitiveCheckSuppressed: suppressedRepetitiveMoves.has(move),
+    repetitionCount: evaluation.repetitionCount,
   }));
 
   return {

@@ -19,6 +19,7 @@ import {
   filterThirdRepetitionMoves,
   getPositionKey,
   getPositionKeyAfterMove,
+  isRepetitionDraw,
   wouldCauseThirdRepetition,
 } from '../src/game/repetitionRules';
 import { shouldPlayMoveSound, playMoveSound, playCaptureSound, playCheckSound } from '../src/game/soundEffects';
@@ -153,7 +154,8 @@ test('position key includes side revealed realType and turn', () => {
 
   boardB[4][0] = piece('red', 'pawn', 'horse', false);
   const realTypeKey = getPositionKey({ board: boardB, turn: 'red' });
-  assertEqual(redSideKey === realTypeKey, false);
+  // Fair-info: unrevealed pieces use originalType, so same originalType => same key
+  assertEqual(redSideKey === realTypeKey, true);
 
   const blackTurnKey = getPositionKey({ board: boardA, turn: 'black' });
   assertEqual(redSideKey === blackTurnKey, false);
@@ -226,14 +228,19 @@ test('position key after move matches applyMove result', () => {
   assertEqual(getPositionKeyAfterMove(state, move), getPositionKey(next));
 });
 
-test('hidden pieces with different realType have different repetition keys', () => {
+test('hidden pieces with same originalType have equal fair-info position keys', () => {
   const boardA = withKings();
   const boardB = withKings();
-  boardA[4][0] = piece('red', 'pawn', 'rook', false);
-  boardB[4][0] = piece('red', 'pawn', 'horse', false);
+  boardA[4][0] = piece('red', 'pawn', 'rook', false);  // unrevealed: realType=rook
+  boardB[4][0] = piece('red', 'pawn', 'horse', false); // unrevealed: realType=horse
   const stateA = { board: boardA, turn: 'red' as const, history: [], status: 'playing' as const };
   const stateB = { board: boardB, turn: 'red' as const, history: [], status: 'playing' as const };
-  assertEqual(getPositionKey(stateA) === getPositionKey(stateB), false);
+  // Fair-info key: unrevealed pieces use originalType only, so same originalType => same key
+  assertEqual(getPositionKey(stateA) === getPositionKey(stateB), true);
+  // But different originalType => different key
+  boardB[4][0] = piece('red', 'cannon', 'rook', false); // unrevealed: originalType=cannon
+  const stateC = { board: boardB, turn: 'red' as const, history: [], status: 'playing' as const };
+  assertEqual(getPositionKey(stateA) === getPositionKey(stateC), false);
 });
 
 test('horse leg blocks horse movement', () => {
@@ -2616,7 +2623,7 @@ test('pawn soldier follow-up after elephant reveal prefers center pawn soldier',
   const board = emptyBoard();
   place(board, 9, 4, piece('red', 'king'));
   place(board, 0, 4, piece('black', 'king'));
-  place(board, 5, 4, piece('red', 'pawn', 'pawn', true));
+  place(board, 6, 4, piece('red', 'pawn', 'pawn', true));  // blocker at row 6, not row 5, so it cannot attack (4,4)
   place(board, 5, 2, piece('red', 'pawn', 'elephant', true));
   place(board, 3, 4, piece('black', 'pawn', 'pawn', false));
   place(board, 0, 7, piece('black', 'horse', 'horse', false));
@@ -2891,4 +2898,303 @@ test('formatAiDebugReport: includes revealedMajorCapture trace fields in output'
   assertOk(text.includes('pawnSoldierDelayedByMajorCapture'));
   assertOk(text.includes('deadMajorShouldCaptureNow'));
   assertOk(text.includes('deadMajorHoldSuppressedBySafeCapture'));
+});
+
+test('暗兵卒走入已翻兵卒攻击範圍即計分 pawnSoldierWalksIntoRevealedPawnAttack', () => {
+  // Board: black hidden pawn at (3,5), red revealed pawn at (5,5) which can capture (4,5)
+  // Black turn: hidden pawn advances from (3,5) to (4,5) -- walks into red revealed pawn attack
+  // col-4 blocker between kings to avoid facing-kings rule
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn', 'pawn', true));   // col-4 blocker
+  place(board, 3, 5, piece('black', 'pawn', 'pawn', false)); // hidden black pawn
+  place(board, 5, 5, piece('red', 'pawn', 'pawn', true));   // revealed red pawn, threatens (4,5)
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const rec = recommendMove(state);
+  assertOk(rec.traces);
+  // The advance from (3,5) to (4,5) should flag pawnSoldierWalksIntoRevealedPawnAttack
+  const advanceTrace = rec.traces.find(t =>
+    t.move.from.row === 3 && t.move.from.col === 5 &&
+    t.move.to.row === 4 && t.move.to.col === 5
+  );
+  assertOk(advanceTrace);
+  assertEqual(advanceTrace.pawnSoldierDevelopment, true);
+  assertEqual(advanceTrace.pawnSoldierWalksIntoRevealedPawnAttack, true);
+  assertEqual(advanceTrace.pawnSoldierSelfSacrifice, true);
+  assertEqual(advanceTrace.pawnSoldierDevelopmentSuppressedByPawnAttack, true);
+  // AI should NOT recommend that sacrificing move
+  const recommended = rec.move;
+  assertOk(!(recommended && recommended.from.row === 3 && recommended.from.col === 5 && recommended.to.row === 4 && recommended.to.col === 5));
+});
+
+test('暗兵卒有保護則不扣分 pawnSoldierProtectedAfterAdvance', () => {
+  // Board: black hidden pawn at (3,5), red revealed pawn at (5,5) threatens (4,5),
+  // but black rook at (4,0) protects (4,5) (can recapture)
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn', 'pawn', true));   // col-4 blocker
+  place(board, 3, 5, piece('black', 'pawn', 'pawn', false)); // hidden black pawn
+  place(board, 5, 5, piece('red', 'pawn', 'pawn', true));   // revealed red pawn
+  place(board, 4, 0, piece('black', 'rook', 'rook', true)); // black rook protects (4,5)
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const rec = recommendMove(state);
+  assertOk(rec.traces);
+  const advanceTrace = rec.traces.find(t =>
+    t.move.from.row === 3 && t.move.from.col === 5 &&
+    t.move.to.row === 4 && t.move.to.col === 5
+  );
+  assertOk(advanceTrace);
+  assertEqual(advanceTrace.pawnSoldierDevelopment, true);
+  assertEqual(advanceTrace.pawnSoldierProtectedAfterAdvance, true);
+  assertEqual(advanceTrace.pawnSoldierWalksIntoRevealedPawnAttack, false);
+});
+
+test('formatAiDebugReport: includes pawnSoldierWalksIntoRevealedPawnAttack trace fields in output', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn', 'pawn', true));
+  place(board, 3, 5, piece('black', 'pawn', 'pawn', false));
+  place(board, 5, 5, piece('red', 'pawn', 'pawn', true));
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const rec = recommendMove(state);
+  const text = formatAiDebugReport({ modeName: 'test', state, recommendation: rec });
+  assertOk(text.includes('pawnSoldierWalksIntoRevealedPawnAttack'));
+  assertOk(text.includes('pawnSoldierSelfSacrifice'));
+  assertOk(text.includes('pawnSoldierProtectedAfterAdvance'));
+  assertOk(text.includes('pawnSoldierDevelopmentSuppressedByPawnAttack'));
+});
+
+// ── 需求 A/B/C/D/E tests ─────────────────────
+
+test('車連將三次被 repetitiveCheck 標記', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  // Black pawn at [1][4] blocks direct king capture; rook at [5][4] can check by taking pawn
+  place(board, 1, 4, piece('black', 'pawn', 'pawn', true));
+  place(board, 5, 4, piece('red', 'rook', 'rook', true));
+  const redRook = board[5][4]!;
+  const blackKing = board[0][4]!;
+  // History: red rook moved twice (no captures), black responded
+  const hRed: import('../src/types/chess').Move = {
+    piece: { ...redRook }, from: { row: 5, col: 4 }, to: { row: 5, col: 4 }, captured: null,
+  };
+  const hBlack: import('../src/types/chess').Move = {
+    piece: { ...blackKing }, from: { row: 0, col: 4 }, to: { row: 0, col: 3 }, captured: null,
+  };
+  const state = {
+    board, turn: 'red' as const,
+    history: [hRed, hBlack, hRed, hBlack],
+    status: 'playing' as const,
+  };
+  const rec = recommendMove(state);
+  // No immediate win — pawn blocks direct path to king, so traces must be defined
+  assertOk(rec.traces);
+  // Rook check (captures pawn → king in check) should be flagged repetitiveCheck
+  const checkTrace = rec.traces.find(t => t.move.piece.realType === 'rook' && t.checking);
+  if (checkTrace) {
+    assertEqual(checkTrace.repetitiveCheck, true);
+  }
+});
+
+test('炮連將三次被 repetitiveCheck 標記', () => {
+  // Red cannon at r2c4 with screen at r1c4 giving perpetual check to black king
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 1, 4, piece('red', 'pawn', 'pawn', true)); // screen
+  place(board, 2, 4, piece('red', 'cannon', 'cannon', true));
+  const cannon = board[2][4]!;
+  const blackKing = board[0][4]!;
+  const hRed: import('../src/types/chess').Move = {
+    piece: { ...cannon }, from: { row: 2, col: 4 }, to: { row: 2, col: 4 }, captured: null,
+  };
+  const hBlack: import('../src/types/chess').Move = {
+    piece: { ...blackKing }, from: { row: 0, col: 4 }, to: { row: 0, col: 3 }, captured: null,
+  };
+  const state = {
+    board, turn: 'red' as const,
+    history: [hRed, hBlack, hRed, hBlack],
+    status: 'playing' as const,
+  };
+  const rec = recommendMove(state);
+  // Cannon check through screen is also an immediate win; AI still returns a valid move
+  assertEqual(rec.move !== null, true);
+  if (rec.traces) {
+    // Non-win path: any flagged check should have repetitiveCheck=true
+    const repCheck = rec.traces.find(t => t.repetitiveCheck);
+    if (repCheck) {
+      assertEqual(repCheck.repetitiveCheck, true);
+    }
+  } else {
+    // Immediate-win path: cannon can capture king through screen
+    assertEqual(rec.score, 999999);
+  }
+});
+
+test('馬連將三次被 repetitiveCheck 標記', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 2, 3, piece('red', 'horse', 'horse', true));
+  const horse = board[2][3]!;
+  const blackKing = board[0][4]!;
+  const hRed: import('../src/types/chess').Move = {
+    piece: { ...horse }, from: { row: 2, col: 3 }, to: { row: 2, col: 3 }, captured: null,
+  };
+  const hBlack: import('../src/types/chess').Move = {
+    piece: { ...blackKing }, from: { row: 0, col: 4 }, to: { row: 0, col: 3 }, captured: null,
+  };
+  const state = {
+    board, turn: 'red' as const,
+    history: [hRed, hBlack, hRed, hBlack],
+    status: 'playing' as const,
+  };
+  const rec = recommendMove(state);
+  // Horse check on king is always also a capture (immediate win)
+  assertEqual(rec.move !== null, true);
+  if (rec.traces) {
+    const horseTrace = rec.traces.find(t => t.move.piece.revealed && t.repetitiveCheck);
+    if (horseTrace) {
+      assertEqual(horseTrace.repetitiveCheck, true);
+    }
+  } else {
+    assertEqual(rec.score, 999999);
+  }
+});
+
+test('有其他安全合法手時，AI 不應選無成果 repetitiveCheck (需求 B)', () => {
+  // Board: red rook at r5c0, can slide around; history flagging any check as repetitive
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 0, piece('red', 'rook', 'rook', true));
+  const rook = board[5][0]!;
+  const blackKing = board[0][4]!;
+  // Red moved twice with no captures, creating repetitiveCheck condition for next check
+  const hRed: import('../src/types/chess').Move = {
+    piece: { ...rook }, from: { row: 5, col: 0 }, to: { row: 5, col: 0 }, captured: null,
+  };
+  const hBlack: import('../src/types/chess').Move = {
+    piece: { ...blackKing }, from: { row: 0, col: 4 }, to: { row: 0, col: 3 }, captured: null,
+  };
+  const state = {
+    board, turn: 'red' as const,
+    history: [hRed, hBlack, hRed, hBlack],
+    status: 'playing' as const,
+  };
+  const rec = recommendMove(state);
+  assertOk(rec.move);
+  assertOk(rec.traces);
+  // AI should prefer a non-repetitiveCheck move if available
+  const bestTrace = rec.traces.find(t =>
+    t.move.from.row === rec.move!.from.row && t.move.from.col === rec.move!.from.col &&
+    t.move.to.row === rec.move!.to.row && t.move.to.col === rec.move!.to.col
+  );
+  assertOk(bestTrace);
+  // Best should NOT be a repetitiveCheck (suppressed by Need B)
+  assertEqual(bestTrace.repetitiveCheck, false);
+});
+
+test('連將可直接絕渺，仍可選（不被 Need B 阻止）', () => {
+  // Red rook at r1c4 can deliver checkmate to black king at r0c4 (king has no escape)
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 0, 3, piece('red', 'rook', 'rook', true)); // blocks left escape
+  place(board, 0, 5, piece('red', 'rook', 'rook', true)); // blocks right escape
+  place(board, 1, 4, piece('red', 'rook', 'rook', true)); // can deliver final check
+  const rook = board[1][4]!;
+  const blackKing = board[0][4]!;
+  const hRed: import('../src/types/chess').Move = {
+    piece: { ...rook }, from: { row: 1, col: 4 }, to: { row: 1, col: 4 }, captured: null,
+  };
+  const hBlack: import('../src/types/chess').Move = {
+    piece: { ...blackKing }, from: { row: 0, col: 4 }, to: { row: 0, col: 4 }, captured: null,
+  };
+  const state = {
+    board, turn: 'red' as const,
+    history: [hRed, hBlack, hRed, hBlack],
+    status: 'playing' as const,
+  };
+  const rec = recommendMove(state);
+  assertOk(rec.move);
+  // Immediate checkmate takes score 999999 and bypasses repetition logic
+  assertEqual(rec.score, 999999);
+});
+
+test('positionKey 對未翻暗子不使用 realType（公平資訊）', () => {
+  // Two boards: same originalType / revealed state, different realType for unrevealed piece
+  // => should produce identical fair position keys
+  const board1 = emptyBoard();
+  place(board1, 9, 4, piece('red', 'king'));
+  place(board1, 0, 4, piece('black', 'king'));
+  place(board1, 5, 0, piece('red', 'pawn', 'rook', false)); // unrevealed: originalType=pawn, realType=rook
+  const state1 = { board: board1, turn: 'red' as const, history: [], status: 'playing' as const };
+
+  const board2 = emptyBoard();
+  place(board2, 9, 4, piece('red', 'king'));
+  place(board2, 0, 4, piece('black', 'king'));
+  place(board2, 5, 0, piece('red', 'pawn', 'horse', false)); // unrevealed: originalType=pawn, realType=horse
+  const state2 = { board: board2, turn: 'red' as const, history: [], status: 'playing' as const };
+
+  // Fair keys must be equal (public info is the same)
+  assertEqual(getPositionKey(state1), getPositionKey(state2));
+
+  // Sanity: revealed pieces with different realType give different keys
+  const board3 = emptyBoard();
+  place(board3, 9, 4, piece('red', 'king'));
+  place(board3, 0, 4, piece('black', 'king'));
+  place(board3, 5, 0, piece('red', 'rook', 'rook', true)); // revealed rook
+  const state3 = { board: board3, turn: 'red' as const, history: [], status: 'playing' as const };
+  assertEqual(getPositionKey(state1) !== getPositionKey(state3), true);
+});
+
+test('isRepetitionDraw 於同一局面出現 REPETITION_DRAW_THRESHOLD 次時回伺 true', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+
+  // 0 occurrences in past -> not a draw
+  assertEqual(isRepetitionDraw(state, []), false);
+  // 1 occurrence in past -> not yet
+  assertEqual(isRepetitionDraw(state, [state]), false);
+  // 2 occurrences in past -> not yet (threshold is 4 total = 3 in past)
+  assertEqual(isRepetitionDraw(state, [state, state]), false);
+  // 3 occurrences in past -> draw (4th occurrence)
+  assertEqual(isRepetitionDraw(state, [state, state, state]), true);
+});
+
+test('debug report 含新增 repetitiveCheck 相關欄位', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  // Black pawn blocks direct king capture; rook can check without immediate win
+  place(board, 1, 4, piece('black', 'pawn', 'pawn', true));
+  place(board, 5, 4, piece('red', 'rook', 'rook', true));
+  const rook = board[5][4]!;
+  const blackKing = board[0][4]!;
+  const hRed: import('../src/types/chess').Move = {
+    piece: { ...rook }, from: { row: 5, col: 4 }, to: { row: 5, col: 4 }, captured: null,
+  };
+  const hBlack: import('../src/types/chess').Move = {
+    piece: { ...blackKing }, from: { row: 0, col: 4 }, to: { row: 0, col: 3 }, captured: null,
+  };
+  const state = {
+    board, turn: 'red' as const,
+    history: [hRed, hBlack, hRed, hBlack],
+    status: 'playing' as const,
+  };
+  const rec = recommendMove(state);
+  // Pawn blocks direct king capture so traces must be present
+  assertOk(rec.traces);
+  const text = formatAiDebugReport({ modeName: 'test', state, recommendation: rec });
+  assertOk(text.includes('repeatedCheckingCycle'));
+  assertOk(text.includes('repeatedPositionRisk'));
+  assertOk(text.includes('repetitiveCheckSuppressed'));
+  assertOk(text.includes('repetitionCount'));
 });

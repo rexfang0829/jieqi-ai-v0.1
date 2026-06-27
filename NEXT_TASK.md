@@ -1,6 +1,61 @@
 # NEXT_TASK
 
 ## 此輪完成
+- 修正 AI VS AI 來回連將 / 重複殺卡死問題
+- 擴充 detectRepetitiveCheck 至所有棋子類型（車、炮、馬等）
+- 新增 detectRepeatedCheckingCycle：偵測 A→B, B→A, A→B 來回模式
+- 需求 B：硬性抑制—無成果連將時強制轉換其他手
+- 需求 C：修正 getPositionKey 未翻暗子不偷看 realType（公平資訊鍵值）
+- 需求 D：AI VS AI 同一局面出現 4 次則判定和棋（重複局面和棋訊息）
+- 新增 2 個權重：repeatedCheckingCyclePenalty(-300) / repeatedPositionPenalty(-250)
+- 新增 4 個 trace 欄位：repeatedCheckingCycle / repeatedPositionRisk / repetitiveCheckSuppressed / repetitionCount
+- formatAiDebugReport 補充 4 個新 trace 欄位輸出
+- 新增 8 個測試
+
+## 建議下一步
+1. AI 開局理論回歸測試擴充。
+2. Pattern 觸發日誌 / 統計。
+3. AI VS AI 對局資料統計。
+4. 自我對弈調參實驗。
+5. Belief State / 剩餘池概率推演。
+6. Threat Map MVP。
+
+## 非明確指示不要做
+- 不改 Board UI。
+- 不偷看未翻暗子的 realType。
+- 不加後端或資料庫。
+
+---
+
+# NEXT_TASK
+
+## 此輪完成
+- 修正暗兵卒白送偵測：`pawnSoldierWalksIntoRevealedPawnAttack`
+- 新增 helper `isSquareAttackedByRevealedPawn`：偵測已翻敋兵卒是否攻擊指定格
+- 新增 2 個權重：`pawnSoldierWalksIntoRevealedPawnAttackPenalty(-120)` / `pawnSoldierDevelopmentSuppressedByPawnAttackPenalty(-80)`
+- 新增 4 個 trace 欄位：`pawnSoldierWalksIntoRevealedPawnAttack` / `pawnSoldierSelfSacrifice` / `pawnSoldierProtectedAfterAdvance` / `pawnSoldierDevelopmentSuppressedByPawnAttack`
+- `formatAiDebugReport` 補免 4 個新 trace 欄位輸出
+- 修正舊測試：象相 follow-up 測試的 blocker 擺動位置（避免新懲罰誤觸發）
+- 新增 3 個測試
+
+## 建議下一步
+1. AI 開局理論回歸測試擴充。
+2. Pattern 觸發日誌 / 統計。
+3. AI VS AI 對局資料統計。
+4. 自我對弈調參實驗。
+5. Belief State / 剩餘池概率推演。
+6. Threat Map MVP。
+
+## 非明確指示不要做
+- 不改 Board UI。
+- 不偷看未翻暗子的 `realType`。
+- 不加後端或資料庫。
+
+---
+
+# NEXT_TASK
+
+## 此輪完成
 - 修正明大子戰術優先級：安全吃明車/炮 > 暗兵卒開發 > 死車保留
 - 新增 `revealedMajorCaptureAvailable` / `safeRevealedMajorCapture` / `revealedMajorCaptureScore` trace 欄位
 - `deadMajorThreatHold` 有安全吃大子時抑制，不再給保留獎分

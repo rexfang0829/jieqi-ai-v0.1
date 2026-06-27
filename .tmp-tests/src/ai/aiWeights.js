@@ -117,4 +117,8 @@ exports.defaultAiWeights = {
     safeRevealedRookCaptureBonus: 120,
     safeRevealedMajorCaptureBonus: 80,
     pawnSoldierDelayWhenMajorCaptureAvailablePenalty: -80,
+    pawnSoldierWalksIntoRevealedPawnAttackPenalty: -120,
+    pawnSoldierDevelopmentSuppressedByPawnAttackPenalty: -80,
+    repeatedCheckingCyclePenalty: -300,
+    repeatedPositionPenalty: -250,
 };

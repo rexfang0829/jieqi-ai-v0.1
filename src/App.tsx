@@ -16,8 +16,12 @@ import { loadPosition, savePosition } from './game/positionStorage';
 import { getAllLegalMoves, isInCheck } from './game/checkRules';
 import {
   AI_REPEAT_END_MESSAGE,
+  REPETITION_DRAW_MESSAGE,
   THIRD_REPETITION_MESSAGE,
+  countPositionKey,
   filterThirdRepetitionMoves,
+  getPositionKey,
+  isRepetitionDraw,
   wouldCauseThirdRepetition,
 } from './game/repetitionRules';
 import { getEndgameFeedback, shouldPlayEndgameSound, statusLabel } from './game/endgameFeedback';
@@ -564,6 +568,12 @@ export default function App() {
   function aiVsAiStep() {
     const current = aiVsAiStateRef.current;
     if (current.status !== 'playing') return;
+    // 4次重複同一局面则判定和棋
+    if (isRepetitionDraw(current, aiVsAiPastRef.current)) {
+      setAiVsAiAutoPlay(false);
+      setAiVsAiMsg(REPETITION_DRAW_MESSAGE);
+      return;
+    }
     if (current.history.length >= 300) { setAiVsAiMsg('已達手數上限（300 手）'); return; }
     const legalMoves = getAllLegalMoves(current.board, current.turn);
     const allowedMoves = filterThirdRepetitionMoves(current, aiVsAiPastRef.current, legalMoves);
@@ -666,6 +676,12 @@ export default function App() {
     }
     aiVsAiIntervalRef.current = setInterval(() => {
       const current = aiVsAiStateRef.current;
+      // 4次重複同一局面则判定和棋
+      if (isRepetitionDraw(current, aiVsAiPastRef.current)) {
+        setAiVsAiAutoPlay(false);
+        setAiVsAiMsg(REPETITION_DRAW_MESSAGE);
+        return;
+      }
       if (current.history.length >= 300) {
         setAiVsAiAutoPlay(false);
         setAiVsAiMsg('已達手數上限（300 手）');
