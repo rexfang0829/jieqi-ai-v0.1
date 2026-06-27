@@ -223,6 +223,36 @@
 # NEXT_TASK
 
 ## 此輪完成
+- AI Decision Layer + Safety Gate MVP
+
+### Safety Gate 核心邏輯
+- 新增 `scanHighValueThreats(board, side)`：偵測己方已翻明車/明炮/明馬受攻且無保護
+- 新增 3 個 trace 評分欄位：`resolvedHighValueThreat` (+120) / `unresolvedHighValueThreat` (-250) / `ignoredHigherPriorityThreat` (-180，兵卒開發/暗子救援時額外扣)
+- 決策層 `decisionLayer`：0=直接絕殺 / 1=安全門解除威脅 / 2=戰術 / 3=陣型計畫 / 4=預設
+- `reasonFor()` 新增 3 個安全門 reason strings
+- `aiDebugReport.ts` 補充 7 個新欄位輸出
+- 新增 `docs/AI_DECISION_LAYERS.md`（5 層架構說明）
+- 新增 SG1–SG3 三個測試（明馬攻場景，驗證 AI 救車優先、trace 欄位正確）
+- `npx tsc --noEmit` 無錯；SG1–SG3 全過；全套無 `not ok`
+
+## 建議下一步
+1. AI 開局理論回歸測試擴充。
+2. Pattern 觸發日誌 / 統計。
+3. AI VS AI 對局資料統計。
+4. 自我對弈調參實驗。
+5. Belief State / 剩餘池概率推演。
+6. Threat Map MVP。
+
+## 非明確指示不要做
+- 不改 Board UI。
+- 不偷看未翻暗子的 `realType`。
+- 不加後端或資料庫。
+
+---
+
+# NEXT_TASK
+
+## 此輪完成
 - 修正邊 G / 邊路明車壓力時，馬8進7 類標準解被暗兵卒開發蓋過問題
 
 ### 核心邏輯

@@ -97,6 +97,13 @@ export type AiMoveTrace = {
   edgeRookPawnLineLockRisk?: boolean;
   horsePawnLineGuard?: boolean;
   pawnSoldierDelayedByEdgeRookPressure?: boolean;
+  decisionLayer?: number;
+  decisionLayerLabel?: string;
+  safetyGateTriggered?: boolean;
+  highValuePieceInDanger?: boolean;
+  unresolvedHighValueThreat?: boolean;
+  resolvedHighValueThreat?: boolean;
+  ignoredHigherPriorityThreat?: boolean;
 };
 
 /**

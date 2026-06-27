@@ -131,4 +131,7 @@ exports.defaultAiWeights = {
     unsafeCapturePenalty: -120,
     horsePawnLineGuardEdgeRookBonus: 80,
     pawnSoldierDelayedByEdgeRookPressurePenalty: -90,
+    unresolvedHighValueThreatPenalty: -250,
+    ignoredHigherPriorityThreatPenalty: -180,
+    resolvedHighValueThreatBonus: 120,
 };

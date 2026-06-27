@@ -122,6 +122,9 @@ export type AiWeights = {
   unsafeCapturePenalty: number;
   horsePawnLineGuardEdgeRookBonus: number;
   pawnSoldierDelayedByEdgeRookPressurePenalty: number;
+  unresolvedHighValueThreatPenalty: number;
+  ignoredHigherPriorityThreatPenalty: number;
+  resolvedHighValueThreatBonus: number;
 };
 
 export const defaultAiWeights: AiWeights = {
@@ -254,4 +257,7 @@ export const defaultAiWeights: AiWeights = {
   unsafeCapturePenalty: -120,
   horsePawnLineGuardEdgeRookBonus: 80,
   pawnSoldierDelayedByEdgeRookPressurePenalty: -90,
+  unresolvedHighValueThreatPenalty: -250,
+  ignoredHigherPriorityThreatPenalty: -180,
+  resolvedHighValueThreatBonus: 120,
 };

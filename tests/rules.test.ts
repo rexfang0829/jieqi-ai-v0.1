@@ -3732,3 +3732,71 @@ test('stalemate S4: applyMove sets status to red_win when black has zero legal m
   const next  = applyMove(state, { row: 1, col: 1 }, { row: 1, col: 0 });
   assertEqual(next.status, 'red_win');
 });
+
+// === Safety Gate Tests ===
+// Board for SG1–SG3:
+//   Red king [9,4], Black king [0,3] (different cols → no facing)
+//   Red revealed rook [5,5] — attacked by black revealed horse [3,4] (L-shape: +2,+1)
+//   Red unrevealed pawn [8,2] — opening development option
+//   Black horse foot [4,4] is clear → horse can legally attack [5,5]
+//   Red rook is NOT protected by any other red piece
+
+test('safety gate SG1: AI rescues threatened revealed rook over pawn development', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 3, piece('black', 'king'));
+  place(board, 5, 5, piece('red', 'rook', 'rook', true));
+  place(board, 3, 4, piece('black', 'horse', 'horse', true));
+  place(board, 8, 2, piece('red', 'pawn', 'pawn', false));
+  const state: GameState = { board, turn: 'red', history: [], status: 'playing' };
+  const r = recommendMove(state);
+  assertOk(r.move);
+  // AI should NOT move the pawn; it must rescue the rook
+  const isPawnMove = r.move.from.row === 8 && r.move.from.col === 2;
+  assertOk(!isPawnMove);
+  // Chosen trace must have resolvedHighValueThreat
+  const chosen = r.traces?.find(t =>
+    t.move.from.row === r.move!.from.row && t.move.from.col === r.move!.from.col &&
+    t.move.to.row === r.move!.to.row && t.move.to.col === r.move!.to.col
+  );
+  assertOk(chosen);
+  assertOk(chosen.resolvedHighValueThreat);
+  assertEqual(chosen.decisionLayer, 1);
+});
+
+test('safety gate SG2: pawn development trace has ignoredHigherPriorityThreat when rook is threatened', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 3, piece('black', 'king'));
+  place(board, 5, 5, piece('red', 'rook', 'rook', true));
+  place(board, 3, 4, piece('black', 'horse', 'horse', true));
+  place(board, 8, 2, piece('red', 'pawn', 'pawn', false));
+  const state: GameState = { board, turn: 'red', history: [], status: 'playing' };
+  const r = recommendMove(state);
+  assertOk(r.traces);
+  // Find the pawn development trace (pawn at [8,2] moves forward to [7,2])
+  const pawnTrace = r.traces.find(t =>
+    t.move.from.row === 8 && t.move.from.col === 2
+  );
+  assertOk(pawnTrace);
+  assertOk(pawnTrace.safetyGateTriggered);
+  assertOk(pawnTrace.highValuePieceInDanger);
+  assertOk(pawnTrace.unresolvedHighValueThreat);
+  assertOk(pawnTrace.ignoredHigherPriorityThreat);
+});
+
+test('safety gate SG3: all evaluated traces have safetyGateTriggered when rook is under attack', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 3, piece('black', 'king'));
+  place(board, 5, 5, piece('red', 'rook', 'rook', true));
+  place(board, 3, 4, piece('black', 'horse', 'horse', true));
+  place(board, 8, 2, piece('red', 'pawn', 'pawn', false));
+  const state: GameState = { board, turn: 'red', history: [], status: 'playing' };
+  const r = recommendMove(state);
+  assertOk(r.traces && r.traces.length > 0);
+  // Every evaluated move should see the safety gate active
+  for (const t of r.traces) {
+    assertOk(t.safetyGateTriggered);
+  }
+});

@@ -1039,7 +1039,33 @@ function allowsOpponentWin(state, move) {
     const opponentMoves = (0, checkRules_1.getAllLegalMoves)(next.board, next.turn);
     return opponentMoves.some(reply => (0, gameEngine_1.applyMove)(next, reply.from, reply.to).status === winningStatus(next.turn));
 }
-function evaluateMove(state, move, blocksImmediateWin, weights, posRevealedMajorCaptureAvailable = false) {
+/**
+ * Scan for our own revealed major pieces (rook/cannon/horse) that are:
+ *   1. Attacked by the opponent
+ *   2. NOT protected by our own side
+ * Returns the positions of such threatened pieces.
+ */
+function scanHighValueThreats(board, side) {
+    const opp = opponent(side);
+    const threats = [];
+    for (let r = 0; r < 10; r++) {
+        for (let c = 0; c < 9; c++) {
+            const piece = board[r][c];
+            if (!piece || piece.side !== side || !piece.revealed)
+                continue;
+            const pt = publicType(piece);
+            if (pt !== 'rook' && pt !== 'cannon' && pt !== 'horse')
+                continue;
+            if (!isSquareAttacked(board, opp, { row: r, col: c }))
+                continue;
+            if (isSquareProtectedBySide(board, side, { row: r, col: c }))
+                continue;
+            threats.push({ row: r, col: c });
+        }
+    }
+    return threats;
+}
+function evaluateMove(state, move, blocksImmediateWin, weights, posRevealedMajorCaptureAvailable = false, preHighValueThreats = []) {
     const next = (0, gameEngine_1.applyMove)(state, move.from, move.to);
     const nextBoard = next === state ? applyMoveToBoard(state.board, move) : next.board;
     const moved = nextBoard[move.to.row][move.to.col];
@@ -1296,6 +1322,47 @@ function evaluateMove(state, move, blocksImmediateWin, weights, posRevealedMajor
     const protectionScore = protectedMove ? weights.protectedMoveBonus : 0;
     const hangingPenalty = hangingMove ? weights.hangingMovePenalty : 0;
     const endgamePlan = computeEndgamePlan(state, move, nextBoard, checking, importantThreat, captureGain, blocksImmediateWin, rescuesLooseHiddenPiece, weights);
+    // Safety Gate: 安全門 — 明大子受威脅時的優先決策層
+    const highValuePieceInDanger = preHighValueThreats.length > 0;
+    const safetyGateTriggered = highValuePieceInDanger;
+    // Check if this move resolves (reduces) any high-value threat
+    const postHighValueThreats = safetyGateTriggered
+        ? scanHighValueThreats(nextBoard, state.turn)
+        : [];
+    const resolvedHighValueThreat = safetyGateTriggered &&
+        postHighValueThreats.length < preHighValueThreats.length;
+    const unresolvedHighValueThreat = safetyGateTriggered && !resolvedHighValueThreat;
+    // Ignored: unresolved AND the move is doing something lower-priority
+    const ignoredHigherPriorityThreat = unresolvedHighValueThreat && (pawnSoldierDevelopment ||
+        rescuesLooseHiddenPiece ||
+        pureBlindHorseActivation ||
+        (majorActivation && !captureGain && !effectiveCheck && !blocksImmediateWin));
+    const unresolvedHighValueThreatPenaltyScore = unresolvedHighValueThreat &&
+        !captureGain && !effectiveCheck && !blocksImmediateWin && !escapeBonus
+        ? weights.unresolvedHighValueThreatPenalty : 0;
+    const ignoredHigherPriorityThreatPenaltyScore = ignoredHigherPriorityThreat
+        ? weights.ignoredHigherPriorityThreatPenalty : 0;
+    const resolvedHighValueThreatBonusScore = resolvedHighValueThreat
+        ? weights.resolvedHighValueThreatBonus : 0;
+    // Determine decision layer for this move
+    let decisionLayer;
+    let decisionLayerLabel;
+    if (resolvedHighValueThreat) {
+        decisionLayer = 1;
+        decisionLayerLabel = '安全門—解除大子威脅';
+    }
+    else if (captureGain > 0 || blocksImmediateWin || effectiveCheck || escapeBonus > 0) {
+        decisionLayer = 2;
+        decisionLayerLabel = '戰術—吃子/阻殺/有效將軍/脫身';
+    }
+    else if (pawnSoldierDevelopment || pawnSoldierFollowUp.score > 0 || endgamePlan.endgamePlanActive || rescuesLooseHiddenPiece || openingBonus > 0) {
+        decisionLayer = 3;
+        decisionLayerLabel = '陣型—開局/殘局計畫/兵卒';
+    }
+    else {
+        decisionLayer = 4;
+        decisionLayerLabel = '預設—無明確目標';
+    }
     const score = captureGain -
         reply.possibleLoss +
         revealScore(move, weights) +
@@ -1342,7 +1409,10 @@ function evaluateMove(state, move, blocksImmediateWin, weights, posRevealedMajor
         unsafeCapturePenalty +
         horsePawnLineGuardEdgeRookBonus +
         pawnSoldierDelayedByEdgeRookPressurePenalty +
-        endgamePlan.endgamePlanScore -
+        endgamePlan.endgamePlanScore +
+        resolvedHighValueThreatBonusScore +
+        unresolvedHighValueThreatPenaltyScore +
+        ignoredHigherPriorityThreatPenaltyScore -
         Math.round(reply.maxReplyGain * weights.maxReplyGainPenaltyRatio);
     return {
         score,
@@ -1454,11 +1524,24 @@ function evaluateMove(state, move, blocksImmediateWin, weights, posRevealedMajor
         edgeRookPawnLineLockRisk: structure.horsePawnLineGuard ? true : edgeRookPressure,
         horsePawnLineGuard: structure.horsePawnLineGuard,
         pawnSoldierDelayedByEdgeRookPressure,
+        safetyGateTriggered,
+        highValuePieceInDanger,
+        unresolvedHighValueThreat,
+        resolvedHighValueThreat,
+        ignoredHigherPriorityThreat,
+        decisionLayer,
+        decisionLayerLabel,
     };
 }
 function reasonFor(best, evaluation, avoidedOpponentWin, weights) {
     if (avoidedOpponentWin)
         return '避免對方一步殺';
+    if (evaluation.resolvedHighValueThreat)
+        return '安全門：脫離/解除明大子威脅';
+    if (evaluation.ignoredHigherPriorityThreat)
+        return '忽略明大子受攻，已重扣分';
+    if (evaluation.unresolvedHighValueThreat && !evaluation.captureGain && !evaluation.effectiveCheck && !evaluation.blocksImmediateWin)
+        return '明大子受攻未解，已扣分';
     if (evaluation.rescuesLooseHiddenPiece)
         return '暗子無保護受攻擊，優先脫離';
     if (evaluation.postMoveLooseHiddenPiece && evaluation.postMoveLoosePiecePenalty < 0)
@@ -1615,6 +1698,8 @@ function recommendMove(state, candidateMoves, weights = aiWeights_1.defaultAiWei
     const scoringMoves = safeMoves.length ? safeMoves : moves;
     const avoidedOpponentWin = safeMoves.length > 0 && safeMoves.length < moves.length;
     const currentlyAllowsOpponentWin = opponentHasImmediateWin(state.board, state.turn);
+    // Pre-compute high-value threats once for the current state (Safety Gate)
+    const preHighValueThreats = scanHighValueThreats(state.board, state.turn);
     const posRevealedMajorCaptureAvailable = scoringMoves.some(m => {
         if (!m.captured || !m.captured.revealed)
             return false;
@@ -1626,12 +1711,12 @@ function recommendMove(state, candidateMoves, weights = aiWeights_1.defaultAiWei
         return capValue >= moverValue;
     });
     let best = scoringMoves[0];
-    let bestEvaluation = evaluateMove(state, best, currentlyAllowsOpponentWin && !allowsOpponentWin(state, best), weights, posRevealedMajorCaptureAvailable);
+    let bestEvaluation = evaluateMove(state, best, currentlyAllowsOpponentWin && !allowsOpponentWin(state, best), weights, posRevealedMajorCaptureAvailable, preHighValueThreats);
     const evaluations = [
         { move: best, evaluation: bestEvaluation },
     ];
     for (const move of scoringMoves.slice(1)) {
-        const evaluation = evaluateMove(state, move, currentlyAllowsOpponentWin && !allowsOpponentWin(state, move), weights, posRevealedMajorCaptureAvailable);
+        const evaluation = evaluateMove(state, move, currentlyAllowsOpponentWin && !allowsOpponentWin(state, move), weights, posRevealedMajorCaptureAvailable, preHighValueThreats);
         evaluations.push({ move, evaluation });
         if (evaluation.score > bestEvaluation.score) {
             best = move;
@@ -1745,6 +1830,13 @@ function recommendMove(state, candidateMoves, weights = aiWeights_1.defaultAiWei
         edgeRookPawnLineLockRisk: evaluation.edgeRookPawnLineLockRisk,
         horsePawnLineGuard: evaluation.horsePawnLineGuard,
         pawnSoldierDelayedByEdgeRookPressure: evaluation.pawnSoldierDelayedByEdgeRookPressure,
+        safetyGateTriggered: evaluation.safetyGateTriggered,
+        highValuePieceInDanger: evaluation.highValuePieceInDanger,
+        unresolvedHighValueThreat: evaluation.unresolvedHighValueThreat,
+        resolvedHighValueThreat: evaluation.resolvedHighValueThreat,
+        ignoredHigherPriorityThreat: evaluation.ignoredHigherPriorityThreat,
+        decisionLayer: evaluation.decisionLayer,
+        decisionLayerLabel: evaluation.decisionLayerLabel,
     }));
     return {
         move: best,

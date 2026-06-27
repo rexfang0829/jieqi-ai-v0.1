@@ -1,3 +1,30 @@
+### 2026-06-27 AI Decision Layer + Safety Gate MVP（Claude）
+
+**目標**：建立 5 層決策架構，讓 AI 在明大子受威脅時優先解除（安全門），不因兵卒開發或暗子救援等低優先事項而忽視。
+
+**新增 / 修改檔案**：
+
+1. **`src/ai/aiWeights.ts`**：新增 3 個權重：`unresolvedHighValueThreatPenalty (-250)` / `ignoredHigherPriorityThreatPenalty (-180)` / `resolvedHighValueThreatBonus (+120)`。
+
+2. **`src/ai/aiTrace.ts`**：新增 7 個 trace 欄位：`decisionLayer` / `decisionLayerLabel` / `safetyGateTriggered` / `highValuePieceInDanger` / `unresolvedHighValueThreat` / `resolvedHighValueThreat` / `ignoredHigherPriorityThreat`。
+
+3. **`src/ai/simpleAi.ts`**：
+   - 新增 `scanHighValueThreats(board, side)`：偵測己方已翻明車/明炮/明馬被攻且無保護。
+   - `evaluateMove()` 新增參數 `preHighValueThreats`，在 endgamePlan 計算後執行 Safety Gate 評分與決策層分配。
+   - `recommendMove()` 預先計算 `preHighValueThreats`，傳遞給所有候選評估。
+   - `reasonFor()` 新增安全門相關 reason strings。
+   - trace 建構補充 7 個新欄位。
+
+4. **`src/ai/aiDebugReport.ts`**：`fmtTrace()` 補充 7 個新欄位輸出。
+
+5. **`docs/AI_DECISION_LAYERS.md`**：新建，記錄 Layer 0–4 決策架構說明。
+
+6. **`tests/rules.test.ts`**：新增 SG1–SG3 三個測試（明馬攻擊場景，驗證 AI 救車優先於暗兵卒開發、trace 欄位正確）。
+
+**驗收**：`npx tsc --noEmit` 乾淨；SG1–SG3 全過；全套測試無 `not ok`。
+
+---
+
 ### 2026-06-27 困斃（無合法棋步）結束時播放絕殺音效（Claude）
 
 **目標**：輪到一方卻無合法棋步（困斃），應判對方勝、設定 `status`、播放 `playEndgameSound()`。
