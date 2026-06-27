@@ -56,7 +56,7 @@ exports.aiLearningPatterns = {
         description: '暗車尚未公開時仍可能控制前方關鍵點，活馬或守線手應考慮保留此威懾。',
         futureSignals: ['patternTriggered', 'guardPointControlled', 'hiddenRookPreserved', 'finalResult'],
     },
-    /* ── 邊炮 / 邊 G 分流 patterns（對應 simpleAi.ts 邊炮 / 邊車分流邏輯） ── */
+    /* ── 邊炮 / 邊車 分流 patterns（對應 simpleAi.ts 邊炮 / 邊車分流邏輯） ── */
     opening_edge_cannon_structure_pressure: {
         id: 'opening_edge_cannon_structure_pressure',
         label: '邊炮炮架壓制結構',

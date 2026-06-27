@@ -134,6 +134,18 @@ export type AiWeights = {
   minimumLossDefenseBonus: number;
   partialDefensePenalty: number;
   unresolvedThreatAfterDefensePenalty: number;
+  materialCheckBonus: number;
+  forcesBadKingMoveBonus: number;
+  checkRestrictsKingMobilityBonus: number;
+  meaninglessCheckPenalty: number;
+  dynamicCannonOpeningAdjustment: number;
+  dynamicHorseOpeningAdjustment: number;
+  dynamicCannonEndgameAdjustment: number;
+  dynamicHorseEndgameAdjustment: number;
+  cannonWithFrameBonus: number;
+  cannonNoFramePenalty: number;
+  horseHighMobilityBonus: number;
+  horseLowMobilityPenalty: number;
 };
 
 export const defaultAiWeights: AiWeights = {
@@ -278,4 +290,16 @@ export const defaultAiWeights: AiWeights = {
   minimumLossDefenseBonus: 90,
   partialDefensePenalty: -90,
   unresolvedThreatAfterDefensePenalty: -180,
+  materialCheckBonus: 80,
+  forcesBadKingMoveBonus: 60,
+  checkRestrictsKingMobilityBonus: 50,
+  meaninglessCheckPenalty: -100,
+  dynamicCannonOpeningAdjustment: 20,
+  dynamicHorseOpeningAdjustment: -10,
+  dynamicCannonEndgameAdjustment: -40,
+  dynamicHorseEndgameAdjustment: 50,
+  cannonWithFrameBonus: 30,
+  cannonNoFramePenalty: -20,
+  horseHighMobilityBonus: 20,
+  horseLowMobilityPenalty: -30,
 };

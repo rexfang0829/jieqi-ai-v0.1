@@ -48,7 +48,7 @@
 
 ---
 
-### 2026-06-27 修正邊 G / 邊路明車壓力時馬守兵線被蓋過（Claude）
+### 2026-06-27 修正邊車 / 邊路明車壓力時馬守兵線被蓋過（Claude）
 
 **目標**：當邊路明車（G）壓制兵線時，AI 應優先活馬守線（馬8進7 類），而非普通暗兵卒開發。
 
@@ -61,7 +61,7 @@
    - `pureBlindHorseActivation` 新增 `!structure.horsePawnLineGuard` 排除
    - 新增 `horsePawnLineGuardEdgeRookBonus`：馬走好守格且邊路受車壓 +80
    - 新增 `pawnSoldierDelayedByEdgeRookPressure`：邊路受車壓下普通暗兵卒開發 -90
-   - 新增 reason：`邊路明車壓兵線，優先活馬守線` / `邊 G 壓力下，延後普通暗兵卒開發`
+   - 新增 reason：`邊路明車壓兵線，優先活馬守線` / `邊車壓力下，延後普通暗兵卒開發`
    - `MoveEvaluation` 新增 3 個欄位
 
 2. **`src/ai/aiWeights.ts`**：
@@ -656,4 +656,135 @@ npm.cmd run build
 1. **`src/ai/aiDebugReport.ts`**（全新）：
    - `AiDebugReportInput` 型別：`{ modeName, state, analysisMoves?, recommendation }`
    - `formatAiDebugReport()` 純函式，輸出純文字報告
-   - 報告包含
+   - 報告包含：模式/輪到/手數、最近 10 手、AI 建議（推薦步 + 分數 + reason）、推薦步完整 trace、候選前 5 名
+
+2. **`src/components/AiPanel.tsx`**（修改）：
+   - 新增 `useState` 控制「已複製」提示（2 秒後自動消除）
+   - 新增 `modeName?: string` 與 `analysisMoves?: Move[]` 選用 props（不破壞現有呼叫端）
+   - 新增「複製 AI 測試報告」按鈕，呼叫 `navigator.clipboard.writeText()`
+   - 複製成功顯示「已複製 AI 測試報告」綠色提示
+
+3. **`tests/rules.test.ts`**（新增 6 個測試）：
+   - header 與模式名稱存在
+   - AI 建議區塊存在
+   - 候選前 5 名（有 traces 時）
+   - 推薦步 trace（有 traces 時）
+   - 無合法棋步時顯示提示
+   - analysisMoves 顯示變化手數
+
+**測試**：`npm test` 全部 30 個 AI 相關測試通過。  
+**TypeScript**：`npx tsc --noEmit` 無錯。
+
+---
+
+## 後手翻棋選擇權 + 公平資訊開局大子活化（2026-06-27）
+
+**目標**：修正兩個揭棋 AI 核心邏輯，不動 UI、不改 GameRecord schema。
+
+**新增 / 修改檔案**：
+
+1. **`src/ai/aiWeights.ts`**（修改）：
+   - 新增 5 個 weight：`majorActivationBonus(45)` / `opponentRevealSuppressionBonus(12)` / `revealChoiceRiskPenaltyBase(90)` / `revealChoiceRiskHighValueExtra(40)` / `hiddenPressureNonActivationCap(16)`
+
+2. **`src/ai/aiTrace.ts`**（修改）：
+   - 新增 5 個 trace 欄位：`revealChoiceRisk` / `revealChoicePenalty` / `openingMajorGoal` / `majorActivation` / `opponentRevealSuppression`
+
+3. **`src/ai/simpleAi.ts`**（修改）：
+   - 新增 helper `computeRevealChoiceRisk()`：高價子吃低外觀
+
+---
+
+## 2026-06-27 死車威脅保留 + 暗士翻子卡陣風險 MVP
+
+### 功能概覽
+1. **advisorRevealClogRisk**：暗士翻子易卡住將門，扣分 (-70 基本 / -110 鄰近將軍)
+2. **deadMajorThreatHold**：保留對方死車威脅 (+70)，不须立即吃車
+3. **forcedBadDefense**：暗士翻子硬保已被控制的己方車，扣分 (-80)
+
+### 修改檔案
+- `src/ai/aiWeights.ts`：新增 4 個權重（advisorRevealClogPenalty / advisorRevealClogNearKingPenalty / deadMajorThreatHoldBonus / defendDoomedMajorPenalty）
+- `src/ai/aiTrace.ts`：新增 7 個安全 trace 欄位
+- `src/ai/simpleAi.ts`：新增 helper functions + evaluateMove 整合 + reasonFor + trace 建立
+- `tests/rules.test.ts`：新增 3 個測試
+
+### 測試
+- 全部測試通過，`npx tsc --noEmit` 清洁
+
+
+---
+
+## 2026-06-27 上一手高亮 + AI 報告盤面快照
+
+### 功能
+- **上一手高亮**：Board 新增 `lastMove` prop，from 方格顯示小白點，to 方格顯示白色光圈
+- **盤面快照**：`formatAiDebugReport` 加入10×9 文字棋盤，明子顯紅車/黑馬，暗子顯紅暗車/黑暗卒
+
+### 修改檔案
+- `src/components/Square.tsx`：`lastMoveFrom` / `lastMoveTo` props
+- `src/components/Board.tsx`：`lastMove` prop
+- `src/style.css`：`.lastMoveFrom::before` / `.lastMoveTo::before` 樣式
+- `src/App.tsx` + `src/components/HumanVsAiPanel.tsx`：各模式傳入 `lastMove`
+- `src/ai/aiDebugReport.ts`：`boardSnapshot()` helper + 插入報告
+- `tests/rules.test.ts`：2 個新測試
+
+### 驗收
+- 全部測試通過，`npx tsc --noEmit` 清洁
+
+
+---
+
+### 2026-06-27 Last Move Highlight + Board Snapshot Report
+- Board 支援 lastMove
+- Square 顯示上一手 from 白點 / to 白圈
+- 一般揭棋、人 vs AI、AI VS AI、回放、輔助盤面已傳入 lastMove
+- AI 測試報告加入盤面快照
+- 補 formatAiDebugReport 測試：tests/rules.test.ts import 移至頂層 + 統整測試 (3 個)
+
+---
+
+### 2026-06-27 AI 策略補充（CODEX 更新）
+
+以下為已完成但尚未記錄於 CODEX 的策略項目：
+
+- **暗兵卒優先策略**：開局優先翻自方兵卒，不急於翻大子，降低資訊洩漏風險
+- **純暗馬活化降權**：未翻馬在開局階段不給予過高活化分，避免提前暴露
+- **暗兵卒 follow-up heuristic**：翻出兵卒後，優先帶動馬 / 相 / 士進行配合，加強陣型完整性
+- **debug report trace 欄位**：`AiMoveTrace` 已含完整欄位（advisorRevealClogRisk / deadMajorThreatHold / forcedBadDefense 等），`formatAiDebugReport` 輸出含盤面快照與 top-5 候選步
+
+---
+
+### 2026-06-28 Task 5：將軍品質 + 動態馬炮價值 MVP（Claude）
+
+**目標**：評估「將軍」手的實際品質（是否真有威脅或限制將帥活動），並依開局/中盤/殘局動態調整馬、炮的子力價值；同步修正舊版 reason 字串中的「邊 G」/「敵方 G」用語。
+
+**新增 / 修改檔案**：
+
+1. **`src/ai/aiWeights.ts`**：新增 12 個權重 —
+   `materialCheckBonus(80)` / `forcesBadKingMoveBonus(60)` / `checkRestrictsKingMobilityBonus(50)` / `meaninglessCheckPenalty(-100)` /
+   `dynamicCannonOpeningAdjustment(20)` / `dynamicHorseOpeningAdjustment(-10)` / `dynamicCannonEndgameAdjustment(-40)` / `dynamicHorseEndgameAdjustment(50)` /
+   `cannonWithFrameBonus(30)` / `cannonNoFramePenalty(-20)` / `horseHighMobilityBonus(20)` / `horseLowMobilityPenalty(-30)`。
+
+2. **`src/ai/aiTrace.ts`**：`AiMoveTrace` 新增 11 個欄位 —
+   `checkingQuality`（`'none' | 'mate' | 'forcedMateThreat' | 'materialCheck' | 'forcesBadKingMove' | 'restrictsKingMobility' | 'meaninglessCheck'`）、
+   `checkingQualityScore` / `materialCheck` / `forcesBadKingMove` / `checkRestrictsKingMobility` / `meaninglessCheck` /
+   `dynamicMoverValue` / `dynamicTargetValue` / `dynamicValuePhase`（`'opening' | 'midgame' | 'endgame'`） / `cannonFrameAdjustment` / `horseMobilityAdjustment`。
+
+3. **`src/ai/simpleAi.ts`**：
+   - 將軍品質：`materialCheck`（將軍且取得物質，且重要威脅目標不可只是將帥本身）/ `forcesBadKingMove`（將軍後對方將帥僅剩 ≤1 個合法應對）/ `checkRestrictsKingMobility`（將軍後對方將帥合法應對數減少）/ `meaninglessCheck`（將軍但無上述任何成果，扣分）。優先序：mate（既有的 999999 早退邏輯，未變動）> forcedMateThreat > materialCheck > forcesBadKingMove > restrictsKingMobility > meaninglessCheck。
+   - 動態子力價值 MVP：`computeGamePhase()` 依 `isOpeningPhase()`（優先判斷）與剩餘子力數判斷 opening/midgame/endgame；炮架修正（`cannonFrameCount`，MVP 簡化為目的格同列/同行上是否有任意一子）；馬活性修正（`horseMobilityCount`，MVP 簡化為目的格四個馬步空格數）。完全不影響將帥的 10000 價值，也不偷看未翻 `realType`。
+   - 修正將軍品質判斷的關鍵 bug：`importantThreat` 原本只要威脅值 ≥ 馬價值即視為「重要威脅」，但將軍時 `bestCaptureThreat` 永遠會把對方將帥本身（價值 10000）算進去，導致幾乎所有將軍都被誤判為 `materialCheck`。修正為排除「威脅目標即為對方將帥」的情況（`afterThreat?.targetType !== 'king'`）。
+   - 文字修正：`reasonFor` 中「邊 G」→「邊車」、「敵方 G」→「敵方車」（`simpleAi.ts` / `learningPatterns.ts` 已無殘留）。
+
+4. **`src/ai/aiDebugReport.ts`**：輸出上述全部 11 個新 trace 欄位。
+
+5. **`tests/rules.test.ts`**：新增 Task5 A-G 共 7 個測試 —
+   - A：無成果將軍被扣分（meaninglessCheck）
+   - B：將軍同時威脅/吃到高價值子被加分（materialCheck）
+   - C：將軍限制將帥活動被加分（checkRestrictsKingMobility，需以阻擋「將帥對臉」規則的子力佈局避免誤判為 forcesBadKingMove）
+   - D：殘局馬活性修正高於無炮架炮的修正（dynamicMoverValue 比較）
+   - E：炮架修正（有炮架加分 / 無炮架扣分）
+   - F：debug report 含全部新 trace 欄位名稱
+   - G：`simpleAi.ts` / `learningPatterns.ts` 已無「邊 G」/「敵方 G」字串
+
+**測試**：`npm test`（219 個測試，因 sandbox 45 秒逾時限制分段執行驗證）全部通過，`npx tsc --noEmit` 無錯，`npx tsc`（build 第一步）無錯；`npx vite build` 在此 sandbox 因缺少 `@rollup/rollup-linux-x64-gnu` 原生模組且無法連網安裝而失敗（與本次程式碼變更無關的環境限制，建議於使用者本機環境重新驗證 `npm run build`）。
+

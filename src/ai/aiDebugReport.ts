@@ -112,6 +112,17 @@ function fmtTrace(t: AiMoveTrace): string {
     '  threatLossBefore: ' + num(t.threatLossBefore),
     '  threatLossAfter: ' + num(t.threatLossAfter),
     '  threatLossReduced: ' + num(t.threatLossReduced),
+    '  checkingQuality: ' + (t.checkingQuality ?? '-'),
+    '  checkingQualityScore: ' + num(t.checkingQualityScore),
+    '  materialCheck: ' + bool(t.materialCheck),
+    '  forcesBadKingMove: ' + bool(t.forcesBadKingMove),
+    '  checkRestrictsKingMobility: ' + bool(t.checkRestrictsKingMobility),
+    '  meaninglessCheck: ' + bool(t.meaninglessCheck),
+    '  dynamicMoverValue: ' + num(t.dynamicMoverValue),
+    '  dynamicTargetValue: ' + num(t.dynamicTargetValue),
+    '  dynamicValuePhase: ' + (t.dynamicValuePhase ?? '-'),
+    '  cannonFrameAdjustment: ' + num(t.cannonFrameAdjustment),
+    '  horseMobilityAdjustment: ' + num(t.horseMobilityAdjustment),
   ];
   return lines.join('\n');
 }

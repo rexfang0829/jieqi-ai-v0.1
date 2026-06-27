@@ -76,7 +76,7 @@ export const aiLearningPatterns: Record<AiLearningPatternId, AiLearningPattern> 
     futureSignals: ['patternTriggered', 'guardPointControlled', 'hiddenRookPreserved', 'finalResult'],
   },
 
-  /* ── 邊炮 / 邊 G 分流 patterns（對應 simpleAi.ts 邊炮 / 邊車分流邏輯） ── */
+  /* ── 邊炮 / 邊車 分流 patterns（對應 simpleAi.ts 邊炮 / 邊車分流邏輯） ── */
 
   opening_edge_cannon_structure_pressure: {
     id: 'opening_edge_cannon_structure_pressure',

@@ -117,12 +117,23 @@ export type AiMoveTrace = {
   threatLossBefore?: number;
   threatLossAfter?: number;
   threatLossReduced?: number;
+  checkingQuality?: 'none' | 'mate' | 'forcedMateThreat' | 'materialCheck' | 'forcesBadKingMove' | 'restrictsKingMobility' | 'meaninglessCheck';
+  checkingQualityScore?: number;
+  materialCheck?: boolean;
+  forcesBadKingMove?: boolean;
+  checkRestrictsKingMobility?: boolean;
+  meaninglessCheck?: boolean;
+  dynamicMoverValue?: number;
+  dynamicTargetValue?: number;
+  dynamicValuePhase?: 'opening' | 'midgame' | 'endgame';
+  cannonFrameAdjustment?: number;
+  horseMobilityAdjustment?: number;
 };
 
 /**
  * Return type of recommendMove().
  * Extends the previous { move, score, reason } shape with an optional traces array.
-lers that only read .move / .score / .reason are unaffected.
+ * Callers that only read .move / .score / .reason are unaffected.
  */
 export type AiRecommendation = {
   move: Move | null;

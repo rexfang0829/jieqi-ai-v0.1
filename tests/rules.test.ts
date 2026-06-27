@@ -25,6 +25,8 @@ import {
 } from '../src/game/repetitionRules';
 import { shouldPlayMoveSound, playMoveSound, playCaptureSound, playCheckSound } from '../src/game/soundEffects';
 import type { Board, GameState, Move, Piece, PieceType, Position, Side } from '../src/types/chess';
+declare function require(id: string): any;
+declare const process: { cwd(): string };
 
 function assertEqual(actual: unknown, expected: unknown) {
   if (!Object.is(actual, expected)) {
@@ -3932,4 +3934,183 @@ test('SG2 E: damageControl=true, partialDefense=false when unrelated move does n
   assertOk(!t.resolvedHighValueThreat);
   assertOk(!t.partialDefense);
   assertOk(t.unresolvedHighValueThreat);
+});
+
+// ── Task 5: Checking quality + dynamic piece value MVP ─────────────────────
+
+test('Task5 A: meaningless check (no capture, no threat, no mobility restriction) is penalized', () => {
+  // Black king at (0,3) has two escape squares (0,4) and (1,3), both empty.
+  // Red horse jumps to (2,4), checking the king but attacking only (0,3) and (0,5) --
+  // neither of the king's two escape squares is touched, so mobility is unchanged.
+  const board = emptyBoard();
+  place(board, 8, 5, piece('red', 'king'));
+  place(board, 0, 3, piece('black', 'king'));
+  place(board, 4, 3, piece('red', 'horse', 'horse', true));
+  const state: GameState = { board, turn: 'red', history: [], status: 'playing' };
+  const move = findMove(board, 'red', [4, 3], [2, 4]);
+  const result = recommendMove(state, [move]);
+  assertOk(result.traces);
+  const t = result.traces.find(tr => tr.move === move);
+  assertOk(t);
+  assertOk(t.checking);
+  assertEqual(t.materialCheck, false);
+  assertEqual(t.checkRestrictsKingMobility, false);
+  assertEqual(t.meaninglessCheck, true);
+  assertEqual(t.checkingQuality, 'meaninglessCheck');
+  assertOk((t.checkingQualityScore ?? 0) < 0);
+});
+
+test('Task5 B: check that also captures / threatens a high-value piece is bonused (materialCheck)', () => {
+  // Red rook captures a black horse on the same file as the black king, delivering
+  // check at the same time (the line to the king opens once the horse is removed).
+  const board = emptyBoard();
+  place(board, 8, 5, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('black', 'horse', 'horse', true));
+  place(board, 8, 4, piece('red', 'rook', 'rook', true));
+  const state: GameState = { board, turn: 'red', history: [], status: 'playing' };
+  const move = findMove(board, 'red', [8, 4], [5, 4]);
+  const result = recommendMove(state, [move]);
+  assertOk(result.traces);
+  const t = result.traces.find(tr => tr.move === move);
+  assertOk(t);
+  assertOk(t.checking);
+  assertEqual(t.materialCheck, true);
+  assertEqual(t.checkingQuality, 'materialCheck');
+  assertOk((t.checkingQualityScore ?? 0) > 0);
+});
+
+test('Task5 C: check that restricts king mobility (without capture/threat) is bonused', () => {
+  // Black king at (1,4) starts with 4 escape squares: (0,4),(2,4),(1,3),(1,5).
+  // A red pawn at (5,5) blocks the flying-general line between the two kings'
+  // shared column 5 so (1,5) is a genuine escape option rather than already-illegal.
+  // Red rook starts on row 3 (NOT yet sharing a file with the king) and slides
+  // sideways to (3,4): this newly attacks the whole file, taking away (0,4) and
+  // (2,4) as escape options while delivering check, leaving only the 2 lateral ones.
+  const board = emptyBoard();
+  place(board, 8, 5, piece('red', 'king'));
+  place(board, 5, 5, piece('red', 'pawn'));
+  place(board, 1, 4, piece('black', 'king'));
+  place(board, 3, 0, piece('red', 'rook', 'rook', true));
+  const state: GameState = { board, turn: 'red', history: [], status: 'playing' };
+  const move = findMove(board, 'red', [3, 0], [3, 4]);
+  const result = recommendMove(state, [move]);
+  assertOk(result.traces);
+  const t = result.traces.find(tr => tr.move === move);
+  assertOk(t);
+  assertOk(t.checking);
+  assertEqual(t.materialCheck, false);
+  assertEqual(t.checkRestrictsKingMobility, true);
+  assertEqual(t.checkingQuality, 'restrictsKingMobility');
+  assertOk((t.checkingQualityScore ?? 0) > 0);
+});
+
+test('Task5 D: endgame (<=16 pieces) values a mobile horse above an unsupported cannon', () => {
+  // Horse case: high mobility (>=3 free feet at destination) in an endgame position.
+  // History is padded past openingPhaseMoveLimit so phase detection doesn't fall back
+  // to "opening" just because this synthetic test board happens to be sparse.
+  const hBoard = emptyBoard();
+  place(hBoard, 8, 5, piece('red', 'king'));
+  place(hBoard, 0, 3, piece('black', 'king'));
+  place(hBoard, 5, 4, piece('red', 'horse', 'horse', true));
+  const horseMove = findMove(hBoard, 'red', [5, 4], [3, 3]);
+  const longHistory: Move[] = Array.from({ length: defaultAiWeights.openingPhaseMoveLimit + 1 }, () => horseMove);
+  const hState: GameState = { board: hBoard, turn: 'red', history: longHistory, status: 'playing' };
+  const hResult = recommendMove(hState, [horseMove]);
+  assertOk(hResult.traces);
+  const hTrace = hResult.traces.find(tr => tr.move === horseMove);
+  assertOk(hTrace);
+  assertEqual(hTrace.dynamicValuePhase, 'endgame');
+  assertOk((hTrace.dynamicMoverValue ?? 0) > 0);
+
+  // Cannon case: no frame piece on the destination rank/file in the same endgame phase.
+  const cBoard = emptyBoard();
+  place(cBoard, 8, 5, piece('red', 'king'));
+  place(cBoard, 0, 3, piece('black', 'king'));
+  place(cBoard, 5, 2, piece('red', 'cannon', 'cannon', true));
+  const cannonMove = findMove(cBoard, 'red', [5, 2], [5, 6]);
+  const cState: GameState = {
+    board: cBoard,
+    turn: 'red',
+    history: Array.from({ length: defaultAiWeights.openingPhaseMoveLimit + 1 }, () => cannonMove),
+    status: 'playing',
+  };
+  const cResult = recommendMove(cState, [cannonMove]);
+  assertOk(cResult.traces);
+  const cTrace = cResult.traces.find(tr => tr.move === cannonMove);
+  assertOk(cTrace);
+  assertEqual(cTrace.dynamicValuePhase, 'endgame');
+  assertOk((cTrace.dynamicMoverValue ?? 0) < 0);
+
+  assertOk((hTrace.dynamicMoverValue ?? 0) > (cTrace.dynamicMoverValue ?? 0));
+});
+
+test('Task5 E: cannon frame correction (usable frame bonus vs no-frame penalty)', () => {
+  // With a frame: a black rook sits on the same file as the cannon's destination.
+  const fBoard = emptyBoard();
+  place(fBoard, 8, 5, piece('red', 'king'));
+  place(fBoard, 0, 3, piece('black', 'king'));
+  place(fBoard, 5, 2, piece('red', 'cannon', 'cannon', true));
+  place(fBoard, 2, 4, piece('black', 'rook', 'rook', true));
+  const fState: GameState = { board: fBoard, turn: 'red', history: [], status: 'playing' };
+  const frameMove = findMove(fBoard, 'red', [5, 2], [5, 4]);
+  const fResult = recommendMove(fState, [frameMove]);
+  assertOk(fResult.traces);
+  const fTrace = fResult.traces.find(tr => tr.move === frameMove);
+  assertOk(fTrace);
+  assertOk((fTrace.cannonFrameAdjustment ?? 0) > 0);
+
+  // Without a frame: destination rank/file is otherwise completely empty.
+  const nBoard = emptyBoard();
+  place(nBoard, 8, 5, piece('red', 'king'));
+  place(nBoard, 0, 3, piece('black', 'king'));
+  place(nBoard, 5, 2, piece('red', 'cannon', 'cannon', true));
+  const nState: GameState = { board: nBoard, turn: 'red', history: [], status: 'playing' };
+  const noFrameMove = findMove(nBoard, 'red', [5, 2], [5, 6]);
+  const nResult = recommendMove(nState, [noFrameMove]);
+  assertOk(nResult.traces);
+  const nTrace = nResult.traces.find(tr => tr.move === noFrameMove);
+  assertOk(nTrace);
+  assertOk((nTrace.cannonFrameAdjustment ?? 0) < 0);
+});
+
+test('Task5 F: debug report prints all new checking-quality and dynamic-value trace fields', () => {
+  const board = emptyBoard();
+  place(board, 8, 5, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('black', 'horse', 'horse', true));
+  place(board, 8, 4, piece('red', 'rook', 'rook', true));
+  const state: GameState = { board, turn: 'red', history: [], status: 'playing' };
+  const move = findMove(board, 'red', [8, 4], [5, 4]);
+  const result = recommendMove(state, [move]);
+  assertOk(result.traces);
+  const report = formatAiDebugReport({ modeName: 'test', state, recommendation: result });
+  for (const field of [
+    'checkingQuality',
+    'checkingQualityScore',
+    'materialCheck',
+    'forcesBadKingMove',
+    'checkRestrictsKingMobility',
+    'meaninglessCheck',
+    'dynamicMoverValue',
+    'dynamicTargetValue',
+    'dynamicValuePhase',
+    'cannonFrameAdjustment',
+    'horseMobilityAdjustment',
+  ]) {
+    if (!report.includes(field)) {
+      throw new Error(`expected debug report to contain field "${field}"`);
+    }
+  }
+});
+
+test('Task5 G: reason strings no longer use the old "邊 G" / "敵方 G" wording', () => {
+  const nodeFs = require('fs');
+  const nodePath = require('path');
+  const simpleAiSrc = nodeFs.readFileSync(nodePath.join(process.cwd(), 'src', 'ai', 'simpleAi.ts'), 'utf8');
+  assertEqual(simpleAiSrc.includes('邊 G'), false);
+  assertEqual(simpleAiSrc.includes('敵方 G'), false);
+  const learningPatternsSrc = nodeFs.readFileSync(nodePath.join(process.cwd(), 'src', 'ai', 'learningPatterns.ts'), 'utf8');
+  assertEqual(learningPatternsSrc.includes('邊 G'), false);
+  assertEqual(learningPatternsSrc.includes('敵方 G'), false);
 });

@@ -145,6 +145,17 @@ type MoveEvaluation = {
   threatLossBefore: number;
   threatLossAfter: number;
   threatLossReduced: number;
+  checkingQuality: 'none' | 'mate' | 'forcedMateThreat' | 'materialCheck' | 'forcesBadKingMove' | 'restrictsKingMobility' | 'meaninglessCheck';
+  checkingQualityScore: number;
+  materialCheck: boolean;
+  forcesBadKingMove: boolean;
+  checkRestrictsKingMobility: boolean;
+  meaninglessCheck: boolean;
+  dynamicMoverValue: number;
+  dynamicTargetValue: number;
+  dynamicValuePhase: 'opening' | 'midgame' | 'endgame';
+  cannonFrameAdjustment: number;
+  horseMobilityAdjustment: number;
 };
 
 type AiThreatInfo = {
@@ -1403,6 +1414,57 @@ function scanHighValueThreats(board: Board, side: Side): Position[] {
   return threats;
 }
 
+
+// ── Task 5: Dynamic piece value helpers ──────────────────────────────────────
+
+type GamePhase = 'opening' | 'midgame' | 'endgame';
+
+function computeGamePhase(state: GameState, board: Board, weights: AiWeights): GamePhase {
+  // Opening takes priority: low move count means a low reveal ratio even if the
+  // synthetic/test board happens to be sparse. Real endgames are reached only after
+  // enough moves have been played (or pieces have actually been traded off).
+  if (isOpeningPhase(state, weights)) return 'opening';
+  const totalPieces = board.flat().filter(p => p !== null).length;
+  if (totalPieces <= 16) return 'endgame';
+  return 'midgame';
+}
+
+function cannonFrameCount(board: Board, pos: Position): number {
+  let count = 0;
+  for (let c = 0; c < 9; c++) {
+    if (c !== pos.col && board[pos.row][c] !== null) count++;
+  }
+  for (let r = 0; r < 10; r++) {
+    if (r !== pos.row && board[r][pos.col] !== null) count++;
+  }
+  return count;
+}
+
+function cannonFrameAdjust(board: Board, pos: Position, weights: AiWeights): number {
+  return cannonFrameCount(board, pos) >= 1
+    ? weights.cannonWithFrameBonus
+    : weights.cannonNoFramePenalty;
+}
+
+function horseMobilityCount(board: Board, pos: Position): number {
+  const feet = [[-1, 0], [1, 0], [0, -1], [0, 1]] as const;
+  let count = 0;
+  for (const [dr, dc] of feet) {
+    const fr = pos.row + dr, fc = pos.col + dc;
+    if (fr >= 0 && fr < 10 && fc >= 0 && fc < 9 && board[fr][fc] === null) count++;
+  }
+  return count;
+}
+
+function horseMobilityAdjust(board: Board, pos: Position, weights: AiWeights): number {
+  const count = horseMobilityCount(board, pos);
+  if (count >= 3) return weights.horseHighMobilityBonus;
+  if (count <= 1) return weights.horseLowMobilityPenalty;
+  return 0;
+}
+
+// ── End Task 5 helpers ────────────────────────────────────────────────────────
+
 function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean, weights: AiWeights, posRevealedMajorCaptureAvailable = false, preHighValueThreats: HighValueThreat[] = []): MoveEvaluation {
   const next = applyMove(state, move.from, move.to);
   const nextBoard = next === state ? applyMoveToBoard(state.board, move) : next.board;
@@ -1451,6 +1513,69 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     reply.possibleLoss === 0 && threatValue >= weights.effectiveCheckThreatValue
   );
   const lowQualityCheck = checking && !effectiveCheck;
+
+  // Task 5: Checking quality evaluation
+  const opp = opponent(state.turn);
+  const oppKingMovesBefore = checking
+    ? getAllLegalMoves(state.board, opp).filter(m => publicType(m.piece) === 'king').length : 0;
+  const oppKingMovesAfter = checking
+    ? getAllLegalMoves(nextBoard, opp).filter(m => publicType(m.piece) === 'king').length : 0;
+  // Exclude the king itself as an "important threat" target: being in check already
+  // means the king is under capture threat, so that alone must not count as
+  // materialCheck (otherwise every single check would trivially qualify).
+  const materialCheck = checking && (captureGain > 0 || (importantThreat && afterThreat?.targetType !== 'king'));
+  const forcesBadKingMove = checking && !materialCheck && oppKingMovesAfter <= 1;
+  const checkRestrictsKingMobility = checking && !materialCheck && !forcesBadKingMove &&
+    oppKingMovesAfter < oppKingMovesBefore;
+  const meaninglessCheck = checking && !materialCheck && !forcesBadKingMove && !checkRestrictsKingMobility;
+  const checkingQuality: 'none' | 'mate' | 'forcedMateThreat' | 'materialCheck' | 'forcesBadKingMove' | 'restrictsKingMobility' | 'meaninglessCheck' =
+    !checking ? 'none'
+    : materialCheck ? 'materialCheck'
+    : forcesBadKingMove ? 'forcesBadKingMove'
+    : checkRestrictsKingMobility ? 'restrictsKingMobility'
+    : 'meaninglessCheck';
+  const checkingQualityScore =
+    !checking ? 0
+    : materialCheck ? weights.materialCheckBonus
+    : forcesBadKingMove ? weights.forcesBadKingMoveBonus
+    : checkRestrictsKingMobility ? weights.checkRestrictsKingMobilityBonus
+    : weights.meaninglessCheckPenalty;
+
+  // Task 5: Dynamic piece values
+  const dynamicValuePhase = computeGamePhase(state, nextBoard, weights);
+  const movedPieceType = moved.revealed ? publicType(moved) : null;
+  let dynamicMoverValue = 0;
+  let cannonFrameAdjustment = 0;
+  let horseMobilityAdjustment = 0;
+  if (moved.revealed) {
+    if (movedPieceType === 'cannon') {
+      cannonFrameAdjustment = cannonFrameAdjust(nextBoard, move.to, weights);
+      const phaseAdj = dynamicValuePhase === 'opening'
+        ? weights.dynamicCannonOpeningAdjustment
+        : dynamicValuePhase === 'endgame' ? weights.dynamicCannonEndgameAdjustment : 0;
+      dynamicMoverValue = cannonFrameAdjustment + phaseAdj;
+    } else if (movedPieceType === 'horse') {
+      horseMobilityAdjustment = horseMobilityAdjust(nextBoard, move.to, weights);
+      const phaseAdj = dynamicValuePhase === 'opening'
+        ? weights.dynamicHorseOpeningAdjustment
+        : dynamicValuePhase === 'endgame' ? weights.dynamicHorseEndgameAdjustment : 0;
+      dynamicMoverValue = horseMobilityAdjustment + phaseAdj;
+    }
+  }
+  let dynamicTargetValue = 0;
+  if (move.captured && move.captured.revealed) {
+    const capType = publicType(move.captured);
+    if (capType === 'cannon') {
+      dynamicTargetValue = dynamicValuePhase === 'opening'
+        ? weights.dynamicCannonOpeningAdjustment
+        : dynamicValuePhase === 'endgame' ? weights.dynamicCannonEndgameAdjustment : 0;
+    } else if (capType === 'horse') {
+      dynamicTargetValue = dynamicValuePhase === 'opening'
+        ? weights.dynamicHorseOpeningAdjustment
+        : dynamicValuePhase === 'endgame' ? weights.dynamicHorseEndgameAdjustment : 0;
+    }
+  }
+
   const exchangeNet = captureGain - reply.possibleLoss;
   const hasClearGain = captureGain >= weights.pieceValues.cannon || blocksImmediateWin || effectiveCheck || (captureGain > 0 && exchangeNet >= 0) || escapeBonus > 0;
   const leaveKeySquareScore = leaveKeySquarePenalty(state.board, state.turn, move.from, move.to, hasClearGain, weights);
@@ -1866,7 +1991,10 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     forcesOpponentChoiceBonusScore +
     minimumLossDefenseBonusScore +
     partialDefensePenaltyScore +
-    unresolvedThreatAfterDefensePenaltyScore -
+    unresolvedThreatAfterDefensePenaltyScore +
+    checkingQualityScore +
+    dynamicMoverValue +
+    dynamicTargetValue -
     Math.round(reply.maxReplyGain * weights.maxReplyGainPenaltyRatio);
 
   return {
@@ -1999,6 +2127,17 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     threatLossBefore,
     threatLossAfter,
     threatLossReduced,
+    checkingQuality,
+    checkingQualityScore,
+    materialCheck,
+    forcesBadKingMove,
+    checkRestrictsKingMobility,
+    meaninglessCheck,
+    dynamicMoverValue,
+    dynamicTargetValue,
+    dynamicValuePhase,
+    cannonFrameAdjustment,
+    horseMobilityAdjustment,
   };
 }
 
@@ -2047,15 +2186,19 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (evaluation.revealTacticalSuppressed && !evaluation.effectiveCheck && !evaluation.releasedHorseFromPressure && !evaluation.releasedElephantFromPressure && !evaluation.preventsPawnLineLock) return '暗子翻開效果未知，未按確定將軍加分';
   if (evaluation.repeatedCheckingCycle) return '重複循環將軍，改尋求起角';
   if (evaluation.repetitiveCheck) return '無成果連將，避免重複';
+  if (evaluation.materialCheck) return '高品質將軍：將軍並取得物質';
+  if (evaluation.forcesBadKingMove) return '高品質將軍：逼將帥走壞位';
+  if (evaluation.checkRestrictsKingMobility) return '高品質將軍：限制將帥活動';
+  if (evaluation.meaninglessCheck) return '無成果將軍，已重扣';
   if (evaluation.effectiveCheck) return '有效將軍';
   if (evaluation.lowQualityCheck) return '無成果將軍，已降分';
   if (evaluation.horsePawnLineGuard) return '邊路明車壓兵線，優先活馬守線';
-  if (evaluation.pawnSoldierDelayedByEdgeRookPressure) return '邊 G 壓力下，延後普通暗兵卒開發';
+  if (evaluation.pawnSoldierDelayedByEdgeRookPressure) return '邊車壓力下，延後普通暗兵卒開發';
   if (evaluation.releasedHorseFromPressure) return '活馬解除邊炮壓制';
   if (evaluation.releasedElephantFromPressure) return '活象解除邊炮壓制';
   if (evaluation.weakScreen) return '只是塞炮線但仍被卡馬腳，已扣分';
   if (evaluation.badHorseRelease) return '活馬落點不符當前威脅，已扣分';
-  if (evaluation.preventsPawnLineLock) return '守住兵線，避免敵方 G 壓兵線';
+  if (evaluation.preventsPawnLineLock) return '守住兵線，避免敵方車壓兵線';
   if (evaluation.forcingReply) return '形成強制應手';
   if (evaluation.pawnLineDefense && evaluation.structurePatterns.includes('hidden_rook_guard_point')) return '活馬並保護暗車控制點';
   if (evaluation.pawnLineDefense) return '守住兵線關鍵點';
@@ -2063,6 +2206,9 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (evaluation.preservesHiddenCannon) return '保留暗炮威懾';
   if (evaluation.leaveKeySquareScore < 0) return '離開關鍵點，價值下降';
   if (evaluation.meaningless) return '目的性不足，已扣分';
+  if (evaluation.dynamicValuePhase === 'endgame' && evaluation.dynamicMoverValue > 0 && evaluation.horseMobilityAdjustment > 0) return '殘局馬活性較高，交換評估上修';
+  if (evaluation.cannonFrameAdjustment > 0) return '炮有有效炮架，價值上修';
+  if (evaluation.cannonFrameAdjustment < 0) return '炮架不足，炮價值下修';
   const typeLabel: Record<PieceType, string> = { king: '帥/將', advisor: '仕/士', elephant: '相/象', rook: '車', horse: '馬', cannon: '炮/包', pawn: '兵/卒' };
   const newThreat = evaluation.threatValue >= weights.pieceValues.horse && (evaluation.threatDelta > 0 || evaluation.threatByMovedPiece);
   if (newThreat && evaluation.threatByMovedPiece && evaluation.threatTargetType) return `此步直接威脅對方${typeLabel[evaluation.threatTargetType]}`;
@@ -2264,6 +2410,17 @@ export function recommendMove(
     threatLossBefore: evaluation.threatLossBefore,
     threatLossAfter: evaluation.threatLossAfter,
     threatLossReduced: evaluation.threatLossReduced,
+    checkingQuality: evaluation.checkingQuality,
+    checkingQualityScore: evaluation.checkingQualityScore,
+    materialCheck: evaluation.materialCheck,
+    forcesBadKingMove: evaluation.forcesBadKingMove,
+    checkRestrictsKingMobility: evaluation.checkRestrictsKingMobility,
+    meaninglessCheck: evaluation.meaninglessCheck,
+    dynamicMoverValue: evaluation.dynamicMoverValue,
+    dynamicTargetValue: evaluation.dynamicTargetValue,
+    dynamicValuePhase: evaluation.dynamicValuePhase,
+    cannonFrameAdjustment: evaluation.cannonFrameAdjustment,
+    horseMobilityAdjustment: evaluation.horseMobilityAdjustment,
   }));
 
   return {
