@@ -119,6 +119,9 @@ type MoveEvaluation = {
   createNonCheckingThreat: boolean;
   avoidAimlessMove: boolean;
   endgamePlanScore: number;
+  hiddenMajorRecaptureRisk: boolean;
+  unsafeEndgameCapture: boolean;
+  unsafeCaptureExchangeNet: number;
 };
 
 type AiThreatInfo = {
@@ -519,6 +522,15 @@ function isSquareAttackedByRevealedPawn(board: Board, bySide: Side, target: Posi
     publicType(m.piece) === 'pawn' &&
     m.captured &&
     samePosition(m.to, target)
+  );
+}
+
+function hiddenMajorCanRecaptureAt(board: Board, enemySide: Side, target: Position): boolean {
+  return getAllLegalMoves(board, enemySide).some(m =>
+    !m.piece.revealed &&
+    (m.piece.originalType === 'rook' || m.piece.originalType === 'cannon' || m.piece.originalType === 'horse') &&
+    samePosition(m.to, target) &&
+    m.captured != null
   );
 }
 
@@ -1418,10 +1430,11 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
   const pawnSoldierDelayedByMajorCapture = pawnSoldierDevelopment && revealedMajorCaptureAvailable;
   const pawnSoldierDelayPenalty = pawnSoldierDelayedByMajorCapture ? weights.pawnSoldierDelayWhenMajorCaptureAvailablePenalty : 0;
 
-  // 暗兵卒走入已翻兵卒攻擊（白送）
-  const pawnSoldierProtectedAfterAdvance = pawnSoldierDevelopment &&
+  // 暗兵卒走入已翻兵卒攻擊（白送）—— 不限開局階段
+  const isUnrevealedPawnMove = isUnrevealedPawnSoldier(move.piece);
+  const pawnSoldierProtectedAfterAdvance = isUnrevealedPawnMove &&
     isSquareProtectedBySide(nextBoard, state.turn, move.to);
-  const pawnSoldierWalksIntoRevealedPawnAttack = pawnSoldierDevelopment &&
+  const pawnSoldierWalksIntoRevealedPawnAttack = isUnrevealedPawnMove &&
     captureGain === 0 &&
     !blocksImmediateWin &&
     isSquareAttackedByRevealedPawn(nextBoard, opponent(state.turn), move.to) &&
@@ -1432,6 +1445,18 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     ? weights.pawnSoldierWalksIntoRevealedPawnAttackPenalty : 0;
   const pawnSoldierDevelopmentSuppressedByPawnAttackPenalty = pawnSoldierDevelopmentSuppressedByPawnAttack
     ? weights.pawnSoldierDevelopmentSuppressedByPawnAttackPenalty : 0;
+
+  // 暗大子回吃風險
+  const hiddenMajorRecaptureRisk = captureGain > 0 &&
+    !blocksImmediateWin &&
+    !effectiveCheck &&
+    hiddenMajorCanRecaptureAt(nextBoard, opponent(state.turn), move.to);
+  const unsafeCaptureExchangeNet = captureGain -
+    Math.round(defensiveTargetValue(move.piece, state.board, move.from, weights));
+  const unsafeEndgameCapture = hiddenMajorRecaptureRisk &&
+    unsafeCaptureExchangeNet < 0 &&
+    !isSquareProtectedBySide(nextBoard, state.turn, move.to);
+  const unsafeCapturePenalty = unsafeEndgameCapture ? weights.unsafeCapturePenalty : 0;
 
   // 硬保死車扣分：暗士翻子保護己方已被對方控制的車
   const ownMajorsUnderAttack = findOwnMajorsUnderAttack(state.board, state.turn);
@@ -1618,6 +1643,7 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     firstMoveBlindMajorActivationCapPenalty +
     pureBlindHorsePenalty +
     forcedBadDefensePenalty +
+    unsafeCapturePenalty +
     endgamePlan.endgamePlanScore -
     Math.round(reply.maxReplyGain * weights.maxReplyGainPenaltyRatio);
 
@@ -1725,6 +1751,9 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     createNonCheckingThreat: endgamePlan.createNonCheckingThreat,
     avoidAimlessMove: endgamePlan.avoidAimlessMove,
     endgamePlanScore: endgamePlan.endgamePlanScore,
+    hiddenMajorRecaptureRisk,
+    unsafeEndgameCapture,
+    unsafeCaptureExchangeNet,
   };
 }
 
@@ -1798,6 +1827,7 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (evaluation.createNonCheckingThreat) return '形成非將軍威脅';
   if (evaluation.improveMajorActivity) return '改善大子位置';
   if (evaluation.passedPawnAdvance) return '過河兵卒推進';
+  if (evaluation.unsafeEndgameCapture) return '吃子後遭暗大子回吃，交換不利';
   return '簡單評分最佳';
 }
 export function recommendMove(
@@ -1949,6 +1979,9 @@ export function recommendMove(
     createNonCheckingThreat: evaluation.createNonCheckingThreat,
     avoidAimlessMove: evaluation.avoidAimlessMove,
     endgamePlanScore: evaluation.endgamePlanScore,
+    hiddenMajorRecaptureRisk: evaluation.hiddenMajorRecaptureRisk,
+    unsafeEndgameCapture: evaluation.unsafeEndgameCapture,
+    unsafeCaptureExchangeNet: evaluation.unsafeCaptureExchangeNet,
   }));
 
   return {

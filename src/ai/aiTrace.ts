@@ -91,6 +91,9 @@ export type AiMoveTrace = {
   createNonCheckingThreat?: boolean;
   avoidAimlessMove?: boolean;
   endgamePlanScore?: number;
+  hiddenMajorRecaptureRisk?: boolean;
+  unsafeEndgameCapture?: boolean;
+  unsafeCaptureExchangeNet?: number;
 };
 
 /**

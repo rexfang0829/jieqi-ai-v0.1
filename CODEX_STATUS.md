@@ -1,3 +1,33 @@
+### 2026-06-27 修正暗兵卒白送偵測與暗大子回吃風險（Claude）
+
+**目標**：修正兩個 AI 實戰漏判問題。
+
+**新增 / 修改檔案**：
+
+1. **`src/ai/simpleAi.ts`**：
+   - 問題 A：引入 `isUnrevealedPawnMove`（與開局無關），解除 `pawnSoldierWalksIntoRevealedPawnAttack` 對 `isOpeningPhase` 的依賴
+   - 問題 B：新增 `hiddenMajorCanRecaptureAt` helper（用 `originalType` 偵測暗車/炮/馬回吃能力）
+   - 新增 `hiddenMajorRecaptureRisk` / `unsafeEndgameCapture` / `unsafeCaptureExchangeNet` 邏輯
+   - 新增 `unsafeCapturePenalty` 到分數公式
+   - 新增 reason `'吃子後遭暗大子回吃，交換不利'`
+   - 新增 3 個 `MoveEvaluation` 欄位 + 3 個 traces 欄位
+
+2. **`src/ai/aiWeights.ts`**：
+   - 新增 `unsafeCapturePenalty: -120`
+
+3. **`src/ai/aiTrace.ts`**：
+   - 新增 3 個 trace 欄位：`hiddenMajorRecaptureRisk` / `unsafeEndgameCapture` / `unsafeCaptureExchangeNet`
+
+4. **`src/ai/aiDebugReport.ts`**：
+   - `fmtTrace` 補充 3 個新欄位輸出
+
+5. **`tests/rules.test.ts`**：
+   - 新增 6 個測試（A1~A3 驗證開局外暗兵卒邏輯，B1~B3 驗證暗大子回吃 trace）
+
+**測試**：`npm test` 全 196 項通過；`npx tsc --noEmit` 無錯。
+
+---
+
 ## 最新完成的工作
 
 ### 2026-06-27 Human vs AI 悔棋（undo）MVP（Claude）

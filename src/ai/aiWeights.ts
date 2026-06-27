@@ -119,6 +119,7 @@ export type AiWeights = {
   passedPawnAdvanceBonus: number;
   createNonCheckingThreatBonus: number;
   avoidAimlessMovePenalty: number;
+  unsafeCapturePenalty: number;
 };
 
 export const defaultAiWeights: AiWeights = {
@@ -248,4 +249,5 @@ export const defaultAiWeights: AiWeights = {
   passedPawnAdvanceBonus: 30,
   createNonCheckingThreatBonus: 40,
   avoidAimlessMovePenalty: -80,
+  unsafeCapturePenalty: -120,
 };

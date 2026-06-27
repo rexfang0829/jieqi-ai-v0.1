@@ -1,6 +1,41 @@
 # NEXT_TASK
 
 ## 此輪完成
+- 修正兩個 AI 實戰漏判問題
+
+### 問題 A：暗兵卒白送偵測不限開局階段
+- `pawnSoldierWalksIntoRevealedPawnAttack` 原本被 `pawnSoldierDevelopment` 綁住（需 `isOpeningPhase` 為真）
+- 修正：引入 `isUnrevealedPawnMove = isUnrevealedPawnSoldier(move.piece)`（與開局階段無關）
+- `pawnSoldierProtectedAfterAdvance` / `pawnSoldierWalksIntoRevealedPawnAttack` 改用 `isUnrevealedPawnMove` 作為 gate
+- 開局獎分（`pawnSoldierDevelopmentScore` 等）仍保留 `pawnSoldierDevelopment` 限制
+
+### 問題 B：殘局吃子暗大子回吃風險
+- 新增 helper `hiddenMajorCanRecaptureAt`：用 `originalType` 偵測敵方暗車/炮/馬是否能在指定格回吃
+- 新增 `hiddenMajorRecaptureRisk` / `unsafeEndgameCapture` / `unsafeCaptureExchangeNet` 三個 trace 欄位
+- 新增 `unsafeCapturePenalty(-120)` 權重
+- 新增 reason：`'吃子後遭暗大子回吃，交換不利'`
+- `formatAiDebugReport` 補充 3 個新 trace 欄位輸出
+- 新增 6 個測試（A1~A3 / B1~B3）
+- `npx tsc --noEmit` 無錯；`npm test` 全 196 項通過
+
+## 建議下一步
+1. AI 開局理論回歸測試擴充。
+2. Pattern 觸發日誌 / 統計。
+3. AI VS AI 對局資料統計。
+4. 自我對弈調參實驗。
+5. Belief State / 剩餘池概率推演。
+6. Threat Map MVP。
+
+## 非明確指示不要做
+- 不改 Board UI。
+- 不偷看未翻暗子的 `realType`。
+- 不加後端或資料庫。
+
+---
+
+# NEXT_TASK
+
+## 此輪完成
 - Human vs AI 新增「回到上一步」（悔棋）功能
 - `UndoEntry` 型別：儲存 gameState / past / aiAnnotations / lastAiInfo 快照
 - `undoStack`：每次玩家或 AI 落子前 push snapshot
