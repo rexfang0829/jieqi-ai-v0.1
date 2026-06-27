@@ -14,6 +14,14 @@ import type { RecordStorage } from '../game/gameRecord';
 
 type AiAnnotation = { score: number; reason: string; moveIndex: number };
 
+/** Snapshot saved before each move (human or AI) for undo. */
+type UndoEntry = {
+  gameState: GameState;
+  past: GameState[];
+  aiAnnotations: (AiAnnotation | null)[];
+  lastAiInfo: { text: string; score: number; reason: string } | null;
+};
+
 type Props = {
   onHome: () => void;
   storage: RecordStorage | undefined;
@@ -29,21 +37,35 @@ export function HumanVsAiPanel({ onHome, storage }: Props) {
   const [aiAnnotations, setAiAnnotations] = useState<(AiAnnotation | null)[]>([]);
   const [aiThinking, setAiThinking] = useState(false);
   const [savedMsg, setSavedMsg] = useState('');
+  const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
 
   const gameStateRef = useRef(gameState);
   const pastRef = useRef(past);
   const aiAnnotationsRef = useRef(aiAnnotations);
+  const lastAiInfoRef = useRef(lastAiInfo);
+  const undoStackRef = useRef(undoStack);
   const prevStatusRef = useRef<GameState['status']>('playing');
 
   useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
   useEffect(() => { pastRef.current = past; }, [past]);
   useEffect(() => { aiAnnotationsRef.current = aiAnnotations; }, [aiAnnotations]);
+  useEffect(() => { lastAiInfoRef.current = lastAiInfo; }, [lastAiInfo]);
+  useEffect(() => { undoStackRef.current = undoStack; }, [undoStack]);
 
   const aiSide: Side | null = humanSide === 'red' ? 'black' : humanSide === 'black' ? 'red' : null;
   const endgame = getEndgameFeedback(gameState.status);
   const isPlaying = gameState.status === 'playing';
   const isHumanTurn = isPlaying && humanSide !== null && gameState.turn === humanSide;
   const moveCount = gameState.history.length;
+
+  // Compute how many undo stack entries are needed:
+  // - If last move was AI (now human's turn): undo 2 (AI move + preceding human move)
+  //   so we restore to before human's last move where human can re-decide.
+  // - If last move was human (now AI's turn, AI hasn't responded): undo 1.
+  const undoStepsNeeded = (humanSide && aiSide)
+    ? (gameState.turn === humanSide ? 2 : 1)
+    : 0;
+  const undoDisabled = undoStepsNeeded === 0 || undoStack.length < undoStepsNeeded;
 
   const legalMoves = (isHumanTurn && selected)
     ? getAllLegalMoves(gameState.board, gameState.turn)
@@ -62,10 +84,13 @@ export function HumanVsAiPanel({ onHome, storage }: Props) {
     setAiAnnotations([]);
     setAiThinking(false);
     setSavedMsg('');
+    setUndoStack([]);
     prevStatusRef.current = 'playing';
     gameStateRef.current = initial;
     pastRef.current = [];
     aiAnnotationsRef.current = [];
+    lastAiInfoRef.current = null;
+    undoStackRef.current = [];
   }
 
   function restart() {
@@ -83,11 +108,24 @@ export function HumanVsAiPanel({ onHome, storage }: Props) {
     const id = setTimeout(() => {
       const current = gameStateRef.current;
       if (current.status !== 'playing') { setAiThinking(false); return; }
+      // Guard: abort if turn changed (e.g. undo fired during 400ms delay)
+      if (current.turn !== aiSide) { setAiThinking(false); return; }
       const legal = getAllLegalMoves(current.board, current.turn);
       const allowed = filterThirdRepetitionMoves(current, pastRef.current, legal);
       const candidates = allowed.length ? allowed : legal;
       const r = recommendMoveFair(current);
       if (!r.move) { setAiThinking(false); return; }
+
+      // Save undo entry before AI move
+      const undoEntry: UndoEntry = {
+        gameState: current,
+        past: [...pastRef.current],
+        aiAnnotations: [...aiAnnotationsRef.current],
+        lastAiInfo: lastAiInfoRef.current,
+      };
+      setUndoStack(s => [...s, undoEntry]);
+      undoStackRef.current = [...undoStackRef.current, undoEntry];
+
       const next = applyMove(current, r.move.from, r.move.to);
       const ann: AiAnnotation = { score: r.score, reason: r.reason, moveIndex: current.history.length };
       const nextAnns = [...aiAnnotationsRef.current, ann];
@@ -119,6 +157,16 @@ export function HumanVsAiPanel({ onHome, storage }: Props) {
     if (selected && legalMoves.some(p => p.row === pos.row && p.col === pos.col)) {
       const next = applyMove(gameState, selected, pos);
       if (next !== gameState) {
+        // Save undo entry before human move
+        const undoEntry: UndoEntry = {
+          gameState,
+          past: [...past],
+          aiAnnotations: [...aiAnnotations],
+          lastAiInfo,
+        };
+        setUndoStack(s => [...s, undoEntry]);
+        undoStackRef.current = [...undoStackRef.current, undoEntry];
+
         aiAnnotationsRef.current = [...aiAnnotationsRef.current, null];
         setAiAnnotations(a => [...a, null]);
         setPast(h => [...h, gameState]);
@@ -133,6 +181,29 @@ export function HumanVsAiPanel({ onHome, storage }: Props) {
     }
     if (piece && piece.side === humanSide) setSelected(pos);
     else setSelected(null);
+  }
+
+  function handleUndo() {
+    if (!humanSide || !aiSide) return;
+    const stack = undoStack;
+    const targetIdx = stack.length - undoStepsNeeded;
+    if (targetIdx < 0) return;
+
+    const entry = stack[targetIdx];
+    const newStack = stack.slice(0, targetIdx);
+    setUndoStack(newStack);
+    undoStackRef.current = newStack;
+    setGameState(entry.gameState);
+    setPast(entry.past);
+    setAiAnnotations(entry.aiAnnotations);
+    setLastAiInfo(entry.lastAiInfo);
+    setSelected(null);
+    setAiThinking(false);
+    // Sync refs immediately so in-flight AI timeout (if any) sees updated state
+    gameStateRef.current = entry.gameState;
+    pastRef.current = entry.past;
+    aiAnnotationsRef.current = entry.aiAnnotations;
+    lastAiInfoRef.current = entry.lastAiInfo;
   }
 
   function saveRecord() {
@@ -237,6 +308,7 @@ export function HumanVsAiPanel({ onHome, storage }: Props) {
 
       <div className="toolbar" style={{ marginTop: 8, flexWrap: 'wrap', gap: 6 }}>
         <button onClick={restart}>重新開始</button>
+        <button onClick={handleUndo} disabled={undoDisabled}>回到上一步</button>
         {initialState && moveCount > 0 && (
           <button onClick={saveRecord}>儲存棋譜</button>
         )}

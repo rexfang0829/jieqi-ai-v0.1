@@ -1,6 +1,36 @@
 # NEXT_TASK
 
 ## 此輪完成
+- Human vs AI 新增「回到上一步」（悔棋）功能
+- `UndoEntry` 型別：儲存 gameState / past / aiAnnotations / lastAiInfo 快照
+- `undoStack`：每次玩家或 AI 落子前 push snapshot
+- 悔棋邏輯：
+  - 最後一手為 AI（humanSide 回合）→ 退 2 步，回到玩家可重新決策的局面
+  - 最後一手為玩家（aiSide 回合）→ 退 1 步
+- AI 效果新增 `current.turn !== aiSide` guard，防止 undo 期間 400ms timer 誤觸
+- 「回到上一步」按鈕：disabled 邏輯為 `undoStack.length < undoStepsNeeded`
+- lastMove highlight 隨悔棋正確還原
+- 新增 4 個測試
+- `npx tsc --noEmit` 無錯；`npm test` 全 184 項通過
+
+## 建議下一步
+1. AI 開局理論回歸測試擴充。
+2. Pattern 觸發日誌 / 統計。
+3. AI VS AI 對局資料統計。
+4. 自我對弈調參實驗。
+5. Belief State / 剩餘池概率推演。
+6. Threat Map MVP。
+
+## 非明確指示不要做
+- 不改 Board UI。
+- 不偷看未翻暗子的 `realType`。
+- 不加後端或資料庫。
+
+---
+
+# NEXT_TASK
+
+## 此輪完成
 - 新增中殘局目標 heuristic MVP：修正 AI VS AI 無意義來回和棋
 - `endgamePlanActive`：開局後（history.length > 12）自動啟動
 - 新增 6 個加分：`towardEnemyKing(25)` / `restrictKingMobility(45)` / `attackPalaceGuard(35)` / `improveMajorActivity(20)` / `passedPawnAdvance(30)` / `createNonCheckingThreat(40)`

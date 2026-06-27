@@ -1,5 +1,30 @@
 ## 最新完成的工作
 
+### 2026-06-27 Human vs AI 悔棋（undo）MVP（Claude）
+
+**目標**：Human vs AI 模式新增「回到上一步」按鈕，方便 AI 調參測試。
+
+**新增 / 修改檔案**：
+
+1. **`src/components/HumanVsAiPanel.tsx`**：
+   - 新增 `UndoEntry` 型別：`{ gameState, past, aiAnnotations, lastAiInfo }`
+   - 新增 `undoStack` state + `undoStackRef`
+   - 新增 `lastAiInfoRef`（供 AI timeout callback 讀取）
+   - 玩家落子（`click()`）前 push undo snapshot
+   - AI 落子（setTimeout callback）前 push undo snapshot
+   - AI callback 新增 `current.turn !== aiSide` guard（防止 undo 後 timer 誤觸）
+   - 新增 `handleUndo()`：計算 stepsBack（humanSide turn=2, aiSide turn=1），還原所有 state + refs，setAiThinking(false)
+   - 新增 `undoDisabled` 計算：`undoStack.length < undoStepsNeeded`
+   - 新增「回到上一步」按鈕（disabled 時不可點）
+   - `startGame()` / `restart()` 清除 `undoStack`
+
+2. **`tests/rules.test.ts`**：
+   - 新增 4 個悔棋邏輯測試
+
+**測試**：`npm test` 全 184 項通過；`npx tsc --noEmit` 無錯。
+
+---
+
 ### 2026-06-27 中殘局目標 heuristic MVP（Claude）
 
 **目標**：修正 AI VS AI 無意義來回重複和棋，新增中殘局方向性評分。

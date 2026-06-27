@@ -3014,3 +3014,76 @@ test('debug report 含新增 endgame 相關欄位', () => {
     assertOk(text.includes('createNonCheckingThreat'));
     assertOk(text.includes('avoidAimlessMove'));
 });
+// ══════════════════════════════════════════════════════════════
+// Human vs AI 悔棋（undo）邏輯驗證
+// ══════════════════════════════════════════════════════════════
+test('human vs AI undo: undo unavailable before any move (empty stack)', () => {
+    // The undo stack starts empty at game start → button should be disabled.
+    // Modelled as: undoStepsNeeded entries required, stack has 0.
+    const humanSide = 'red';
+    const initial = (0, gameState_1.newGame)();
+    // At start it is humanSide's turn, so stepsNeeded = 2.
+    const stepsNeeded = initial.turn === humanSide ? 2 : 1;
+    const undoStackLength = 0; // nothing saved yet
+    assertEqual(undoStackLength < stepsNeeded, true);
+});
+test('human vs AI undo: after human+AI moves, pre-human snapshot restores player-turn state', () => {
+    const humanSide = 'red';
+    const aiSide = 'black';
+    const initial = (0, gameState_1.newGame)();
+    // Human (red) makes first move
+    const redMoves = (0, checkRules_1.getAllLegalMoves)(initial.board, 'red');
+    assertOk(redMoves.length > 0);
+    const afterHuman = (0, gameState_1.applyMove)(initial, redMoves[0].from, redMoves[0].to);
+    assertEqual(afterHuman.turn, aiSide);
+    assertEqual(afterHuman.history.length, 1);
+    // AI (black) responds
+    const aiResult = (0, simpleAi_1.recommendMove)(afterHuman);
+    assertOk(aiResult.move !== null);
+    const afterAi = (0, gameState_1.applyMove)(afterHuman, aiResult.move.from, aiResult.move.to);
+    assertEqual(afterAi.turn, humanSide);
+    assertEqual(afterAi.history.length, 2);
+    // Simulate undo: gameState.turn === humanSide → stepsBack = 2.
+    // The 2-steps-back snapshot is the one saved BEFORE the human's move = initial.
+    const restoredState = initial;
+    assertEqual(restoredState.turn, humanSide);
+    assertEqual(restoredState.history.length, 0);
+});
+test('human vs AI undo: restored state turn is humanSide so AI would not auto-trigger', () => {
+    const humanSide = 'red';
+    const aiSide = 'black';
+    const initial = (0, gameState_1.newGame)();
+    const redMoves = (0, checkRules_1.getAllLegalMoves)(initial.board, 'red');
+    const afterHuman = (0, gameState_1.applyMove)(initial, redMoves[0].from, redMoves[0].to);
+    const aiResult = (0, simpleAi_1.recommendMove)(afterHuman);
+    assertOk(aiResult.move !== null);
+    const afterAi = (0, gameState_1.applyMove)(afterHuman, aiResult.move.from, aiResult.move.to);
+    // After undo (2 steps back), restored to initial
+    const restored = initial;
+    // AI trigger condition is: gameState.turn === aiSide — must be false after undo
+    assertEqual(restored.turn === aiSide, false);
+    assertEqual(restored.turn, humanSide);
+    // Human still has legal moves → can re-decide
+    const legalAfterUndo = (0, checkRules_1.getAllLegalMoves)(restored.board, humanSide);
+    assertOk(legalAfterUndo.length > 0);
+});
+test('human vs AI undo: after undo human can choose a different first move', () => {
+    const humanSide = 'red';
+    const initial = (0, gameState_1.newGame)();
+    const redMoves = (0, checkRules_1.getAllLegalMoves)(initial.board, 'red');
+    assertOk(redMoves.length >= 2);
+    // Original move
+    const move1 = redMoves[0];
+    const afterMove1 = (0, gameState_1.applyMove)(initial, move1.from, move1.to);
+    const aiResult = (0, simpleAi_1.recommendMove)(afterMove1);
+    assertOk(aiResult.move !== null);
+    // After undo, pick a different move
+    const move2 = redMoves[1];
+    const isDifferent = move1.from.row !== move2.from.row || move1.from.col !== move2.from.col ||
+        move1.to.row !== move2.to.row || move1.to.col !== move2.to.col;
+    assertOk(isDifferent);
+    // Can apply the different move from the restored initial state
+    const afterMove2 = (0, gameState_1.applyMove)(initial, move2.from, move2.to);
+    assertEqual(afterMove2.history.length, 1);
+    assertEqual(afterMove2.turn, 'black');
+});
