@@ -657,7 +657,12 @@ test('AI chooses immediate checkmate before simple material scoring', () => {
   place(board, 0, 5, piece('red', 'rook'));
   place(board, 7, 0, piece('red', 'pawn'));
   place(board, 6, 0, piece('black', 'rook'));
-  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const state = {
+    board,
+    turn: 'red' as const,
+    history: [],
+    status: 'playing' as const,
+  };
   const mate = {
     from: { row: 1, col: 3 },
     to: { row: 1, col: 4 },
@@ -1524,6 +1529,9 @@ test('recommendMove returns traces with correct fields', () => {
   assertOk(typeof first.postMoveLoosePiecePenalty === 'number');
   assertOk(typeof first.rescuesLooseHiddenPiece === 'boolean');
   assertOk(typeof first.ignoresLooseHiddenPiece === 'boolean');
+  assertOk(typeof first.firstMovePawnOpening === 'boolean');
+  assertOk(typeof first.firstMoveBlindHorseActivation === 'boolean');
+  assertOk(typeof first.firstMoveBlindHorsePenalty === 'number');
 });
 
 test('AI prioritizes rescuing an unprotected hidden pawn attacked by a revealed elephant', () => {
@@ -1865,7 +1873,12 @@ test('safe capture: safeCapturePriority is set on safe captures and rook capture
   // Unrevealed red cannon with no direct capture path (slide only)
   place(board, 9, 2, piece('red', 'cannon', 'cannon', false)); // unrevealed cannon
 
-  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const state = {
+    board,
+    turn: 'red' as const,
+    history: [],
+    status: 'playing' as const,
+  };
   const rec = recommendMove(state);
   assertOk(rec.traces);
   assertOk(rec.move);
@@ -2362,6 +2375,13 @@ test('reveal choice risk fair info: watcher hidden realType must not change scor
 // ─── Fair AI Boundary MVP tests ───────────────────────────────────────────────
 import { createAiView, visibleStateToMaskedGameState } from '../src/ai/aiVisibility';
 import { recommendMoveFair, recommendMoveOracle } from '../src/ai/simpleAi';
+import { buildAiPanelDebugReport, getAiPanelRecommendations } from '../src/ai/aiPanelRecommendations';
+
+function isPriorityOpeningPawnMove(move: Move | null): boolean {
+  if (!move) return false;
+  return move.from.row === 6 &&
+    (move.from.col === 0 || move.from.col === 2 || move.from.col === 6 || move.from.col === 8);
+}
 
 test('Fair AI view hides realType for unrevealed pieces', () => {
   const board = emptyBoard();
@@ -2432,6 +2452,72 @@ test('Oracle AI and Fair AI entrypoints both return recommendations', () => {
   const oracle = recommendMoveOracle(state);
   assertOk(fair.move);
   assertOk(oracle.move);
+});
+
+test('Fair AI initial move prefers 1379 hidden pawn opening', () => {
+  const state = newGame();
+  const rec = recommendMoveFair(state);
+  assertOk(rec.move);
+  assertEqual(isPriorityOpeningPawnMove(rec.move), true);
+  assertEqual(rec.reason, '第一手穩健翹邊兵');
+});
+
+test('Fair AI first move blind horse activation does not outscore 1379 hidden pawns', () => {
+  const state = newGame();
+  const rec = recommendMoveFair(state);
+  assertOk(rec.traces);
+  const pawnScores = rec.traces
+    .filter(t => isPriorityOpeningPawnMove(t.move))
+    .map(t => t.score);
+  const blindHorseScores = rec.traces
+    .filter(t => t.move.piece.originalType === 'horse' && t.move.piece.revealed === false)
+    .map(t => t.score);
+  assertEqual(pawnScores.length > 0, true);
+  assertEqual(blindHorseScores.length > 0, true);
+  assertEqual(Math.max(...blindHorseScores) < Math.max(...pawnScores), true);
+  const blindHorseTrace = rec.traces.find(t =>
+    t.move.piece.originalType === 'horse' && t.move.piece.revealed === false
+  );
+  assertOk(blindHorseTrace);
+  assertEqual(blindHorseTrace.firstMoveBlindHorseActivation, true);
+  assertEqual((blindHorseTrace.firstMoveBlindHorsePenalty ?? 0) < 0, true);
+});
+
+test('AiPanel main recommendation uses Fair AI and keeps Oracle as debug comparison', () => {
+  const state = newGame();
+  const fair = recommendMoveFair(state);
+  const panel = getAiPanelRecommendations(state);
+  assertOk(fair.move);
+  assertOk(panel.fair.move);
+  assertEqual(panel.fair.move.from.row, fair.move.from.row);
+  assertEqual(panel.fair.move.from.col, fair.move.from.col);
+  assertEqual(panel.fair.move.to.row, fair.move.to.row);
+  assertEqual(panel.fair.move.to.col, fair.move.to.col);
+  assertOk(panel.oracle.move);
+  const report = buildAiPanelDebugReport({
+    state,
+    fair: panel.fair,
+    oracle: panel.oracle,
+    differs: true,
+  });
+  assertEqual(report.includes('Fair AI'), true);
+  assertEqual(report.includes('Oracle / Debug'), true);
+});
+
+test('Fair AI first move opening rule does not override direct checkmate', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 1, 4, piece('red', 'rook', 'rook', true));
+  place(board, 6, 0, piece('red', 'pawn', 'pawn', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const rec = recommendMoveFair(state);
+  assertOk(rec.move);
+  assertEqual(rec.move.from.row, 1);
+  assertEqual(rec.move.from.col, 4);
+  assertEqual(rec.move.to.row, 0);
+  assertEqual(rec.move.to.col, 4);
+  assertEqual(rec.reason, '此步直接形成絕殺');
 });
 
 // --- Dead Major Threat Hold + Advisor Reveal Clog Risk MVP tests ---------------

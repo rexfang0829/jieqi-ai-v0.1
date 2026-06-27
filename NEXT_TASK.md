@@ -1,6 +1,9 @@
 # NEXT_TASK
 
 ## Completed this round
+- Fixed Fair AI first move to prefer 1 / 3 / 7 / 9 hidden pawn openings over blind hidden horse activation.
+- Aligned AiPanel main recommendation with `recommendMoveFair`; Oracle is now Debug comparison only.
+- Added first-move Fair AI trace fields and regression tests.
 - Added post-move loose hidden piece MVP evaluation.
 - Added trace fields for loose hidden piece count, protected-under-attack count, rescue, ignore, and penalty.
 - Added weights for loose-piece penalty, rescue bonus, protected-under-attack cap, and activation cap.

@@ -89,6 +89,9 @@ export type AiWeights = {
   rescueLooseHiddenPieceBonus: number;
   protectedUnderAttackPenaltyCap: number;
   activationOnlyCapWhenLoosePieceExists: number;
+  firstMovePawnOpeningBonus: number;
+  firstMoveBlindHorseActivationPenalty: number;
+  firstMoveBlindMajorActivationCap: number;
 };
 
 export const defaultAiWeights: AiWeights = {
@@ -188,4 +191,7 @@ export const defaultAiWeights: AiWeights = {
   rescueLooseHiddenPieceBonus: 90,
   protectedUnderAttackPenaltyCap: -20,
   activationOnlyCapWhenLoosePieceExists: 20,
+  firstMovePawnOpeningBonus: 80,
+  firstMoveBlindHorseActivationPenalty: -90,
+  firstMoveBlindMajorActivationCap: 20,
 };

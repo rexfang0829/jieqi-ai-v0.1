@@ -52,6 +52,9 @@ export type AiMoveTrace = {
   postMoveLoosePiecePenalty?: number;
   rescuesLooseHiddenPiece?: boolean;
   ignoresLooseHiddenPiece?: boolean;
+  firstMovePawnOpening?: boolean;
+  firstMoveBlindHorseActivation?: boolean;
+  firstMoveBlindHorsePenalty?: number;
 };
 
 /**

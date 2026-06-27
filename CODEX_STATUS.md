@@ -554,3 +554,30 @@ npm.cmd run build
 - No Board UI, moveNotation, gameEngine, checkRules, or Fair AI permission boundary changes.
 
 ---
+## 2026-06-27 Codex update
+
+### Latest completed work
+- Fixed Fair AI first-move opening bias so a fully unknown initial position prefers stable 1 / 3 / 7 / 9 hidden pawn openings.
+- Added first-move scoring controls: `firstMovePawnOpeningBonus`, `firstMoveBlindHorseActivationPenalty`, and `firstMoveBlindMajorActivationCap`.
+- Added trace fields: `firstMovePawnOpening`, `firstMoveBlindHorseActivation`, and `firstMoveBlindHorsePenalty`.
+- First-move hidden horse activation is only penalized when a priority hidden pawn option exists and the horse move has no capture, check, rescue, immediate-win prevention, or revealed-piece threat reason.
+- Changed AiPanel main recommendation to use `recommendMoveFair`; Oracle remains available only as 天眼 Debug comparison.
+- Added a small non-UI helper module for AiPanel recommendations and report composition.
+
+### Tests added
+- `recommendMoveFair(newGame())` chooses a 1 / 3 / 7 / 9 hidden pawn opening.
+- Blind first-move hidden horse activation scores below priority hidden pawn openings.
+- AiPanel main recommendation matches Fair AI while Oracle remains Debug-only.
+- Direct checkmate can still override first-move pawn-opening preference.
+
+### Verification
+- `npm.cmd test`: passed.
+- `npx.cmd tsc --noEmit`: passed.
+- `npm.cmd run build`: passed.
+
+### Scope note
+- No Board UI, moveNotation, gameEngine, checkRules, or Fair AI permission boundary changes.
+- `recommendMoveOracle` remains available for Debug / 天眼 comparison.
+- `majorActivation` was not removed; only first-move blind horse activation is capped/penalized.
+
+---

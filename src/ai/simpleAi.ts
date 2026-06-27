@@ -79,6 +79,9 @@ type MoveEvaluation = {
   postMoveLoosePiecePenalty: number;
   rescuesLooseHiddenPiece: boolean;
   ignoresLooseHiddenPiece: boolean;
+  firstMovePawnOpening: boolean;
+  firstMoveBlindHorseActivation: boolean;
+  firstMoveBlindHorsePenalty: number;
 };
 
 type AiThreatInfo = {
@@ -262,7 +265,15 @@ function openingPawnRevealBonus(state: GameState, move: Move, weights: AiWeights
   let bonus = weights.openingPawnBonus;
   if (move.from.col === 0 || move.from.col === 8) bonus += weights.edgePawnBonus;
   else if (move.from.col === 2 || move.from.col === 6) bonus += weights.thirdSeventhPawnBonus;
+  if (state.history.length === 0) bonus += weights.firstMovePawnOpeningBonus;
   return bonus;
+}
+
+function hasFirstMovePriorityPawnOption(state: GameState, weights: AiWeights): boolean {
+  if (state.history.length !== 0) return false;
+  return getAllLegalMoves(state.board, state.turn).some(move =>
+    openingPawnRevealBonus(state, move, weights) > 0
+  );
 }
 
 function bestRecaptureValue(board: Board, side: Side, target: Position, weights: AiWeights): number {
@@ -1113,6 +1124,25 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     activationOnlyScore > weights.activationOnlyCapWhenLoosePieceExists
       ? -(activationOnlyScore - weights.activationOnlyCapWhenLoosePieceExists)
       : 0;
+  const firstMovePawnOpening = state.history.length === 0 && openingBonus > 0;
+  const firstMoveBlindHorseActivation =
+    hasFirstMovePriorityPawnOption(state, weights) &&
+    state.history.length === 0 &&
+    !move.piece.revealed &&
+    move.piece.originalType === 'horse' &&
+    captureGain === 0 &&
+    !effectiveCheck &&
+    !blocksImmediateWin &&
+    !rescuesLooseHiddenPiece &&
+    !isPositionAttackedByRevealedEnemy(state.board, state.turn, move.from);
+  const firstMoveBlindHorsePenalty = firstMoveBlindHorseActivation
+    ? weights.firstMoveBlindHorseActivationPenalty
+    : 0;
+  const firstMoveBlindMajorActivationCapPenalty =
+    firstMoveBlindHorseActivation &&
+    majorActivationScore > weights.firstMoveBlindMajorActivationCap
+      ? -(majorActivationScore - weights.firstMoveBlindMajorActivationCap)
+      : 0;
 
   const forcingReply =
     blocksImmediateWin ||
@@ -1190,6 +1220,8 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     rescueLooseHiddenPieceScore +
     protectedUnderAttackPenalty +
     activationOnlyCapPenalty +
+    firstMoveBlindHorsePenalty +
+    firstMoveBlindMajorActivationCapPenalty +
     forcedBadDefensePenalty -
     Math.round(reply.maxReplyGain * weights.maxReplyGainPenaltyRatio);
 
@@ -1257,6 +1289,9 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     postMoveLoosePiecePenalty,
     rescuesLooseHiddenPiece,
     ignoresLooseHiddenPiece,
+    firstMovePawnOpening,
+    firstMoveBlindHorseActivation,
+    firstMoveBlindHorsePenalty: firstMoveBlindHorsePenalty + firstMoveBlindMajorActivationCapPenalty,
   };
 }
 
@@ -1264,6 +1299,7 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (avoidedOpponentWin) return '避免對方一步殺';
   if (evaluation.rescuesLooseHiddenPiece) return '暗子無保護受攻擊，優先脫離';
   if (evaluation.postMoveLooseHiddenPiece && evaluation.postMoveLoosePiecePenalty < 0) return '下完仍有無保護暗子被抓，已扣分';
+  if (evaluation.firstMoveBlindHorseActivation) return '第一手盲動暗馬，已降分';
   if (evaluation.forcedBadDefense) return '暗士硬保死車，易卡陣，已扣分';
   if (evaluation.hangingMove) return '落點缺少保護，已扣分';
   if (evaluation.advisorRevealClogRisk && evaluation.advisorRevealClogPenalty < 0) return '暗士翻子易卡住將門，已扣分';
@@ -1298,6 +1334,7 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (newThreat && evaluation.threatDelta > 0) return '形成新的高價威脅';
   if (evaluation.escapeBonus > 0) return '脫離重要子力危險';
   if (evaluation.pressureBonus > 0) return '形成攻擊壓力';
+  if (evaluation.firstMovePawnOpening) return '第一手穩健翹邊兵';
   if (evaluation.controlsImportantHidden && !evaluation.edgeCannonPressureUnresolved) return '壓制對方重要暗子';
   if (evaluation.hiddenPressureScore > 0 && !evaluation.edgeCannonPressureUnresolved) return '壓制對方暗子';
   if (evaluation.keySquareScore >= weights.keySquareEnemyPalaceBonus) return '佔住關鍵點';
@@ -1390,6 +1427,9 @@ export function recommendMove(
     postMoveLoosePiecePenalty: evaluation.postMoveLoosePiecePenalty,
     rescuesLooseHiddenPiece: evaluation.rescuesLooseHiddenPiece,
     ignoresLooseHiddenPiece: evaluation.ignoresLooseHiddenPiece,
+    firstMovePawnOpening: evaluation.firstMovePawnOpening,
+    firstMoveBlindHorseActivation: evaluation.firstMoveBlindHorseActivation,
+    firstMoveBlindHorsePenalty: evaluation.firstMoveBlindHorsePenalty,
   }));
 
   return {
