@@ -68,6 +68,12 @@ export type AiMoveTrace = {
   pawnSoldierCenterPreference?: boolean;
   pawnSoldierFollowUpAdvisor?: boolean;
   pawnSoldierAntiAdvisorFork?: boolean;
+  revealedMajorCaptureAvailable?: boolean;
+  safeRevealedMajorCapture?: boolean;
+  revealedMajorCaptureScore?: number;
+  pawnSoldierDelayedByMajorCapture?: boolean;
+  deadMajorShouldCaptureNow?: boolean;
+  deadMajorHoldSuppressedBySafeCapture?: boolean;
 };
 
 /**

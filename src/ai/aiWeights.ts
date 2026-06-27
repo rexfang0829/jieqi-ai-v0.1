@@ -104,6 +104,10 @@ export type AiWeights = {
   pawnSoldierCenterPreferenceBonus: number;
   pawnSoldierFollowUpAdvisorBonus: number;
   pawnSoldierAntiAdvisorForkBonus: number;
+  revealedMajorCapturePriorityBonus: number;
+  safeRevealedRookCaptureBonus: number;
+  safeRevealedMajorCaptureBonus: number;
+  pawnSoldierDelayWhenMajorCaptureAvailablePenalty: number;
 };
 
 export const defaultAiWeights: AiWeights = {
@@ -218,4 +222,8 @@ export const defaultAiWeights: AiWeights = {
   pawnSoldierCenterPreferenceBonus: 30,
   pawnSoldierFollowUpAdvisorBonus: 35,
   pawnSoldierAntiAdvisorForkBonus: 30,
+  revealedMajorCapturePriorityBonus: 90,
+  safeRevealedRookCaptureBonus: 120,
+  safeRevealedMajorCaptureBonus: 80,
+  pawnSoldierDelayWhenMajorCaptureAvailablePenalty: -80,
 };

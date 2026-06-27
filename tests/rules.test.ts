@@ -2684,9 +2684,10 @@ test('hidden advisor reveal near king has clog risk', () => {
   assertOk(advisorTrace.reason.includes('士') || advisorTrace.reason.includes('卡'));
 });
 
-test('controlled dead rook can be held instead of immediately captured', () => {
-  // Red can capture black's rook, but there's also a non-capturing move
-  // deadMajorThreatHold should be true for the non-capturing move
+test('controlled dead rook: hold is suppressed when safe capture is available', () => {
+  // Red can safely capture black's revealed rook (equal exchange).
+  // With the new logic, deadMajorThreatHold is suppressed for non-capturing moves
+  // because the AI should just capture now, not hold for threat value.
   const board = emptyBoard();
   place(board, 9, 4, piece('red', 'king'));
   place(board, 0, 4, piece('black', 'king'));
@@ -2698,11 +2699,13 @@ test('controlled dead rook can be held instead of immediately captured', () => {
   const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
   const rec = recommendMove(state);
   assertOk(rec.traces);
-  // Find a non-capturing trace that should have controlledDeadMajor=true
+  // Find a non-capturing trace with controlledDeadMajor=true
   const holdTrace = rec.traces.find(t => !t.move.captured && t.controlledDeadMajor === true);
   assertOk(holdTrace);
-  assertEqual(holdTrace.deadMajorThreatHold, true);
-  assertOk((holdTrace.deadMajorPressureScore ?? 0) > 0);
+  // Safe capture is available, so hold bonus is suppressed
+  assertEqual(holdTrace.revealedMajorCaptureAvailable, true);
+  assertEqual(holdTrace.deadMajorHoldSuppressedBySafeCapture, true);
+  assertEqual(holdTrace.deadMajorThreatHold, false);
 });
 
 test('forced hidden advisor defense of doomed rook is penalized', () => {
@@ -2782,4 +2785,110 @@ test('formatAiDebugReport: board snapshot covers all 5 required criteria', () =>
   assertOk(text.includes('紅車'));
   // (5) hidden piece
   assertOk(text.includes('黑暗馬'));
+});
+
+test('safe revealed rook capture beats pawn soldier development', () => {
+  // Red horse at (5,0) can safely capture black revealed rook at (7,1).
+  // Red also has two unrevealed pawns for opening pawnSoldierDevelopment.
+  // AI should prefer the rook capture over pawn development.
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn', 'pawn', true));        // blocks kings-facing col 4
+  place(board, 5, 0, piece('red', 'horse', 'horse', true));      // revealed red horse
+  place(board, 7, 2, piece('red', 'pawn', 'pawn', false));       // hidden pawn (dev candidate)
+  place(board, 7, 6, piece('red', 'pawn', 'pawn', false));       // 2nd hidden pawn
+  place(board, 7, 1, piece('black', 'rook', 'rook', true));      // black revealed rook
+  place(board, 0, 3, piece('black', 'pawn', 'pawn', false));     // filler
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const rec = recommendMove(state);
+  assertOk(rec.move);
+  // AI must choose horse captures rook at (7,1) rather than pawn development
+  assertEqual(rec.move?.to.row, 7);
+  assertEqual(rec.move?.to.col, 1);
+  assertOk(rec.move?.captured !== null);
+});
+
+test('deadMajorHoldSuppressedBySafeCapture: suppressed when safe revealed capture exists', () => {
+  // Red rook at (5,0) controls black revealed rook at (5,4) (dead major).
+  // Red can safely capture black rook (both same value, exchangeNet=0>=0).
+  // A quiet red pawn move should have deadMajorHoldSuppressedBySafeCapture=true,
+  // NOT deadMajorThreatHold, because we should capture NOW.
+  // Red pawn at (7,4) blocks black rook's check on red king along col 4.
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 0, piece('red', 'rook', 'rook', true));        // red rook controls black rook
+  place(board, 5, 4, piece('black', 'rook', 'rook', true));      // black revealed rook (dead)
+  place(board, 7, 4, piece('red', 'pawn', 'pawn', true));        // blocks check on red king (col 4)
+  place(board, 6, 2, piece('red', 'pawn', 'pawn', true));        // red pawn for quiet move
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const rec = recommendMove(state);
+  assertOk(rec.traces);
+  // Find pawn at (6,2) moving forward - a quiet non-capturing move
+  const pawnTrace = rec.traces.find(t => !t.move.captured && t.move.from.row === 6 && t.move.from.col === 2);
+  assertOk(pawnTrace);
+  assertEqual(pawnTrace.controlledDeadMajor, true);
+  assertEqual(pawnTrace.revealedMajorCaptureAvailable, true);
+  assertEqual(pawnTrace.deadMajorHoldSuppressedBySafeCapture, true);
+  assertEqual(pawnTrace.deadMajorThreatHold, false);
+});
+
+test('pawnSoldierDelayedByMajorCapture: pawn dev move penalized when revealed rook capturable', () => {
+  // Same board as test 1: red horse can capture black revealed rook,
+  // so pawn development moves should have pawnSoldierDelayedByMajorCapture=true.
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn', 'pawn', true));        // blocks kings-facing col 4
+  place(board, 5, 0, piece('red', 'horse', 'horse', true));
+  place(board, 7, 2, piece('red', 'pawn', 'pawn', false));
+  place(board, 7, 6, piece('red', 'pawn', 'pawn', false));
+  place(board, 7, 1, piece('black', 'rook', 'rook', true));
+  place(board, 0, 3, piece('black', 'pawn', 'pawn', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const rec = recommendMove(state);
+  assertOk(rec.traces);
+  // Pawn at (7,2) can move to (6,2): find that trace
+  const pawnTrace = rec.traces.find(t =>
+    t.move.from.row === 7 && t.move.from.col === 2 &&
+    t.move.to.row === 6 && t.move.to.col === 2
+  );
+  assertOk(pawnTrace);
+  assertEqual(pawnTrace.pawnSoldierDevelopment, true);
+  assertEqual(pawnTrace.revealedMajorCaptureAvailable, true);
+  assertEqual(pawnTrace.pawnSoldierDelayedByMajorCapture, true);
+});
+
+test('revealedMajorCaptureAvailable is false when no revealed enemy major capturable', () => {
+  // Black rook is hidden (not revealed): posRevealedMajorCaptureAvailable should be false.
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 0, piece('red', 'rook', 'rook', true));
+  place(board, 5, 4, piece('black', 'rook', 'rook', false));     // hidden (not revealed)
+  place(board, 6, 2, piece('red', 'pawn', 'pawn', true));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const rec = recommendMove(state);
+  assertOk(rec.traces);
+  const anyAvailable = rec.traces.some(t => t.revealedMajorCaptureAvailable);
+  assertEqual(anyAvailable, false);
+});
+
+test('formatAiDebugReport: includes revealedMajorCapture trace fields in output', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 0, piece('red', 'rook', 'rook', true));
+  place(board, 5, 4, piece('black', 'rook', 'rook', true));
+  place(board, 6, 2, piece('red', 'pawn', 'pawn', true));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const rec = recommendMove(state);
+  const text = formatAiDebugReport({ modeName: 'test', state, recommendation: rec });
+  assertOk(text.includes('revealedMajorCaptureAvailable'));
+  assertOk(text.includes('safeRevealedMajorCapture'));
+  assertOk(text.includes('revealedMajorCaptureScore'));
+  assertOk(text.includes('pawnSoldierDelayedByMajorCapture'));
+  assertOk(text.includes('deadMajorShouldCaptureNow'));
+  assertOk(text.includes('deadMajorHoldSuppressedBySafeCapture'));
 });

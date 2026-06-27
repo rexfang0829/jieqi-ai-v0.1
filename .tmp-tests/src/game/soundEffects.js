@@ -1,0 +1,175 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.VOICE_SOUND_VOLUME = exports.BOARD_SOUND_VOLUME = void 0;
+exports.playBoardSoundFeedback = playBoardSoundFeedback;
+exports.shouldPlayMoveSound = shouldPlayMoveSound;
+exports.playMoveSound = playMoveSound;
+exports.playCaptureSound = playCaptureSound;
+exports.playCheckSound = playCheckSound;
+/* ── Volume Constants (adjust here to tune all sounds at once) ── */
+exports.BOARD_SOUND_VOLUME = 0.80; // noise burst peak-gain multiplier
+exports.VOICE_SOUND_VOLUME = 0.70; // speech synthesis volume
+// Singleton AudioContext — created once, resumed on reuse (avoids mobile throttling)
+let sharedCtx = null;
+function getSharedContext() {
+    try {
+        if (sharedCtx && sharedCtx.state !== 'closed')
+            return sharedCtx;
+        const win = window;
+        const Ctx = win.AudioContext ?? win.webkitAudioContext;
+        if (!Ctx)
+            return null;
+        sharedCtx = new Ctx();
+        return sharedCtx;
+    }
+    catch {
+        return null;
+    }
+}
+async function getResumedContext() {
+    const ctx = getSharedContext();
+    if (!ctx)
+        return null;
+    if (ctx.state === 'suspended') {
+        try {
+            await ctx.resume();
+        }
+        catch {
+            return null;
+        }
+    }
+    return ctx;
+}
+function noiseBurst(context, frequency, q, peakGain, decayTime) {
+    const bufferSize = Math.ceil(context.sampleRate * (decayTime + 0.02));
+    const buffer = context.createBuffer(1, bufferSize, context.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++)
+        data[i] = Math.random() * 2 - 1;
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    const filter = context.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = frequency;
+    filter.Q.value = q;
+    const gain = context.createGain();
+    const t = context.currentTime;
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(peakGain, t + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + decayTime);
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(context.destination);
+    source.start(t);
+    source.stop(t + decayTime + 0.01);
+}
+/**
+ * Queue a speech utterance WITHOUT cancelling what is already speaking.
+ * Used by playBoardSoundFeedback so multiple voices can stack (capture + check).
+ */
+function queueSpeech(win, text, pitch, rate) {
+    try {
+        if (typeof win.speechSynthesis === 'undefined')
+            return;
+        const UtteranceClass = win['SpeechSynthesisUtterance'];
+        if (!UtteranceClass)
+            return;
+        const utter = new UtteranceClass(text);
+        utter.lang = 'zh-TW';
+        utter.pitch = pitch;
+        utter.rate = rate;
+        utter.volume = exports.VOICE_SOUND_VOLUME;
+        const voices = win.speechSynthesis.getVoices();
+        const zhVoice = voices.find(v => v.lang.startsWith('zh'));
+        if (zhVoice)
+            utter.voice = zhVoice;
+        win.speechSynthesis.speak(utter);
+    }
+    catch {
+        // speechSynthesis unavailable
+    }
+}
+/**
+ * Cancel any ongoing speech and speak immediately.
+ * Used by legacy playCheckSound and endgameSound.
+ */
+function speakNow(win, text, pitch, rate) {
+    try {
+        if (typeof win.speechSynthesis === 'undefined')
+            return;
+        const UtteranceClass = win['SpeechSynthesisUtterance'];
+        if (!UtteranceClass)
+            return;
+        win.speechSynthesis.cancel();
+        const utter = new UtteranceClass(text);
+        utter.lang = 'zh-TW';
+        utter.pitch = pitch;
+        utter.rate = rate;
+        utter.volume = exports.VOICE_SOUND_VOLUME;
+        const voices = win.speechSynthesis.getVoices();
+        const zhVoice = voices.find(v => v.lang.startsWith('zh'));
+        if (zhVoice)
+            utter.voice = zhVoice;
+        win.speechSynthesis.speak(utter);
+    }
+    catch {
+        // speechSynthesis unavailable
+    }
+}
+/**
+ * Unified sound feedback for any board move or playback step change.
+ * Always plays the move noise burst (peakGain = 1.0 * BOARD_SOUND_VOLUME).
+ * Queues "eat" voice if captured, "check" voice if in check.
+ * Endgame sound is handled separately by the caller or endgame useEffect.
+ */
+function playBoardSoundFeedback({ captured, check, win = window }) {
+    // Move noise burst — always, full volume
+    getResumedContext().then(ctx => {
+        if (!ctx)
+            return;
+        try {
+            noiseBurst(ctx, 900, 8, 1.0 * exports.BOARD_SOUND_VOLUME, 0.08);
+        }
+        catch { /* blocked */ }
+    }).catch(() => undefined);
+    // Voice stacking — queue, no cancel
+    if (captured)
+        queueSpeech(win, '吃', 0.9, 0.9);
+    if (check)
+        queueSpeech(win, '將軍', 0.7, 0.85);
+}
+/* ── Legacy exports (preserved for tests and backward compat) ─── */
+function shouldPlayMoveSound(previous, next) {
+    return previous !== next && next.history.length === previous.history.length + 1;
+}
+function playMoveSound() {
+    getResumedContext().then(ctx => {
+        if (!ctx)
+            return;
+        try {
+            noiseBurst(ctx, 900, 8, 1.0 * exports.BOARD_SOUND_VOLUME, 0.08);
+        }
+        catch { /* blocked */ }
+    }).catch(() => undefined);
+}
+function playCaptureSound() {
+    getResumedContext().then(ctx => {
+        if (!ctx)
+            return;
+        try {
+            noiseBurst(ctx, 700, 6, 1.0 * exports.BOARD_SOUND_VOLUME, 0.10);
+        }
+        catch { /* blocked */ }
+    }).catch(() => undefined);
+}
+function playCheckSound(win = window) {
+    getResumedContext().then(ctx => {
+        if (!ctx)
+            return;
+        try {
+            noiseBurst(ctx, 800, 7, 0.45 * exports.BOARD_SOUND_VOLUME, 0.08);
+        }
+        catch { /* blocked */ }
+    }).catch(() => undefined);
+    speakNow(win, '將軍', 0.7, 0.85);
+}

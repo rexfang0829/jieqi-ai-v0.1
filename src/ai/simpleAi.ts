@@ -95,6 +95,12 @@ type MoveEvaluation = {
   pawnSoldierCenterPreference: boolean;
   pawnSoldierFollowUpAdvisor: boolean;
   pawnSoldierAntiAdvisorFork: boolean;
+  revealedMajorCaptureAvailable: boolean;
+  safeRevealedMajorCapture: boolean;
+  revealedMajorCaptureScore: number;
+  pawnSoldierDelayedByMajorCapture: boolean;
+  deadMajorShouldCaptureNow: boolean;
+  deadMajorHoldSuppressedBySafeCapture: boolean;
 };
 
 type AiThreatInfo = {
@@ -1106,7 +1112,7 @@ function allowsOpponentWin(state: GameState, move: Move): boolean {
   );
 }
 
-function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean, weights: AiWeights): MoveEvaluation {
+function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean, weights: AiWeights, posRevealedMajorCaptureAvailable = false): MoveEvaluation {
   const next = applyMove(state, move.from, move.to);
   const nextBoard = next === state ? applyMoveToBoard(state.board, move) : next.board;
   const moved = nextBoard[move.to.row][move.to.col]!;
@@ -1208,6 +1214,21 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
   const capturedControlledRook = controlledDeadMajor &&
     !!move.captured && publicType(move.captured) === 'rook' &&
     controlledDeadMajorPositions.some(p => p.row === move.to.row && p.col === move.to.col);
+
+  // 明大子吃子優先（Req A/B）
+  const revealedMajorCaptureAvailable = posRevealedMajorCaptureAvailable;
+  const safeRevealedMajorCapture = !!move.captured && move.captured.revealed &&
+    (publicType(move.captured) === 'rook' || publicType(move.captured) === 'cannon') &&
+    exchangeNet >= 0;
+  const safeRevealedRookCapture = safeRevealedMajorCapture && publicType(move.captured!) === 'rook';
+  const revealedMajorCaptureScore = safeRevealedMajorCapture
+    ? (safeRevealedRookCapture
+        ? weights.safeRevealedRookCaptureBonus + weights.revealedMajorCapturePriorityBonus
+        : weights.safeRevealedMajorCaptureBonus + weights.revealedMajorCapturePriorityBonus)
+    : 0;
+  // 暗兵卒開發延後（Req C）
+  const pawnSoldierDelayedByMajorCapture = pawnSoldierDevelopment && revealedMajorCaptureAvailable;
+  const pawnSoldierDelayPenalty = pawnSoldierDelayedByMajorCapture ? weights.pawnSoldierDelayWhenMajorCaptureAvailablePenalty : 0;
 
   // 硬保死車扣分：暗士翻子保護己方已被對方控制的車
   const ownMajorsUnderAttack = findOwnMajorsUnderAttack(state.board, state.turn);
@@ -1332,7 +1353,9 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
   const meaningless = !purposeful && !checking;
   const highValueMover = defensiveTargetValue(move.piece, state.board, move.from, weights) >= weights.pieceValues.horse;
   const hangingMove = highValueMover && !protectedMove && !hasClearGain;
-  const deadMajorThreatHold = controlledDeadMajor && !capturedControlledRook && !hangingMove;
+  const deadMajorShouldCaptureNow = controlledDeadMajor && revealedMajorCaptureAvailable;
+  const deadMajorHoldSuppressedBySafeCapture = deadMajorShouldCaptureNow && !safeRevealedMajorCapture;
+  const deadMajorThreatHold = controlledDeadMajor && !capturedControlledRook && !hangingMove && !deadMajorHoldSuppressedBySafeCapture;
   const deadMajorPressureScore = deadMajorThreatHold ? weights.deadMajorThreatHoldBonus : 0;
   const forcedBadDefensePenalty = forcedBadDefense ? weights.defendDoomedMajorPenalty : 0;
   const purposePenalty = meaningless ? weights.meaninglessMovePenalty : 0;
@@ -1361,6 +1384,8 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     opponentRevealSuppressionScore +
     pawnSoldierDevelopmentScore +
     pawnSoldierThreatRevealedMajorScore +
+    revealedMajorCaptureScore +
+    pawnSoldierDelayPenalty +
     pawnSoldierFollowUp.score +
     revealChoicePenalty +
     blockDangerBonus +
@@ -1464,6 +1489,12 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     pawnSoldierCenterPreference: pawnSoldierFollowUp.pawnSoldierCenterPreference,
     pawnSoldierFollowUpAdvisor: pawnSoldierFollowUp.pawnSoldierFollowUpAdvisor,
     pawnSoldierAntiAdvisorFork: pawnSoldierFollowUp.pawnSoldierAntiAdvisorFork,
+    revealedMajorCaptureAvailable,
+    safeRevealedMajorCapture,
+    revealedMajorCaptureScore,
+    pawnSoldierDelayedByMajorCapture,
+    deadMajorShouldCaptureNow,
+    deadMajorHoldSuppressedBySafeCapture,
   };
 }
 
@@ -1492,6 +1523,9 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (evaluation.pawnSoldierAntiAdvisorFork) return '同路暗兵卒對翻，避免士抓蛇雙';
   if (evaluation.pawnSoldierFollowUpAdvisor) return '同路暗兵卒對翻，避免士抓蛇雙';
   if (evaluation.pawnSoldierThreatRevealedMajor) return '暗兵卒壓制對方明子';
+  if (evaluation.safeRevealedMajorCapture) return '安全吃明大子，優先執行';
+  if (evaluation.deadMajorHoldSuppressedBySafeCapture) return '有安全吃明大子機會，不應保留死車威脅';
+  if (evaluation.pawnSoldierDelayedByMajorCapture) return '有明大子可吃，延後開發暗兵卒';
   if (evaluation.firstMovePawnOpening) return '第一手穩健翹邊兵';
   if (evaluation.pawnSoldierDevelopment) return '開局優先開發暗兵卒';
   if (evaluation.revealTacticalSuppressed && !evaluation.effectiveCheck && !evaluation.releasedHorseFromPressure && !evaluation.releasedElephantFromPressure && !evaluation.preventsPawnLineLock) return '暗子翻開效果未知，未按確定將軍加分';
@@ -1546,14 +1580,22 @@ export function recommendMove(
   const avoidedOpponentWin = safeMoves.length > 0 && safeMoves.length < moves.length;
   const currentlyAllowsOpponentWin = opponentHasImmediateWin(state.board, state.turn);
 
+  const posRevealedMajorCaptureAvailable = scoringMoves.some(m => {
+    if (!m.captured || !m.captured.revealed) return false;
+    const capType = publicType(m.captured);
+    if (capType !== 'rook' && capType !== 'cannon') return false;
+    const capValue = weights.pieceValues[capType as 'rook' | 'cannon'];
+    const moverValue = weights.pieceValues[publicType(m.piece) as 'rook' | 'cannon' | 'horse' | 'elephant' | 'advisor' | 'pawn' | 'king'];
+    return capValue >= moverValue;
+  });
   let best = scoringMoves[0];
-  let bestEvaluation = evaluateMove(state, best, currentlyAllowsOpponentWin && !allowsOpponentWin(state, best), weights);
+  let bestEvaluation = evaluateMove(state, best, currentlyAllowsOpponentWin && !allowsOpponentWin(state, best), weights, posRevealedMajorCaptureAvailable);
   const evaluations: { move: Move; evaluation: ReturnType<typeof evaluateMove> }[] = [
     { move: best, evaluation: bestEvaluation },
   ];
 
   for (const move of scoringMoves.slice(1)) {
-    const evaluation = evaluateMove(state, move, currentlyAllowsOpponentWin && !allowsOpponentWin(state, move), weights);
+    const evaluation = evaluateMove(state, move, currentlyAllowsOpponentWin && !allowsOpponentWin(state, move), weights, posRevealedMajorCaptureAvailable);
     evaluations.push({ move, evaluation });
     if (evaluation.score > bestEvaluation.score) {
       best = move;
@@ -1624,6 +1666,12 @@ export function recommendMove(
     pawnSoldierCenterPreference: evaluation.pawnSoldierCenterPreference,
     pawnSoldierFollowUpAdvisor: evaluation.pawnSoldierFollowUpAdvisor,
     pawnSoldierAntiAdvisorFork: evaluation.pawnSoldierAntiAdvisorFork,
+    revealedMajorCaptureAvailable: evaluation.revealedMajorCaptureAvailable,
+    safeRevealedMajorCapture: evaluation.safeRevealedMajorCapture,
+    revealedMajorCaptureScore: evaluation.revealedMajorCaptureScore,
+    pawnSoldierDelayedByMajorCapture: evaluation.pawnSoldierDelayedByMajorCapture,
+    deadMajorShouldCaptureNow: evaluation.deadMajorShouldCaptureNow,
+    deadMajorHoldSuppressedBySafeCapture: evaluation.deadMajorHoldSuppressedBySafeCapture,
   }));
 
   return {

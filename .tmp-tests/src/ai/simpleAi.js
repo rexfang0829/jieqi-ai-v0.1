@@ -1,0 +1,1503 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.recommendMove = recommendMove;
+exports.recommendMoveOracle = recommendMoveOracle;
+exports.recommendMoveFair = recommendMoveFair;
+const aiVisibility_1 = require("./aiVisibility");
+const checkRules_1 = require("../game/checkRules");
+const gameEngine_1 = require("../game/gameEngine");
+const initialBoard_1 = require("../game/initialBoard");
+const aiWeights_1 = require("./aiWeights");
+const openingPawnStarts = (0, initialBoard_1.createInitialBoard)().flatMap((row, rowIndex) => row.flatMap((piece, colIndex) => piece?.originalType === 'pawn'
+    ? [{ side: piece.side, row: rowIndex, col: colIndex }]
+    : []));
+function detectRepetitiveCheck(state, move, isCheck) {
+    if (!isCheck)
+        return false;
+    const h = state.history;
+    if (h.length < 4)
+        return false;
+    if (publicType(move.piece) !== 'rook')
+        return false;
+    const prev1 = h[h.length - 2]; // same side 1 turn ago
+    const prev2 = h[h.length - 4]; // same side 2 turns ago
+    if (!prev1 || !prev2)
+        return false;
+    if (prev1.piece.side !== state.turn || prev2.piece.side !== state.turn)
+        return false;
+    if (publicType(prev1.piece) !== 'rook' || publicType(prev2.piece) !== 'rook')
+        return false;
+    return true; // 3 consecutive rook moves from same side → repetitive check
+}
+function publicType(piece) {
+    return piece.revealed ? piece.realType : piece.originalType;
+}
+function cloneBoard(board) {
+    return board.map(row => row.map(piece => piece ? { ...piece } : null));
+}
+function applyMoveToBoard(board, move) {
+    const next = cloneBoard(board);
+    const moving = next[move.from.row][move.from.col];
+    if (!moving)
+        return next;
+    next[move.to.row][move.to.col] = { ...moving, revealed: true };
+    next[move.from.row][move.from.col] = null;
+    return next;
+}
+function samePosition(a, b) {
+    return a.row === b.row && a.col === b.col;
+}
+function includesPosition(positions, target) {
+    return positions.some(position => samePosition(position, target));
+}
+function pieceValue(piece, weights) {
+    return weights.pieceValues[publicType(piece)];
+}
+function movedPieceValue(piece, weights) {
+    return weights.pieceValues[piece.realType];
+}
+function countRevealedSameType(board, side, type) {
+    return board.reduce((count, row) => count + row.filter(piece => piece?.side === side &&
+        piece.revealed &&
+        piece.realType === type).length, 0);
+}
+function hiddenPieceValue(piece, board, weights) {
+    if (piece.revealed)
+        return movedPieceValue(piece, weights);
+    const revealedCount = Math.min(2, countRevealedSameType(board, piece.side, piece.realType));
+    if (piece.realType === 'rook') {
+        if (revealedCount === 0)
+            return weights.hiddenRookValueNoRevealed;
+        if (revealedCount === 1)
+            return weights.hiddenRookValueOneRevealed;
+        return weights.hiddenRookValueTwoRevealed;
+    }
+    if (piece.realType === 'cannon') {
+        if (revealedCount === 0)
+            return weights.hiddenCannonValueNoRevealed;
+        if (revealedCount === 1)
+            return weights.hiddenCannonValueOneRevealed;
+        return weights.hiddenCannonValueTwoRevealed;
+    }
+    if (piece.realType === 'horse') {
+        if (revealedCount === 0)
+            return weights.hiddenHorseValueNoRevealed;
+        if (revealedCount === 1)
+            return weights.hiddenHorseValueOneRevealed;
+        return weights.hiddenHorseValueTwoRevealed;
+    }
+    return Math.round(movedPieceValue(piece, weights) * 0.65);
+}
+function defensiveTargetValue(piece, board, position, weights) {
+    return piece.revealed ? targetValue(piece, board, position, weights) : hiddenPieceValue(piece, board, weights);
+}
+function opponent(side) {
+    return side === 'red' ? 'black' : 'red';
+}
+function winningStatus(side) {
+    return side === 'red' ? 'red_win' : 'black_win';
+}
+function isConnectedAdvisor(piece, board, position, weights) {
+    if (publicType(piece) !== 'advisor')
+        return false;
+    for (let row = 0; row < board.length; row++) {
+        for (let col = 0; col < board[row].length; col++) {
+            if (row === position.row && col === position.col)
+                continue;
+            const other = board[row][col];
+            if (!other || other.side !== piece.side || publicType(other) !== 'advisor')
+                continue;
+            const distance = Math.abs(row - position.row) + Math.abs(col - position.col);
+            if (distance <= weights.connectedAdvisorDistance)
+                return true;
+        }
+    }
+    return false;
+}
+function isCrossedPawn(piece, position) {
+    if (publicType(piece) !== 'pawn')
+        return false;
+    return piece.side === 'red' ? position.row <= 4 : position.row >= 5;
+}
+function isNearEnemyPalace(piece, position) {
+    if (piece.side === 'red')
+        return position.row <= 2 && position.col >= 3 && position.col <= 5;
+    return position.row >= 7 && position.col >= 3 && position.col <= 5;
+}
+function targetValue(piece, board, position, weights) {
+    const type = publicType(piece);
+    if (type === 'king')
+        return weights.pieceValues.king;
+    if (type === 'rook')
+        return weights.pieceValues.rook;
+    if (type === 'cannon')
+        return weights.targetCannonValue;
+    if (type === 'horse')
+        return weights.pieceValues.horse;
+    if (type === 'advisor')
+        return isConnectedAdvisor(piece, board, position, weights) ? weights.connectedAdvisorValue : weights.advisorTargetValue;
+    if (type === 'elephant')
+        return weights.elephantTargetValue;
+    if (type === 'pawn') {
+        if (!isCrossedPawn(piece, position))
+            return weights.uncrossedPawnTargetValue;
+        return isNearEnemyPalace(piece, position) ? weights.crossedPawnNearPalaceValue : weights.crossedPawnTargetValue;
+    }
+    return pieceValue(piece, weights);
+}
+function captureScore(board, move, weights) {
+    return move.captured ? targetValue(move.captured, board, move.to, weights) : 0;
+}
+function revealScore(move, weights) {
+    return move.flipped ? weights.revealBonus : 0;
+}
+function positionScore(move) {
+    let score = 4 - Math.abs(4 - move.to.col);
+    if (move.to.row >= 3 && move.to.row <= 6)
+        score += 3;
+    return score;
+}
+function isOpeningPawnStart(side, position) {
+    return openingPawnStarts.some(start => start.side === side &&
+        start.row === position.row &&
+        start.col === position.col);
+}
+function isPriorityOpeningPawnFile(col) {
+    return col === 0 || col === 2 || col === 6 || col === 8;
+}
+function isUnrevealedPawnSoldier(piece) {
+    return !!piece && !piece.revealed && piece.originalType === 'pawn';
+}
+function hasUnrevealedPawnSoldiersForSide(board, side) {
+    return board.some(row => row.some(piece => piece?.side === side && isUnrevealedPawnSoldier(piece)));
+}
+function countUnrevealedPawnSoldiersForSide(board, side) {
+    return board.reduce((total, row) => total + row.filter(piece => piece?.side === side && isUnrevealedPawnSoldier(piece)).length, 0);
+}
+function isPawnSoldierDevelopmentMove(move) {
+    return isUnrevealedPawnSoldier(move.piece);
+}
+function isRevealedMajorType(type) {
+    return type === 'rook' || type === 'cannon' || type === 'horse';
+}
+function moveFromPositionThreatensRevealedMajor(board, side, from) {
+    return (0, checkRules_1.getAllLegalMoves)(board, side).some(move => samePosition(move.from, from) &&
+        !!move.captured &&
+        move.captured.revealed &&
+        isRevealedMajorType(move.captured.realType));
+}
+function isPawnOriginRevealedPiece(piece, type) {
+    return !!piece && piece.revealed && piece.originalType === 'pawn' && piece.realType === type;
+}
+function isHorseFootBlockSquare(horse, block) {
+    return Math.abs(horse.row - block.row) + Math.abs(horse.col - block.col) === 1;
+}
+function pawnSoldierFollowUpEvaluation(board, side, move, weights) {
+    const empty = {
+        pawnSoldierFollowUpHorse: false,
+        pawnSoldierHorseFootBlock: false,
+        pawnSoldierFollowUpElephant: false,
+        pawnSoldierCenterPreference: false,
+        pawnSoldierFollowUpAdvisor: false,
+        pawnSoldierAntiAdvisorFork: false,
+        score: 0,
+    };
+    if (!isPawnSoldierDevelopmentMove(move))
+        return empty;
+    const enemy = opponent(side);
+    const result = { ...empty };
+    for (let row = 0; row < board.length; row++) {
+        for (let col = 0; col < board[row].length; col++) {
+            const piece = board[row][col];
+            if (piece?.side !== enemy || piece.originalType !== 'pawn' || !piece.revealed)
+                continue;
+            const sameFile = move.from.col === col || move.to.col === col;
+            if (piece.realType === 'horse' && sameFile) {
+                result.pawnSoldierFollowUpHorse = true;
+                result.score += weights.pawnSoldierFollowUpHorseBonus;
+                if (isHorseFootBlockSquare({ row, col }, move.to)) {
+                    result.pawnSoldierHorseFootBlock = true;
+                    result.score += weights.pawnSoldierHorseFootBlockBonus;
+                }
+            }
+            if (piece.realType === 'elephant') {
+                const centerFile = move.from.col === 4 || move.to.col === 4;
+                const nearbyThirdOrFifth = col === 2 || col === 4 || col === 6;
+                if (centerFile || nearbyThirdOrFifth && Math.abs(move.to.col - col) <= 2) {
+                    result.pawnSoldierFollowUpElephant = true;
+                    result.score += weights.pawnSoldierFollowUpElephantBonus;
+                    if (centerFile) {
+                        result.pawnSoldierCenterPreference = true;
+                        result.score += weights.pawnSoldierCenterPreferenceBonus;
+                    }
+                }
+            }
+            if (piece.realType === 'advisor' && sameFile) {
+                result.pawnSoldierFollowUpAdvisor = true;
+                result.pawnSoldierAntiAdvisorFork = true;
+                result.score += weights.pawnSoldierFollowUpAdvisorBonus + weights.pawnSoldierAntiAdvisorForkBonus;
+            }
+        }
+    }
+    return result;
+}
+function openingPawnRevealBonus(state, move, weights) {
+    if (state.history.length > 8)
+        return 0;
+    if (move.piece.side !== state.turn)
+        return 0;
+    if (move.piece.originalType !== 'pawn')
+        return 0;
+    if (move.piece.revealed)
+        return 0;
+    if (!isOpeningPawnStart(state.turn, move.from))
+        return 0;
+    if (!isPriorityOpeningPawnFile(move.from.col))
+        return 0;
+    if (enemyOpeningEdgeCannonCols(state.board, state.turn).includes(move.from.col))
+        return 0;
+    if (enemyOpeningEdgeRookCols(state.board, state.turn).includes(move.from.col))
+        return 0;
+    let bonus = weights.openingPawnBonus;
+    if (move.from.col === 0 || move.from.col === 8)
+        bonus += weights.edgePawnBonus;
+    else if (move.from.col === 2 || move.from.col === 6)
+        bonus += weights.thirdSeventhPawnBonus;
+    if (state.history.length === 0)
+        bonus += weights.firstMovePawnOpeningBonus;
+    return bonus;
+}
+function hasFirstMovePriorityPawnOption(state, weights) {
+    if (state.history.length !== 0)
+        return false;
+    return (0, checkRules_1.getAllLegalMoves)(state.board, state.turn).some(move => openingPawnRevealBonus(state, move, weights) > 0);
+}
+function bestRecaptureValue(board, side, target, weights) {
+    const replies = (0, checkRules_1.getAllLegalMoves)(board, side);
+    let best = 0;
+    for (const reply of replies) {
+        if (!reply.captured || !samePosition(reply.to, target))
+            continue;
+        best = Math.max(best, targetValue(reply.captured, board, reply.to, weights));
+    }
+    return best;
+}
+function maxCaptureValue(board, side, weights) {
+    let best = 0;
+    for (const move of (0, checkRules_1.getAllLegalMoves)(board, side)) {
+        if (move.captured)
+            best = Math.max(best, targetValue(move.captured, board, move.to, weights));
+    }
+    return best;
+}
+function bestCaptureThreat(board, side, movedTo, weights) {
+    let best = null;
+    for (const move of (0, checkRules_1.getAllLegalMoves)(board, side)) {
+        if (!move.captured)
+            continue;
+        const value = targetValue(move.captured, board, move.to, weights);
+        if (!best || value > best.value) {
+            best = {
+                value,
+                from: move.from,
+                to: move.to,
+                targetType: publicType(move.captured),
+                targetRevealed: move.captured.revealed,
+                byMovedPiece: !!movedTo && samePosition(move.from, movedTo),
+            };
+        }
+    }
+    return best;
+}
+function isSquareProtectedBySide(board, side, position) {
+    const probe = cloneBoard(board);
+    probe[position.row][position.col] = {
+        id: 'protection-probe',
+        side: opponent(side),
+        originalType: 'pawn',
+        realType: 'pawn',
+        revealed: true,
+    };
+    return (0, checkRules_1.getAllLegalMoves)(probe, side).some(move => samePosition(move.to, position));
+}
+function isSquareAttacked(board, bySide, target) {
+    return (0, checkRules_1.getAllLegalMoves)(board, bySide).some(move => move.captured && samePosition(move.to, target));
+}
+function isPositionAttackedByRevealedEnemy(board, side, target) {
+    const enemy = opponent(side);
+    return (0, checkRules_1.getAllLegalMoves)(board, enemy).some(move => move.piece.revealed &&
+        move.captured &&
+        move.captured.side === side &&
+        samePosition(move.to, target));
+}
+function isHiddenPieceAttackedByRevealedEnemy(board, side, target) {
+    const piece = board[target.row][target.col];
+    return !!piece && !piece.revealed && isPositionAttackedByRevealedEnemy(board, side, target);
+}
+function analyzeLooseHiddenPieces(board, side) {
+    const loosePositions = [];
+    const protectedUnderAttackPositions = [];
+    for (let row = 0; row < board.length; row++) {
+        for (let col = 0; col < board[row].length; col++) {
+            const piece = board[row][col];
+            if (!piece || piece.side !== side || piece.revealed)
+                continue;
+            const position = { row, col };
+            if (!isHiddenPieceAttackedByRevealedEnemy(board, side, position))
+                continue;
+            if (isSquareProtectedBySide(board, side, position)) {
+                protectedUnderAttackPositions.push(position);
+            }
+            else {
+                loosePositions.push(position);
+            }
+        }
+    }
+    return { loosePositions, protectedUnderAttackPositions };
+}
+function isPrematureOpeningCannonStrike(state, move) {
+    if (state.history.length > 8)
+        return false;
+    if (move.piece.revealed)
+        return false;
+    if (move.piece.originalType !== 'cannon')
+        return false;
+    if (!move.captured || move.captured.revealed)
+        return false;
+    if (move.captured.originalType !== 'horse' && move.captured.originalType !== 'rook')
+        return false;
+    const distance = Math.abs(move.from.row - move.to.row) + Math.abs(move.from.col - move.to.col);
+    return distance >= 4;
+}
+function opponentHasImmediateWin(board, side) {
+    const enemy = opponent(side);
+    const fakeState = { board, turn: enemy, history: [], status: 'playing' };
+    return (0, checkRules_1.getAllLegalMoves)(board, enemy).some(move => (0, gameEngine_1.applyMove)(fakeState, move.from, move.to).status === winningStatus(enemy));
+}
+function opponentKingPosition(board, side) {
+    const enemy = opponent(side);
+    for (let row = 0; row < board.length; row++) {
+        for (let col = 0; col < board[row].length; col++) {
+            const piece = board[row][col];
+            if (piece?.side === enemy && piece.realType === 'king')
+                return { row, col };
+        }
+    }
+    return null;
+}
+function kingZonePressureBonus(board, side, movedTo, weights) {
+    const king = opponentKingPosition(board, side);
+    if (!king)
+        return 0;
+    const distance = Math.abs(king.row - movedTo.row) + Math.abs(king.col - movedTo.col);
+    if (distance <= 2)
+        return weights.kingZoneNearBonus;
+    if (distance <= 4 && (king.row === movedTo.row || king.col === movedTo.col))
+        return weights.kingZoneLineBonus;
+    return 0;
+}
+function isNearEnemyCamp(side, position) {
+    return side === 'red' ? position.row <= 3 : position.row >= 6;
+}
+function keySquareBonus(board, side, position, weights) {
+    let score = 0;
+    if (position.col === 4)
+        score += weights.keySquareCenterFileBonus;
+    else if (position.col === 3 || position.col === 5)
+        score += weights.keySquareNearCenterFileBonus;
+    if (position.row === 4 || position.row === 5)
+        score += weights.keySquareRiverBonus;
+    if (isNearEnemyPalace({ id: 'key-square', side, originalType: 'pawn', realType: 'pawn', revealed: true }, position))
+        score += weights.keySquareEnemyPalaceBonus;
+    if ((position.col === 1 || position.col === 7) && isNearEnemyCamp(side, position))
+        score += weights.keySquareSecondEighthFileBonus;
+    const enemy = opponent(side);
+    const adjacentHidden = [
+        { row: position.row - 1, col: position.col },
+        { row: position.row + 1, col: position.col },
+        { row: position.row, col: position.col - 1 },
+        { row: position.row, col: position.col + 1 },
+    ].some(pos => {
+        const piece = board[pos.row]?.[pos.col];
+        return piece?.side === enemy && !piece.revealed;
+    });
+    if (adjacentHidden)
+        score += weights.keySquareAdjacentHiddenBonus;
+    return Math.min(score, weights.keySquareMaxBonus);
+}
+function leaveKeySquarePenalty(board, side, from, to, hasClearGain, weights) {
+    if (hasClearGain)
+        return 0;
+    const fromScore = keySquareBonus(board, side, from, weights);
+    const toScore = keySquareBonus(board, side, to, weights);
+    if (fromScore < weights.leaveKeySquareThreshold || fromScore - toScore < weights.leaveKeySquareDropThreshold)
+        return 0;
+    return fromScore >= weights.leaveKeySquareStrongThreshold ? weights.leaveKeySquareStrongPenalty : weights.leaveKeySquareWeakPenalty;
+}
+function hiddenPiecePressureBonus(board, side, weights) {
+    const controlled = new Set();
+    for (const move of (0, checkRules_1.getAllLegalMoves)(board, side)) {
+        const target = board[move.to.row][move.to.col];
+        if (target?.side === opponent(side) && !target.revealed) {
+            controlled.add(`${move.to.row},${move.to.col}`);
+        }
+    }
+    let score = 0;
+    for (const key of controlled) {
+        const [row, col] = key.split(',').map(Number);
+        score += weights.hiddenPiecePressureBonus;
+        if (col === 4 || row === 4 || row === 5 || isNearEnemyCamp(side, { row, col }))
+            score += weights.importantHiddenPiecePressureBonus;
+    }
+    return Math.min(score, weights.hiddenPiecePressureMaxBonus);
+}
+function isOpeningPhase(state, weights) {
+    return state.history.length <= weights.openingPhaseMoveLimit;
+}
+function forwardDirection(side) {
+    return side === 'red' ? -1 : 1;
+}
+function ownPawnLineRow(side) {
+    return side === 'red' ? 6 : 3;
+}
+function isInitialBackRankPiece(piece, position, type) {
+    if (piece.originalType !== type)
+        return false;
+    const backRank = piece.side === 'red' ? 9 : 0;
+    if (position.row !== backRank)
+        return false;
+    if (type === 'horse')
+        return position.col === 1 || position.col === 7;
+    if (type === 'elephant')
+        return position.col === 2 || position.col === 6;
+    if (type === 'rook')
+        return position.col === 0 || position.col === 8;
+    return false;
+}
+function isHiddenMajor(piece) {
+    return !!piece && !piece.revealed && (piece.realType === 'rook' || piece.realType === 'cannon' || piece.realType === 'horse');
+}
+function isHiddenCannon(piece) {
+    return !!piece && !piece.revealed && piece.realType === 'cannon';
+}
+function isReleasedHorseMove(move) {
+    return publicType(move.piece) === 'horse' && isInitialBackRankPiece(move.piece, move.from, 'horse');
+}
+function isReleasedElephantMove(move) {
+    return publicType(move.piece) === 'elephant' && isInitialBackRankPiece(move.piece, move.from, 'elephant');
+}
+function isGoodHorseGuardSquare(side, position) {
+    const advanceRow = side === 'red' ? 7 : 2;
+    return position.row === advanceRow && (position.col === 2 || position.col === 6);
+}
+function isBadHorseReleaseSquare(side, position) {
+    const advanceRow = side === 'red' ? 7 : 2;
+    return position.row === advanceRow && (position.col === 0 || position.col === 8);
+}
+function hasOpeningEdgeCannonPressure(board, side) {
+    return enemyOpeningEdgeCannonCols(board, side).length > 0;
+}
+function enemyOpeningEdgeCannonCols(board, side) {
+    const enemy = opponent(side);
+    const cols = new Set();
+    for (const row of board) {
+        for (let col = 0; col < row.length; col++) {
+            const piece = row[col];
+            if (piece?.side === enemy &&
+                piece.revealed &&
+                piece.originalType === 'pawn' &&
+                piece.realType === 'cannon' &&
+                (col === 0 || col === 8)) {
+                cols.add(col);
+            }
+        }
+    }
+    return [...cols];
+}
+function hasOpeningEdgeRookPawnLineLockRisk(board, side) {
+    if (enemyOpeningEdgeRookCols(board, side).length > 0)
+        return true;
+    const enemy = opponent(side);
+    return board.some((row, rowIndex) => row.some((piece, col) => piece?.side === enemy &&
+        piece.revealed &&
+        piece.originalType === 'pawn' &&
+        piece.realType === 'rook' &&
+        (col === 0 || col === 8 || Math.abs(rowIndex - ownPawnLineRow(side)) <= 2)));
+}
+function enemyOpeningEdgeRookCols(board, side) {
+    const enemy = opponent(side);
+    const cols = new Set();
+    for (const row of board) {
+        for (let col = 0; col < row.length; col++) {
+            const piece = row[col];
+            if (piece?.side === enemy &&
+                piece.revealed &&
+                piece.originalType === 'pawn' &&
+                piece.realType === 'rook' &&
+                (col === 0 || col === 8)) {
+                cols.add(col);
+            }
+        }
+    }
+    return [...cols];
+}
+function isHorseReleaseForCannonPressure(side, to) {
+    return isBadHorseReleaseSquare(side, to);
+}
+function isHorseReleaseForPawnLineGuard(side, to) {
+    return isGoodHorseGuardSquare(side, to);
+}
+function isElephantReleaseForCannonPressure(side, to) {
+    const advanceRow = side === 'red' ? 7 : 2;
+    return to.row === advanceRow && (to.col === 0 || to.col === 8);
+}
+function guardsPawnLineKeyPoint(side, position) {
+    const guardRow = ownPawnLineRow(side) + forwardDirection(side);
+    return position.row === guardRow && (position.col === 2 || position.col === 4 || position.col === 6);
+}
+function hasHiddenRookGuardPoint(board, side, position) {
+    const guardRow = ownPawnLineRow(side) + forwardDirection(side);
+    if (position.row !== guardRow)
+        return false;
+    return board.some(row => row.some(piece => piece?.side === side && !piece.revealed && piece.realType === 'rook'));
+}
+function enemyRookOnPawnLineRisk(board, side) {
+    const enemy = opponent(side);
+    const lineRow = ownPawnLineRow(side);
+    let risk = 0;
+    for (let col = 0; col < 9; col++) {
+        const piece = board[lineRow][col];
+        if (piece?.side === enemy && publicType(piece) === 'rook')
+            risk += 1;
+    }
+    for (const edgeCol of [0, 8]) {
+        for (let row = 0; row < board.length; row++) {
+            const piece = board[row][edgeCol];
+            if (piece?.side === enemy && publicType(piece) === 'rook' && Math.abs(row - lineRow) <= 2)
+                risk += 1;
+        }
+    }
+    return risk;
+}
+function cannonLineThreatAgainstSide(board, side, weights) {
+    const dirs = [
+        { row: 1, col: 0 },
+        { row: -1, col: 0 },
+        { row: 0, col: 1 },
+        { row: 0, col: -1 },
+    ];
+    let threat = 0;
+    for (let row = 0; row < board.length; row++) {
+        for (let col = 0; col < board[row].length; col++) {
+            const cannon = board[row][col];
+            if (!cannon || cannon.side === side || publicType(cannon) !== 'cannon')
+                continue;
+            for (const dir of dirs) {
+                let screens = 0;
+                for (let r = row + dir.row, c = col + dir.col; r >= 0 && r < 10 && c >= 0 && c < 9; r += dir.row, c += dir.col) {
+                    const target = board[r][c];
+                    if (!target)
+                        continue;
+                    if (screens === 0) {
+                        screens += 1;
+                        continue;
+                    }
+                    if (target.side === side && isHiddenMajor(target)) {
+                        threat += Math.round(defensiveTargetValue(target, board, { row: r, col: c }, weights) * 0.08);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    return threat;
+}
+function structurePatternEvaluation(state, move, nextBoard, hasClearGain, weights) {
+    if (!isOpeningPhase(state, weights)) {
+        return {
+            score: 0,
+            patterns: [],
+            releasedHorseFromPressure: false,
+            releasedElephantFromPressure: false,
+            weakScreen: false,
+            preservesHiddenCannon: false,
+            pawnLineDefense: false,
+            preventsPawnLineLock: false,
+            badHorseRelease: false,
+        };
+    }
+    if (!move.piece.revealed && move.piece.originalType === 'pawn' && isOpeningPawnStart(state.turn, move.from)) {
+        return {
+            score: 0,
+            patterns: [],
+            releasedHorseFromPressure: false,
+            releasedElephantFromPressure: false,
+            weakScreen: false,
+            preservesHiddenCannon: false,
+            pawnLineDefense: false,
+            preventsPawnLineLock: false,
+            badHorseRelease: false,
+        };
+    }
+    const beforeCannonThreat = cannonLineThreatAgainstSide(state.board, state.turn, weights);
+    const afterCannonThreat = cannonLineThreatAgainstSide(nextBoard, state.turn, weights);
+    const beforePawnLineRisk = enemyRookOnPawnLineRisk(state.board, state.turn);
+    const afterPawnLineRisk = enemyRookOnPawnLineRisk(nextBoard, state.turn);
+    const releasedHorse = isReleasedHorseMove(move);
+    const releasedElephant = isReleasedElephantMove(move);
+    const pawnLineDefense = guardsPawnLineKeyPoint(state.turn, move.to);
+    const edgeCannonPressure = hasOpeningEdgeCannonPressure(state.board, state.turn) && beforeCannonThreat > 0;
+    const edgeRookPawnLineLockRisk = hasOpeningEdgeRookPawnLineLockRisk(state.board, state.turn) || beforePawnLineRisk > 0;
+    const horseCannonRelease = releasedHorse && edgeCannonPressure && isHorseReleaseForCannonPressure(state.turn, move.to);
+    const elephantCannonRelease = releasedElephant && edgeCannonPressure && isElephantReleaseForCannonPressure(state.turn, move.to);
+    const horsePawnLineGuard = releasedHorse && edgeRookPawnLineLockRisk && isHorseReleaseForPawnLineGuard(state.turn, move.to);
+    const threatMismatch = releasedHorse &&
+        (edgeCannonPressure && isHorseReleaseForPawnLineGuard(state.turn, move.to) ||
+            edgeRookPawnLineLockRisk && !edgeCannonPressure && isHorseReleaseForCannonPressure(state.turn, move.to));
+    const preventsPawnLineLock = horsePawnLineGuard && afterPawnLineRisk <= beforePawnLineRisk;
+    const badHorseRelease = threatMismatch || releasedHorse && isBadHorseReleaseSquare(state.turn, move.to) && !pawnLineDefense && !edgeCannonPressure;
+    const preservesHiddenCannon = !isHiddenCannon(move.piece) && state.board.some(row => row.some(piece => piece?.side === state.turn && isHiddenCannon(piece)));
+    const weakScreen = isHiddenCannon(move.piece) && beforeCannonThreat > 0 && afterCannonThreat >= beforeCannonThreat && !hasClearGain;
+    const patterns = new Set();
+    let score = 0;
+    if (beforeCannonThreat > 0)
+        patterns.add('opening_cannon_hits_hidden_rook');
+    if (edgeRookPawnLineLockRisk)
+        patterns.add('opening_edge_rook_pawn_line_lock');
+    if (releasedHorse) {
+        patterns.add('opening_hidden_pawn_blocks_horse_foot');
+        score += weights.openingHiddenPawnAssumptionBonus + weights.pawnFootBlockThreatBonus;
+        if (horseCannonRelease)
+            score += weights.structureReleaseHorseBonus;
+        if (!edgeCannonPressure && beforeCannonThreat > 0)
+            score += weights.structureReleaseHorseBonus;
+        if (horsePawnLineGuard || !edgeCannonPressure && isGoodHorseGuardSquare(state.turn, move.to)) {
+            patterns.add('horse_release_to_guard_pawn_line');
+            score += weights.pawnLineDefenseBonus;
+        }
+        if (hasHiddenRookGuardPoint(state.board, state.turn, move.to)) {
+            patterns.add('hidden_rook_guard_point');
+            score += weights.hiddenRookGuardPointBonus + weights.pawnNearHiddenRookThreatBonus;
+        }
+    }
+    if (releasedElephant) {
+        patterns.add('opening_hidden_pawn_blocks_elephant_eye');
+        score += weights.openingHiddenPawnAssumptionBonus + weights.pawnElephantEyeBlockThreatBonus;
+        if (elephantCannonRelease || !edgeCannonPressure && beforeCannonThreat > 0) {
+            patterns.add('elephant_release_from_cannon_pressure');
+            score += weights.structureReleaseElephantBonus;
+        }
+    }
+    if (pawnLineDefense && (!edgeCannonPressure || horsePawnLineGuard))
+        score += weights.pawnLineDefenseBonus;
+    if (preventsPawnLineLock)
+        score += weights.preventEnemyRookPawnLineLockBonus + weights.pawnLineLockThreatBonus;
+    if (afterPawnLineRisk > beforePawnLineRisk)
+        score += weights.enemyRookOnPawnLinePenalty;
+    if (badHorseRelease)
+        score += weights.badHorseReleaseSquarePenalty;
+    if (beforeCannonThreat > 0)
+        score += Math.max(weights.cannonLineThreatPenalty, -beforeCannonThreat);
+    if (afterCannonThreat < beforeCannonThreat)
+        score += Math.min(beforeCannonThreat - afterCannonThreat, weights.structureReleaseHorseBonus);
+    if (weakScreen) {
+        patterns.add('preserve_hidden_cannon_threat');
+        score += weights.weakScreenAllowsPawnBlockPenalty;
+    }
+    if (preservesHiddenCannon && !hasClearGain) {
+        patterns.add('preserve_hidden_cannon_threat');
+        score += weights.preserveHiddenCannonBonus;
+    }
+    if (state.board.some(row => row.some(piece => piece?.side === opponent(state.turn) && !piece.revealed))) {
+        patterns.add('opening_hidden_pawn_as_cannon_screen');
+        if (releasedHorse || releasedElephant || pawnLineDefense)
+            score += weights.pawnCannonScreenThreatBonus;
+    }
+    return {
+        score,
+        patterns: [...patterns],
+        releasedHorseFromPressure: horseCannonRelease || releasedHorse && !edgeCannonPressure && beforeCannonThreat > 0,
+        releasedElephantFromPressure: elephantCannonRelease || releasedElephant && !edgeCannonPressure && beforeCannonThreat > 0,
+        weakScreen,
+        preservesHiddenCannon: preservesHiddenCannon && !hasClearGain,
+        pawnLineDefense,
+        preventsPawnLineLock,
+        badHorseRelease,
+    };
+}
+/**
+ * 公平資訊：估計對方回擊棋子的威脅值。
+ * 只使用 piece.originalType（公開資訊），不讀 unrevealed piece.realType。
+ * revealed=true 時可讀 realType，因為那是已公開資訊。
+ */
+function publicHiddenReplyThreatValue(piece, weights) {
+    if (piece.revealed)
+        return weights.pieceValues[piece.realType];
+    const type = piece.originalType;
+    if (type === 'rook')
+        return weights.pieceValues.rook;
+    if (type === 'cannon')
+        return weights.targetCannonValue;
+    if (type === 'horse')
+        return weights.pieceValues.horse;
+    if (type === 'advisor')
+        return weights.advisorTargetValue;
+    if (type === 'elephant')
+        return weights.elephantTargetValue;
+    if (type === 'pawn')
+        return weights.uncrossedPawnTargetValue;
+    return weights.pieceValues[type];
+}
+/**
+ * 後手翻棋選擇權風險評估。
+ * 觸發條件：我方高價子吃對方低外觀暗子，且落點被對方高價暗子看住。
+ * 對方可依我方翻出結果決定是否交換 → 我方承擔翻子風險。
+ * 不使用 unrevealed piece.realType：對方看住暗子以 originalType 估值（公平資訊）。
+ */
+function computeRevealChoiceRisk(board, side, move, weights) {
+    // 只在有吃子且吃的是暗子時觸發
+    if (!move.captured || move.captured.revealed)
+        return { isRisk: false, penalty: 0 };
+    // 被吃的暗子必須是低外觀（pawn / advisor / elephant）
+    const capturedOrig = move.captured.originalType;
+    const isLowAppearance = capturedOrig === 'pawn' || capturedOrig === 'advisor' || capturedOrig === 'elephant';
+    if (!isLowAppearance)
+        return { isRisk: false, penalty: 0 };
+    // 我方走子必須是高價子（使用 publicType = 公開資訊）
+    const moverPubType = publicType(move.piece);
+    const isHighValueMover = moverPubType === 'rook' || moverPubType === 'cannon' || moverPubType === 'horse';
+    if (!isHighValueMover)
+        return { isRisk: false, penalty: 0 };
+    // 吃完後盤面，檢查落點是否被對方暗子看住
+    const nextBoard = applyMoveToBoard(board, move);
+    const opp = opponent(side);
+    const oppMoves = (0, checkRules_1.getAllLegalMoves)(nextBoard, opp);
+    let maxHiddenThreat = 0;
+    for (const reply of oppMoves) {
+        if (!samePosition(reply.to, move.to))
+            continue;
+        // 公平資訊估值：只用 originalType，不讀 unrevealed realType
+        const replyEst = publicHiddenReplyThreatValue(reply.piece, weights);
+        maxHiddenThreat = Math.max(maxHiddenThreat, replyEst);
+    }
+    // 只有對方有高價值棋子看住落點才觸發
+    if (maxHiddenThreat < weights.pieceValues.horse)
+        return { isRisk: false, penalty: 0 };
+    // 扣分：車吃重扣，炮/馬吃中扣
+    const isRookMover = moverPubType === 'rook';
+    const penalty = -(weights.revealChoiceRiskPenaltyBase + (isRookMover ? weights.revealChoiceRiskHighValueExtra : 0));
+    return { isRisk: true, penalty };
+}
+/**
+ * 開局大子活動目標（公平資訊）。
+ * 判斷一手是否具有「活出大子」或「壓制對方翻子」的開局價值。
+ * 嚴禁使用 unrevealed piece.realType 做加分判斷。
+ * 只使用：piece.revealed、piece.originalType、初始位置、已翻出棋子、合法走法。
+ */
+function computeOpeningMajorActivation(state, move, hiddenPressureScore, weights) {
+    if (!isOpeningPhase(state, weights)) {
+        return { majorActivation: false, openingMajorGoal: false, opponentRevealSuppression: false };
+    }
+    // 大子活動：已翻出的大子（rook/horse/cannon）在移動
+    // 已翻出的棋子 realType 是公開資訊，可以使用
+    const moverRevealed = move.piece.revealed;
+    const moverRealMajor = moverRevealed &&
+        (move.piece.realType === 'rook' ||
+            move.piece.realType === 'horse' ||
+            move.piece.realType === 'cannon');
+    // 活馬：從初始後排位置活出馬（originalType='horse'，初始後排，公開資訊）
+    const releasingHorse = isReleasedHorseMove(move);
+    // 活象：從初始後排位置活出象（公開資訊）
+    const releasingElephant = isReleasedElephantMove(move);
+    const majorActivation = moverRealMajor || releasingHorse || releasingElephant;
+    // 開局大子目標：majorActivation，或未翻開兵從初始位置移動釋放後排大子空間
+    const openingMajorGoal = majorActivation;
+    // 壓制對方翻子：同時達成大子活動且有暗子壓制
+    const opponentRevealSuppression = majorActivation && hiddenPressureScore >= weights.hiddenPiecePressureBonus;
+    return { majorActivation, openingMajorGoal, opponentRevealSuppression };
+}
+function opponentReplyPenalty(board, side, movedTo, movedPiece, weights) {
+    const replies = (0, checkRules_1.getAllLegalMoves)(board, opponent(side));
+    let immediateCapture = false;
+    let maxReplyGain = 0;
+    let possibleLoss = 0;
+    for (const reply of replies) {
+        if (reply.captured) {
+            const gain = targetValue(reply.captured, board, reply.to, weights);
+            if (gain > maxReplyGain)
+                maxReplyGain = gain;
+        }
+        if (!samePosition(reply.to, movedTo))
+            continue;
+        immediateCapture = true;
+        const replyBoard = applyMoveToBoard(board, reply);
+        const recaptureValue = bestRecaptureValue(replyBoard, side, movedTo, weights);
+        const tradeNet = defensiveTargetValue(movedPiece, board, movedTo, weights) - recaptureValue;
+        possibleLoss = Math.max(possibleLoss, Math.max(0, tradeNet));
+    }
+    return {
+        immediateCapture,
+        maxReplyGain,
+        possibleLoss,
+        risk: Math.round(possibleLoss * weights.possibleLossMultiplier + maxReplyGain * weights.maxReplyGainPenaltyRatio),
+    };
+}
+// ─── 暗士翻子卡陣風險 ────────────────────────────────────────────────────────
+function isInOwnPalaceArea(side, pos) {
+    if (side === 'red')
+        return pos.row >= 7 && pos.col >= 3 && pos.col <= 5;
+    return pos.row <= 2 && pos.col >= 3 && pos.col <= 5;
+}
+function detectAdvisorRevealClogRisk(move, captureGain, effectiveCheck, blocksImmediateWin, weights) {
+    if (move.piece.revealed)
+        return { isRisk: false, penalty: 0 };
+    if (move.piece.originalType !== 'advisor')
+        return { isRisk: false, penalty: 0 };
+    // Only fire if this move will reveal the advisor (any move of unrevealed piece reveals it)
+    if (captureGain > 0 || effectiveCheck || blocksImmediateWin)
+        return { isRisk: false, penalty: 0 };
+    const nearKing = isInOwnPalaceArea(move.piece.side, move.from) ||
+        isInOwnPalaceArea(move.piece.side, move.to);
+    const penalty = nearKing
+        ? weights.advisorRevealClogNearKingPenalty
+        : weights.advisorRevealClogPenalty;
+    return { isRisk: true, penalty };
+}
+// ─── 死車威脅保留 ──────────────────────────────────────────────────────────────
+function findControlledDeadMajors(board, side) {
+    const opp = side === 'red' ? 'black' : 'red';
+    const result = [];
+    for (let row = 0; row < board.length; row++) {
+        for (let col = 0; col < board[row].length; col++) {
+            const piece = board[row][col];
+            if (!piece || piece.side !== opp)
+                continue;
+            if (publicType(piece) !== 'rook')
+                continue;
+            // If our side can attack that square, we "control" this rook
+            if (isSquareAttacked(board, side, { row, col })) {
+                result.push({ row, col });
+            }
+        }
+    }
+    return result;
+}
+function findOwnMajorsUnderAttack(board, side) {
+    const opp = side === 'red' ? 'black' : 'red';
+    const result = [];
+    for (let row = 0; row < board.length; row++) {
+        for (let col = 0; col < board[row].length; col++) {
+            const piece = board[row][col];
+            if (!piece || piece.side !== side)
+                continue;
+            if (publicType(piece) !== 'rook')
+                continue;
+            if (isSquareAttacked(board, opp, { row, col })) {
+                result.push({ row, col });
+            }
+        }
+    }
+    return result;
+}
+function allowsOpponentWin(state, move) {
+    const next = (0, gameEngine_1.applyMove)(state, move.from, move.to);
+    if (next === state || next.status !== 'playing')
+        return false;
+    const opponentMoves = (0, checkRules_1.getAllLegalMoves)(next.board, next.turn);
+    return opponentMoves.some(reply => (0, gameEngine_1.applyMove)(next, reply.from, reply.to).status === winningStatus(next.turn));
+}
+function evaluateMove(state, move, blocksImmediateWin, weights, posRevealedMajorCaptureAvailable = false) {
+    const next = (0, gameEngine_1.applyMove)(state, move.from, move.to);
+    const nextBoard = next === state ? applyMoveToBoard(state.board, move) : next.board;
+    const moved = nextBoard[move.to.row][move.to.col];
+    const reply = opponentReplyPenalty(nextBoard, state.turn, move.to, moved, weights);
+    const targetGain = captureScore(state.board, move, weights);
+    const captureGain = targetGain;
+    const openingBonus = openingPawnRevealBonus(state, move, weights);
+    const beforeThreat = bestCaptureThreat(state.board, state.turn, undefined, weights);
+    const afterThreat = bestCaptureThreat(nextBoard, state.turn, move.to, weights);
+    const threatValue = afterThreat?.value ?? 0;
+    const threatDelta = threatValue - (beforeThreat?.value ?? 0);
+    const threatByMovedPiece = afterThreat?.byMovedPiece ?? false;
+    const moveRevealsUnknown = !move.piece.revealed;
+    const revealDependentThreat = moveRevealsUnknown && threatByMovedPiece;
+    const importantThreat = threatValue >= weights.pieceValues.horse && (threatDelta > 0 || threatByMovedPiece) && !revealDependentThreat;
+    const hasUnrevealedPawnSoldiers = hasUnrevealedPawnSoldiersForSide(state.board, state.turn);
+    const unrevealedPawnSoldierCount = countUnrevealedPawnSoldiersForSide(state.board, state.turn);
+    const pawnSoldiersStillDeveloping = unrevealedPawnSoldierCount >= 2;
+    const pawnSoldierDevelopment = isOpeningPhase(state, weights) && isPawnSoldierDevelopmentMove(move);
+    const pawnSoldierThreatRevealedMajor = pawnSoldierDevelopment &&
+        moveFromPositionThreatensRevealedMajor(nextBoard, state.turn, move.to);
+    const pawnSoldierFollowUp = pawnSoldierFollowUpEvaluation(state.board, state.turn, move, weights);
+    const pawnSoldierDevelopmentScore = pawnSoldierDevelopment ? weights.pawnSoldierDevelopmentBonus : 0;
+    const pawnSoldierThreatRevealedMajorScore = pawnSoldierThreatRevealedMajor
+        ? weights.pawnSoldierThreatRevealedMajorBonus
+        : 0;
+    const wasUnderAttack = isSquareAttacked(state.board, opponent(state.turn), move.from);
+    const escapeBonus = wasUnderAttack && !reply.immediateCapture && movedPieceValue(move.piece, weights) >= weights.pieceValues.horse ? weights.escapeImportantPieceBonus : 0;
+    const pressureBonus = kingZonePressureBonus(nextBoard, state.turn, move.to, weights);
+    const protectedMove = isSquareProtectedBySide(nextBoard, state.turn, move.to);
+    const capturedConnectedAdvisor = !!move.captured && publicType(move.captured) === 'advisor' && isConnectedAdvisor(move.captured, state.board, move.to, weights);
+    const capturedCrossedPawn = !!move.captured && publicType(move.captured) === 'pawn' && isCrossedPawn(move.captured, move.to);
+    const rawKeySquareScore = keySquareBonus(nextBoard, state.turn, move.to, weights);
+    const keySquareScore = openingBonus > 0 ? Math.min(rawKeySquareScore, weights.openingKeySquareMaxBonus) : rawKeySquareScore;
+    const hiddenPressureScore = hiddenPiecePressureBonus(nextBoard, state.turn, weights);
+    const controlsImportantHidden = hiddenPressureScore >= weights.hiddenPiecePressureBonus + weights.importantHiddenPiecePressureBonus;
+    const rawChecking = next !== state && next.status === 'playing' && (0, checkRules_1.isInCheck)(next.board, next.turn);
+    const checking = moveRevealsUnknown ? false : rawChecking;
+    const revealTacticalSuppressed = moveRevealsUnknown && (rawChecking || revealDependentThreat);
+    const effectiveCheck = checking && (captureGain > 0 ||
+        importantThreat ||
+        pressureBonus > 0 ||
+        reply.possibleLoss === 0 && threatValue >= weights.effectiveCheckThreatValue);
+    const lowQualityCheck = checking && !effectiveCheck;
+    const exchangeNet = captureGain - reply.possibleLoss;
+    const hasClearGain = captureGain >= weights.pieceValues.cannon || blocksImmediateWin || effectiveCheck || (captureGain > 0 && exchangeNet >= 0) || escapeBonus > 0;
+    const leaveKeySquareScore = leaveKeySquarePenalty(state.board, state.turn, move.from, move.to, hasClearGain, weights);
+    const structure = structurePatternEvaluation(state, move, nextBoard, hasClearGain, weights);
+    // Edge cannon pressure: cap hiddenPressureScore for plain pawn moves that don't resolve pressure
+    const edgeCannonPressure = isOpeningPhase(state, weights) && hasOpeningEdgeCannonPressure(state.board, state.turn);
+    const isPlainUnrevealedPawnMove = !move.piece.revealed && move.piece.originalType === 'pawn' &&
+        !structure.releasedHorseFromPressure && !structure.releasedElephantFromPressure &&
+        !structure.preventsPawnLineLock && !structure.pawnLineDefense && captureGain === 0;
+    const edgeCannonPressureUnresolved = edgeCannonPressure && isPlainUnrevealedPawnMove;
+    const cappedHiddenPressureScore = edgeCannonPressureUnresolved
+        ? Math.min(hiddenPressureScore, weights.edgeCannonPressureHiddenPressureCap)
+        : hiddenPressureScore;
+    // Safe capture priority: boost definite captures over speculative pressure
+    const safeCapturePriority = captureGain > 0 && exchangeNet >= 0;
+    const safeCapturePriorityBonus = safeCapturePriority ? weights.safeCapturePriorityBonus : 0;
+    // Speculative hidden cannon attack: penalize unrevealed cannon threatening unrevealed target (no capture)
+    const speculativeAttack = !move.piece.revealed && move.piece.originalType === 'cannon' &&
+        captureGain === 0 && (afterThreat?.byMovedPiece ?? false) && !(afterThreat?.targetRevealed ?? true);
+    const speculativeAttackPenalty = speculativeAttack ? weights.speculativeHiddenAttackPenalty : 0;
+    // Repetitive check: penalize same side using rook for checks multiple turns in a row
+    const repetitiveCheck = detectRepetitiveCheck(state, move, checking);
+    const repetitiveCheckPenaltyScore = repetitiveCheck ? weights.repetitiveCheckPenalty : 0;
+    // 後手翻棋選擇權懲罰（揭棋核心：主動吃低價暗子後給對方選擇權）
+    const { isRisk: revealChoiceRisk, penalty: revealChoicePenalty } = computeRevealChoiceRisk(state.board, state.turn, move, weights);
+    // 開局大子活動目標（公平資訊，不偷看 realType）
+    const { majorActivation, openingMajorGoal, opponentRevealSuppression } = computeOpeningMajorActivation(state, move, hiddenPressureScore, weights);
+    // 開局非大子活動手的 hiddenPressureScore 上限（避免純壓制蓋過活馬/活炮）
+    const isOpeningNonActivation = isOpeningPhase(state, weights) && !majorActivation && !edgeCannonPressureUnresolved;
+    const finalHiddenPressureScore = isOpeningNonActivation
+        ? Math.min(cappedHiddenPressureScore, weights.hiddenPressureNonActivationCap)
+        : cappedHiddenPressureScore;
+    const majorActivationScore = openingMajorGoal ? weights.majorActivationBonus : 0;
+    const opponentRevealSuppressionScore = opponentRevealSuppression ? weights.opponentRevealSuppressionBonus : 0;
+    // 暗士翻子卡陣風險
+    const { isRisk: advisorRevealClogRisk, penalty: advisorRevealClogPenalty } = detectAdvisorRevealClogRisk(move, captureGain, effectiveCheck, blocksImmediateWin, weights);
+    // 死車威脅保留：對方車已被我方控制（hangingMove 後才能確定是否保留）
+    const controlledDeadMajorPositions = findControlledDeadMajors(state.board, state.turn);
+    const controlledDeadMajor = controlledDeadMajorPositions.length > 0;
+    const capturedControlledRook = controlledDeadMajor &&
+        !!move.captured && publicType(move.captured) === 'rook' &&
+        controlledDeadMajorPositions.some(p => p.row === move.to.row && p.col === move.to.col);
+    // 明大子吃子優先（Req A/B）
+    const revealedMajorCaptureAvailable = posRevealedMajorCaptureAvailable;
+    const safeRevealedMajorCapture = !!move.captured && move.captured.revealed &&
+        (publicType(move.captured) === 'rook' || publicType(move.captured) === 'cannon') &&
+        exchangeNet >= 0;
+    const safeRevealedRookCapture = safeRevealedMajorCapture && publicType(move.captured) === 'rook';
+    const revealedMajorCaptureScore = safeRevealedMajorCapture
+        ? (safeRevealedRookCapture
+            ? weights.safeRevealedRookCaptureBonus + weights.revealedMajorCapturePriorityBonus
+            : weights.safeRevealedMajorCaptureBonus + weights.revealedMajorCapturePriorityBonus)
+        : 0;
+    // 暗兵卒開發延後（Req C）
+    const pawnSoldierDelayedByMajorCapture = pawnSoldierDevelopment && revealedMajorCaptureAvailable;
+    const pawnSoldierDelayPenalty = pawnSoldierDelayedByMajorCapture ? weights.pawnSoldierDelayWhenMajorCaptureAvailablePenalty : 0;
+    // 硬保死車扣分：暗士翻子保護己方已被對方控制的車
+    const ownMajorsUnderAttack = findOwnMajorsUnderAttack(state.board, state.turn);
+    const defendsDoomedMajor = advisorRevealClogRisk && ownMajorsUnderAttack.length > 0 &&
+        captureGain === 0 && !effectiveCheck && !blocksImmediateWin;
+    const forcedBadDefense = defendsDoomedMajor;
+    // Post-move loose hidden piece scan: only revealed enemy attackers count.
+    const beforeLooseHiddenPieces = analyzeLooseHiddenPieces(state.board, state.turn);
+    const postMoveLooseHiddenPieces = analyzeLooseHiddenPieces(nextBoard, state.turn);
+    const postMoveLooseHiddenPieceCount = postMoveLooseHiddenPieces.loosePositions.length;
+    const postMoveProtectedUnderAttackCount = postMoveLooseHiddenPieces.protectedUnderAttackPositions.length;
+    const postMoveLooseHiddenPiece = postMoveLooseHiddenPieceCount > 0;
+    const rescuedLooseHiddenPieceCount = beforeLooseHiddenPieces.loosePositions.filter(position => !includesPosition(postMoveLooseHiddenPieces.loosePositions, position) &&
+        !includesPosition(postMoveLooseHiddenPieces.protectedUnderAttackPositions, position)).length;
+    const movedFromLooseHiddenPiece = includesPosition(beforeLooseHiddenPieces.loosePositions, move.from);
+    const movedPieceStillAttackedByRevealedEnemy = movedFromLooseHiddenPiece && isPositionAttackedByRevealedEnemy(nextBoard, state.turn, move.to);
+    const rescuesLooseHiddenPiece = rescuedLooseHiddenPieceCount > 0 && !movedPieceStillAttackedByRevealedEnemy;
+    const ignoresLooseHiddenPiece = beforeLooseHiddenPieces.loosePositions.length > 0 &&
+        rescuedLooseHiddenPieceCount === 0 &&
+        !rescuesLooseHiddenPiece;
+    const postMoveLoosePiecePenalty = postMoveLooseHiddenPieceCount * weights.postMoveLooseHiddenPiecePenalty;
+    const rescueLooseHiddenPieceScore = rescuesLooseHiddenPiece ? weights.rescueLooseHiddenPieceBonus : 0;
+    const protectedUnderAttackPenalty = postMoveProtectedUnderAttackCount > 0
+        ? Math.max(weights.protectedUnderAttackPenaltyCap, -10 * postMoveProtectedUnderAttackCount)
+        : 0;
+    const activationOnlyScore = Math.max(0, structure.score) +
+        Math.max(0, majorActivationScore) +
+        Math.max(0, opponentRevealSuppressionScore);
+    const activationOnlyCapPenalty = ignoresLooseHiddenPiece &&
+        captureGain === 0 &&
+        !effectiveCheck &&
+        !blocksImmediateWin &&
+        activationOnlyScore > weights.activationOnlyCapWhenLoosePieceExists
+        ? -(activationOnlyScore - weights.activationOnlyCapWhenLoosePieceExists)
+        : 0;
+    const firstMovePawnOpening = state.history.length === 0 && openingBonus > 0;
+    const firstMoveBlindHorseActivation = hasFirstMovePriorityPawnOption(state, weights) &&
+        state.history.length === 0 &&
+        !move.piece.revealed &&
+        move.piece.originalType === 'horse' &&
+        captureGain === 0 &&
+        !effectiveCheck &&
+        !blocksImmediateWin &&
+        !rescuesLooseHiddenPiece &&
+        !isPositionAttackedByRevealedEnemy(state.board, state.turn, move.from);
+    const firstMoveBlindHorsePenalty = firstMoveBlindHorseActivation
+        ? weights.firstMoveBlindHorseActivationPenalty
+        : 0;
+    const firstMoveBlindMajorActivationCapPenalty = firstMoveBlindHorseActivation &&
+        majorActivationScore > weights.firstMoveBlindMajorActivationCap
+        ? -(majorActivationScore - weights.firstMoveBlindMajorActivationCap)
+        : 0;
+    const pureBlindHorseActivation = pawnSoldiersStillDeveloping &&
+        !move.piece.revealed &&
+        move.piece.originalType === 'horse' &&
+        captureGain === 0 &&
+        !effectiveCheck &&
+        !blocksImmediateWin &&
+        !rescuesLooseHiddenPiece &&
+        !importantThreat &&
+        (structure.score > 0 || majorActivation || structure.releasedHorseFromPressure);
+    const blindHorseStructureCapped = pureBlindHorseActivation && structure.score > weights.pureBlindHorseStructureCap;
+    const blindHorseMajorActivationCapped = pureBlindHorseActivation && majorActivationScore > weights.pureBlindHorseMajorActivationCap;
+    const finalStructureScore = blindHorseStructureCapped
+        ? weights.pureBlindHorseStructureCap
+        : structure.score;
+    const finalMajorActivationScore = blindHorseMajorActivationCapped
+        ? weights.pureBlindHorseMajorActivationCap
+        : majorActivationScore;
+    const pureBlindHorsePenalty = pureBlindHorseActivation
+        ? weights.pureBlindHorseActivationPenalty + weights.pawnSoldierHiddenExtraBlindHorsePenalty
+        : 0;
+    const forcingReply = blocksImmediateWin ||
+        effectiveCheck ||
+        structure.releasedHorseFromPressure ||
+        structure.releasedElephantFromPressure ||
+        structure.preventsPawnLineLock;
+    const safeHighExchange = captureGain >= weights.pieceValues.rook &&
+        exchangeNet >= weights.safeCaptureExchangeNet &&
+        protectedMove;
+    const openingTempoPenalty = isPrematureOpeningCannonStrike(state, move) && !forcingReply && !safeHighExchange
+        ? -Math.max(weights.openingCannonTempoMinPenalty, Math.round(captureGain * weights.openingCannonTempoPenaltyRatio))
+        : 0;
+    const purposeful = (captureGain > 0 ||
+        openingBonus > 0 ||
+        importantThreat ||
+        escapeBonus > 0 ||
+        pressureBonus > 0 ||
+        keySquareScore >= weights.keySquareEnemyPalaceBonus ||
+        hiddenPressureScore >= weights.hiddenPiecePressureBonus + weights.importantHiddenPiecePressureBonus ||
+        finalStructureScore > 0 ||
+        structure.pawnLineDefense ||
+        structure.releasedHorseFromPressure ||
+        structure.releasedElephantFromPressure ||
+        pawnSoldierDevelopment ||
+        pawnSoldierFollowUp.score > 0 ||
+        blocksImmediateWin ||
+        effectiveCheck ||
+        rescuesLooseHiddenPiece ||
+        forcingReply);
+    const meaningless = !purposeful && !checking;
+    const highValueMover = defensiveTargetValue(move.piece, state.board, move.from, weights) >= weights.pieceValues.horse;
+    const hangingMove = highValueMover && !protectedMove && !hasClearGain;
+    const deadMajorShouldCaptureNow = controlledDeadMajor && revealedMajorCaptureAvailable;
+    const deadMajorHoldSuppressedBySafeCapture = deadMajorShouldCaptureNow && !safeRevealedMajorCapture;
+    const deadMajorThreatHold = controlledDeadMajor && !capturedControlledRook && !hangingMove && !deadMajorHoldSuppressedBySafeCapture;
+    const deadMajorPressureScore = deadMajorThreatHold ? weights.deadMajorThreatHoldBonus : 0;
+    const forcedBadDefensePenalty = forcedBadDefense ? weights.defendDoomedMajorPenalty : 0;
+    const purposePenalty = meaningless ? weights.meaninglessMovePenalty : 0;
+    const checkPenalty = lowQualityCheck ? weights.lowQualityCheckPenalty : 0;
+    const checkBonus = effectiveCheck ? weights.effectiveCheckBonus : 0;
+    const threatBonus = importantThreat ? Math.round(Math.min(threatValue, weights.pieceValues.rook) * weights.importantThreatRatio) : 0;
+    const blockDangerBonus = blocksImmediateWin ? weights.blockImmediateWinBonus : 0;
+    const protectionScore = protectedMove ? weights.protectedMoveBonus : 0;
+    const hangingPenalty = hangingMove ? weights.hangingMovePenalty : 0;
+    const score = captureGain -
+        reply.possibleLoss +
+        revealScore(move, weights) +
+        openingBonus +
+        positionScore(move) +
+        threatBonus +
+        escapeBonus +
+        pressureBonus +
+        keySquareScore +
+        finalHiddenPressureScore +
+        leaveKeySquareScore +
+        finalStructureScore +
+        openingTempoPenalty +
+        finalMajorActivationScore +
+        opponentRevealSuppressionScore +
+        pawnSoldierDevelopmentScore +
+        pawnSoldierThreatRevealedMajorScore +
+        revealedMajorCaptureScore +
+        pawnSoldierDelayPenalty +
+        pawnSoldierFollowUp.score +
+        revealChoicePenalty +
+        blockDangerBonus +
+        checkBonus +
+        protectionScore +
+        hangingPenalty +
+        purposePenalty +
+        checkPenalty +
+        safeCapturePriorityBonus +
+        speculativeAttackPenalty +
+        repetitiveCheckPenaltyScore +
+        advisorRevealClogPenalty +
+        deadMajorPressureScore +
+        postMoveLoosePiecePenalty +
+        rescueLooseHiddenPieceScore +
+        protectedUnderAttackPenalty +
+        activationOnlyCapPenalty +
+        firstMoveBlindHorsePenalty +
+        firstMoveBlindMajorActivationCapPenalty +
+        pureBlindHorsePenalty +
+        forcedBadDefensePenalty -
+        Math.round(reply.maxReplyGain * weights.maxReplyGainPenaltyRatio);
+    return {
+        score,
+        risk: reply.risk,
+        immediateCapture: reply.immediateCapture,
+        exchangeNet,
+        captureGain,
+        openingBonus,
+        threatValue,
+        escapeBonus,
+        pressureBonus,
+        targetGain,
+        protectedMove,
+        hangingMove,
+        capturedConnectedAdvisor,
+        capturedCrossedPawn,
+        keySquareScore,
+        leaveKeySquareScore,
+        hiddenPressureScore,
+        controlsImportantHidden,
+        structureScore: finalStructureScore,
+        structurePatterns: structure.patterns,
+        releasedHorseFromPressure: structure.releasedHorseFromPressure,
+        releasedElephantFromPressure: structure.releasedElephantFromPressure,
+        weakScreen: structure.weakScreen,
+        preservesHiddenCannon: structure.preservesHiddenCannon,
+        pawnLineDefense: structure.pawnLineDefense,
+        preventsPawnLineLock: structure.preventsPawnLineLock,
+        badHorseRelease: structure.badHorseRelease,
+        openingTempoPenalty,
+        forcingReply,
+        blocksImmediateWin,
+        checking,
+        effectiveCheck,
+        lowQualityCheck,
+        meaningless,
+        moveRevealsUnknown,
+        revealTacticalSuppressed,
+        threatDelta,
+        threatByMovedPiece,
+        threatTargetType: afterThreat?.targetType ?? null,
+        threatTargetRevealed: afterThreat?.targetRevealed ?? null,
+        edgeCannonPressureUnresolved,
+        speculativeAttack,
+        safeCapturePriority,
+        repetitiveCheck,
+        repetitiveCheckPenaltyScore,
+        revealChoiceRisk,
+        revealChoicePenalty,
+        openingMajorGoal,
+        majorActivation,
+        opponentRevealSuppression,
+        advisorRevealClogRisk,
+        advisorRevealClogPenalty,
+        controlledDeadMajor,
+        deadMajorThreatHold,
+        deadMajorPressureScore,
+        defendsDoomedMajor,
+        forcedBadDefense,
+        postMoveLooseHiddenPiece,
+        postMoveLooseHiddenPieceCount,
+        postMoveProtectedUnderAttackCount,
+        postMoveLoosePiecePenalty,
+        rescuesLooseHiddenPiece,
+        ignoresLooseHiddenPiece,
+        firstMovePawnOpening,
+        firstMoveBlindHorseActivation,
+        firstMoveBlindHorsePenalty: firstMoveBlindHorsePenalty + firstMoveBlindMajorActivationCapPenalty,
+        hasUnrevealedPawnSoldiers,
+        pawnSoldierDevelopment,
+        pawnSoldierThreatRevealedMajor,
+        pureBlindHorseActivation,
+        pureBlindHorsePenalty,
+        blindHorseStructureCapped,
+        blindHorseMajorActivationCapped,
+        pawnSoldierFollowUpHorse: pawnSoldierFollowUp.pawnSoldierFollowUpHorse,
+        pawnSoldierHorseFootBlock: pawnSoldierFollowUp.pawnSoldierHorseFootBlock,
+        pawnSoldierFollowUpElephant: pawnSoldierFollowUp.pawnSoldierFollowUpElephant,
+        pawnSoldierCenterPreference: pawnSoldierFollowUp.pawnSoldierCenterPreference,
+        pawnSoldierFollowUpAdvisor: pawnSoldierFollowUp.pawnSoldierFollowUpAdvisor,
+        pawnSoldierAntiAdvisorFork: pawnSoldierFollowUp.pawnSoldierAntiAdvisorFork,
+        revealedMajorCaptureAvailable,
+        safeRevealedMajorCapture,
+        revealedMajorCaptureScore,
+        pawnSoldierDelayedByMajorCapture,
+        deadMajorShouldCaptureNow,
+        deadMajorHoldSuppressedBySafeCapture,
+    };
+}
+function reasonFor(best, evaluation, avoidedOpponentWin, weights) {
+    if (avoidedOpponentWin)
+        return '避免對方一步殺';
+    if (evaluation.rescuesLooseHiddenPiece)
+        return '暗子無保護受攻擊，優先脫離';
+    if (evaluation.postMoveLooseHiddenPiece && evaluation.postMoveLoosePiecePenalty < 0)
+        return '下完仍有無保護暗子被抓，已扣分';
+    if (evaluation.firstMoveBlindHorseActivation)
+        return '第一手盲動暗馬，已降分';
+    if (evaluation.pureBlindHorseActivation)
+        return '暗兵卒尚未開發，純暗馬活化已降分';
+    if (evaluation.forcedBadDefense)
+        return '暗士硬保死車，易卡陣，已扣分';
+    if (evaluation.hangingMove)
+        return '落點缺少保護，已扣分';
+    if (evaluation.advisorRevealClogRisk && evaluation.advisorRevealClogPenalty < 0)
+        return '暗士翻子易卡住將門，已扣分';
+    if (evaluation.revealChoiceRisk)
+        return '吃低價暗子後給對方選擇權，已降分';
+    if (best.captured && evaluation.exchangeNet < 0)
+        return '交換可能虧損，已扣分';
+    if (evaluation.capturedConnectedAdvisor)
+        return '吃掉連環士';
+    if (evaluation.capturedCrossedPawn)
+        return '吃過河兵';
+    if (evaluation.openingTempoPenalty < 0 && best.captured)
+        return '吃子但未取得後續主動，已降分';
+    if (evaluation.openingTempoPenalty < 0)
+        return '暗炮過早出擊，先手權不足，已扣分';
+    if (best.captured && evaluation.targetGain >= weights.pieceValues.cannon)
+        return '吃高價目標';
+    if (best.captured && evaluation.exchangeNet >= weights.safeCaptureExchangeNet)
+        return '安全吃子';
+    if (best.captured && evaluation.exchangeNet >= 0)
+        return '交換不虧';
+    if (evaluation.pawnSoldierHorseFootBlock)
+        return '同路暗兵卒卡馬腳';
+    if (evaluation.pawnSoldierFollowUpHorse)
+        return '暗兵卒接續壓制明馬';
+    if (evaluation.pawnSoldierCenterPreference)
+        return '暗兵卒翻相，優先活中路';
+    if (evaluation.pawnSoldierFollowUpElephant)
+        return '暗兵卒翻相，優先活中路';
+    if (evaluation.pawnSoldierAntiAdvisorFork)
+        return '同路暗兵卒對翻，避免士抓蛇雙';
+    if (evaluation.pawnSoldierFollowUpAdvisor)
+        return '同路暗兵卒對翻，避免士抓蛇雙';
+    if (evaluation.pawnSoldierThreatRevealedMajor)
+        return '暗兵卒壓制對方明子';
+    if (evaluation.safeRevealedMajorCapture)
+        return '安全吃明大子，優先執行';
+    if (evaluation.deadMajorHoldSuppressedBySafeCapture)
+        return '有安全吃明大子機會，不應保留死車威脅';
+    if (evaluation.pawnSoldierDelayedByMajorCapture)
+        return '有明大子可吃，延後開發暗兵卒';
+    if (evaluation.firstMovePawnOpening)
+        return '第一手穩健翹邊兵';
+    if (evaluation.pawnSoldierDevelopment)
+        return '開局優先開發暗兵卒';
+    if (evaluation.revealTacticalSuppressed && !evaluation.effectiveCheck && !evaluation.releasedHorseFromPressure && !evaluation.releasedElephantFromPressure && !evaluation.preventsPawnLineLock)
+        return '暗子翻開效果未知，未按確定將軍加分';
+    if (evaluation.repetitiveCheck)
+        return '無成果連將，改尋求增援';
+    if (evaluation.effectiveCheck)
+        return '有效將軍';
+    if (evaluation.lowQualityCheck)
+        return '無成果將軍，已降分';
+    if (evaluation.releasedHorseFromPressure)
+        return '活馬解除邊炮壓制';
+    if (evaluation.releasedElephantFromPressure)
+        return '活象解除邊炮壓制';
+    if (evaluation.weakScreen)
+        return '只是塞炮線但仍被卡馬腳，已扣分';
+    if (evaluation.badHorseRelease)
+        return '活馬落點不符當前威脅，已扣分';
+    if (evaluation.preventsPawnLineLock)
+        return '守住兵線，避免敵方 G 壓兵線';
+    if (evaluation.forcingReply)
+        return '形成強制應手';
+    if (evaluation.pawnLineDefense && evaluation.structurePatterns.includes('hidden_rook_guard_point'))
+        return '活馬並保護暗車控制點';
+    if (evaluation.pawnLineDefense)
+        return '守住兵線關鍵點';
+    if (evaluation.deadMajorThreatHold)
+        return '保留死車威脅，持續壓制';
+    if (evaluation.preservesHiddenCannon)
+        return '保留暗炮威懾';
+    if (evaluation.leaveKeySquareScore < 0)
+        return '離開關鍵點，價值下降';
+    if (evaluation.meaningless)
+        return '目的性不足，已扣分';
+    const typeLabel = { king: '帥/將', advisor: '仕/士', elephant: '相/象', rook: '車', horse: '馬', cannon: '炮/包', pawn: '兵/卒' };
+    const newThreat = evaluation.threatValue >= weights.pieceValues.horse && (evaluation.threatDelta > 0 || evaluation.threatByMovedPiece);
+    if (newThreat && evaluation.threatByMovedPiece && evaluation.threatTargetType)
+        return `此步直接威脅對方${typeLabel[evaluation.threatTargetType]}`;
+    if (newThreat && evaluation.threatDelta > 0)
+        return '形成新的高價威脅';
+    if (evaluation.escapeBonus > 0)
+        return '脫離重要子力危險';
+    if (evaluation.pressureBonus > 0)
+        return '形成攻擊壓力';
+    if (evaluation.controlsImportantHidden && !evaluation.edgeCannonPressureUnresolved)
+        return '壓制對方重要暗子';
+    if (evaluation.hiddenPressureScore > 0 && !evaluation.edgeCannonPressureUnresolved)
+        return '壓制對方暗子';
+    if (evaluation.keySquareScore >= weights.keySquareEnemyPalaceBonus)
+        return '佔住關鍵點';
+    if (evaluation.protectedMove)
+        return '落點有保護';
+    if (evaluation.openingMajorGoal && evaluation.opponentRevealSuppression)
+        return '活出大子並壓制對方翻子';
+    if (evaluation.openingMajorGoal)
+        return '開局優先活出大子';
+    if (evaluation.openingBonus > 0)
+        return '開局優先翹 1379 路兵';
+    if (evaluation.risk > 0 || evaluation.immediateCapture)
+        return '避免明顯送子';
+    return '簡單評分最佳';
+}
+function recommendMove(state, candidateMoves, weights = aiWeights_1.defaultAiWeights) {
+    const moves = candidateMoves ?? (0, checkRules_1.getAllLegalMoves)(state.board, state.turn);
+    if (!moves.length)
+        return { move: null, score: -99999, reason: '沒有合法走法' };
+    for (const move of moves) {
+        const next = (0, gameEngine_1.applyMove)(state, move.from, move.to);
+        if (next.status === winningStatus(state.turn)) {
+            return { move, score: 999999, reason: '此步直接形成絕殺' };
+        }
+    }
+    const safeMoves = moves.filter(move => !allowsOpponentWin(state, move));
+    const scoringMoves = safeMoves.length ? safeMoves : moves;
+    const avoidedOpponentWin = safeMoves.length > 0 && safeMoves.length < moves.length;
+    const currentlyAllowsOpponentWin = opponentHasImmediateWin(state.board, state.turn);
+    const posRevealedMajorCaptureAvailable = scoringMoves.some(m => {
+        if (!m.captured || !m.captured.revealed)
+            return false;
+        const capType = publicType(m.captured);
+        if (capType !== 'rook' && capType !== 'cannon')
+            return false;
+        const capValue = weights.pieceValues[capType];
+        const moverValue = weights.pieceValues[publicType(m.piece)];
+        return capValue >= moverValue;
+    });
+    let best = scoringMoves[0];
+    let bestEvaluation = evaluateMove(state, best, currentlyAllowsOpponentWin && !allowsOpponentWin(state, best), weights, posRevealedMajorCaptureAvailable);
+    const evaluations = [
+        { move: best, evaluation: bestEvaluation },
+    ];
+    for (const move of scoringMoves.slice(1)) {
+        const evaluation = evaluateMove(state, move, currentlyAllowsOpponentWin && !allowsOpponentWin(state, move), weights, posRevealedMajorCaptureAvailable);
+        evaluations.push({ move, evaluation });
+        if (evaluation.score > bestEvaluation.score) {
+            best = move;
+            bestEvaluation = evaluation;
+        }
+    }
+    const traces = evaluations.map(({ move, evaluation }) => ({
+        move,
+        score: evaluation.score,
+        reason: reasonFor(move, evaluation, avoidedOpponentWin, weights),
+        patterns: evaluation.structurePatterns,
+        structureScore: evaluation.structureScore,
+        exchangeNet: evaluation.exchangeNet,
+        risk: evaluation.risk,
+        captureGain: evaluation.captureGain,
+        openingBonus: evaluation.openingBonus,
+        keySquareScore: evaluation.keySquareScore,
+        hiddenPressureScore: evaluation.hiddenPressureScore,
+        leaveKeySquareScore: evaluation.leaveKeySquareScore,
+        checking: evaluation.checking,
+        effectiveCheck: evaluation.effectiveCheck,
+        lowQualityCheck: evaluation.lowQualityCheck,
+        meaningless: evaluation.meaningless,
+        moveRevealsUnknown: evaluation.moveRevealsUnknown,
+        revealTacticalSuppressed: evaluation.revealTacticalSuppressed,
+        threatValue: evaluation.threatValue,
+        threatDelta: evaluation.threatDelta,
+        threatByMovedPiece: evaluation.threatByMovedPiece,
+        threatTargetType: evaluation.threatTargetType,
+        threatTargetRevealed: evaluation.threatTargetRevealed,
+        edgeCannonPressureUnresolved: evaluation.edgeCannonPressureUnresolved,
+        speculativeAttack: evaluation.speculativeAttack,
+        safeCapturePriority: evaluation.safeCapturePriority,
+        repetitiveCheck: evaluation.repetitiveCheck,
+        repetitiveCheckPenalty: evaluation.repetitiveCheckPenaltyScore,
+        revealChoiceRisk: evaluation.revealChoiceRisk,
+        revealChoicePenalty: evaluation.revealChoicePenalty,
+        openingMajorGoal: evaluation.openingMajorGoal,
+        majorActivation: evaluation.majorActivation,
+        opponentRevealSuppression: evaluation.opponentRevealSuppression,
+        advisorRevealClogRisk: evaluation.advisorRevealClogRisk,
+        advisorRevealClogPenalty: evaluation.advisorRevealClogPenalty,
+        controlledDeadMajor: evaluation.controlledDeadMajor,
+        deadMajorThreatHold: evaluation.deadMajorThreatHold,
+        deadMajorPressureScore: evaluation.deadMajorPressureScore,
+        defendsDoomedMajor: evaluation.defendsDoomedMajor,
+        forcedBadDefense: evaluation.forcedBadDefense,
+        postMoveLooseHiddenPiece: evaluation.postMoveLooseHiddenPiece,
+        postMoveLooseHiddenPieceCount: evaluation.postMoveLooseHiddenPieceCount,
+        postMoveProtectedUnderAttackCount: evaluation.postMoveProtectedUnderAttackCount,
+        postMoveLoosePiecePenalty: evaluation.postMoveLoosePiecePenalty,
+        rescuesLooseHiddenPiece: evaluation.rescuesLooseHiddenPiece,
+        ignoresLooseHiddenPiece: evaluation.ignoresLooseHiddenPiece,
+        firstMovePawnOpening: evaluation.firstMovePawnOpening,
+        firstMoveBlindHorseActivation: evaluation.firstMoveBlindHorseActivation,
+        firstMoveBlindHorsePenalty: evaluation.firstMoveBlindHorsePenalty,
+        hasUnrevealedPawnSoldiers: evaluation.hasUnrevealedPawnSoldiers,
+        pawnSoldierDevelopment: evaluation.pawnSoldierDevelopment,
+        pawnSoldierThreatRevealedMajor: evaluation.pawnSoldierThreatRevealedMajor,
+        pureBlindHorseActivation: evaluation.pureBlindHorseActivation,
+        pureBlindHorsePenalty: evaluation.pureBlindHorsePenalty,
+        blindHorseStructureCapped: evaluation.blindHorseStructureCapped,
+        blindHorseMajorActivationCapped: evaluation.blindHorseMajorActivationCapped,
+        pawnSoldierFollowUpHorse: evaluation.pawnSoldierFollowUpHorse,
+        pawnSoldierHorseFootBlock: evaluation.pawnSoldierHorseFootBlock,
+        pawnSoldierFollowUpElephant: evaluation.pawnSoldierFollowUpElephant,
+        pawnSoldierCenterPreference: evaluation.pawnSoldierCenterPreference,
+        pawnSoldierFollowUpAdvisor: evaluation.pawnSoldierFollowUpAdvisor,
+        pawnSoldierAntiAdvisorFork: evaluation.pawnSoldierAntiAdvisorFork,
+        revealedMajorCaptureAvailable: evaluation.revealedMajorCaptureAvailable,
+        safeRevealedMajorCapture: evaluation.safeRevealedMajorCapture,
+        revealedMajorCaptureScore: evaluation.revealedMajorCaptureScore,
+        pawnSoldierDelayedByMajorCapture: evaluation.pawnSoldierDelayedByMajorCapture,
+        deadMajorShouldCaptureNow: evaluation.deadMajorShouldCaptureNow,
+        deadMajorHoldSuppressedBySafeCapture: evaluation.deadMajorHoldSuppressedBySafeCapture,
+    }));
+    return {
+        move: best,
+        score: bestEvaluation.score,
+        reason: reasonFor(best, bestEvaluation, avoidedOpponentWin, weights),
+        traces,
+    };
+}
+/**
+ * Oracle AI: full info, for debug / analysis / assisted board.
+ */
+function recommendMoveOracle(state, candidateMoves, weights = aiWeights_1.defaultAiWeights) {
+    return recommendMove(state, candidateMoves, weights);
+}
+/**
+ * Fair AI: official game entry. Hides unrevealed realType via AiVisibleState.
+ * MVP ignores external candidateMoves to avoid leaking full realType via Move objects.
+ */
+function recommendMoveFair(stateOrView, _candidateMoves, weights = aiWeights_1.defaultAiWeights) {
+    const view = 'perspectiveSide' in stateOrView
+        ? stateOrView
+        : (0, aiVisibility_1.createAiView)(stateOrView, stateOrView.turn);
+    const maskedState = (0, aiVisibility_1.visibleStateToMaskedGameState)(view);
+    // MVP: ignore candidateMoves, let recommendMove generate from maskedState
+    return recommendMove(maskedState, undefined, weights);
+}

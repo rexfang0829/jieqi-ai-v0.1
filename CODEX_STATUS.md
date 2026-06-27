@@ -1,5 +1,34 @@
 ## 最新完成的工作
 
+### 2026-06-27 明大子戰術優先級修正（Claude）
+
+**目標**：修正 AI 優先級，確保安全吃明大子 > 暗兵卒開發 > 死車保留威脅。
+
+**新增/修改檔案**：
+
+1. **`src/ai/aiWeights.ts`**：
+   - 新增 4 個權重：`revealedMajorCapturePriorityBonus:90` / `safeRevealedRookCaptureBonus:120` / `safeRevealedMajorCaptureBonus:80` / `pawnSoldierDelayWhenMajorCaptureAvailablePenalty:-80`
+
+2. **`src/ai/aiTrace.ts`**：
+   - 新增 6 個 trace 欄位：`revealedMajorCaptureAvailable` / `safeRevealedMajorCapture` / `revealedMajorCaptureScore` / `pawnSoldierDelayedByMajorCapture` / `deadMajorShouldCaptureNow` / `deadMajorHoldSuppressedBySafeCapture`
+
+3. **`src/ai/simpleAi.ts`**：
+   - Req A: `safeRevealedMajorCapture`判斷此步是否安全吃明大子，加分 120/80+90
+   - Req A: `posRevealedMajorCaptureAvailable` 一次計算揪一遍（在 recommendMove 自羅候選步目前）
+   - Req B: `deadMajorThreatHold` 新增 `!deadMajorHoldSuppressedBySafeCapture` 條件；安全吃大子時不給保留獎分
+   - Req C: `pawnSoldierDelayedByMajorCapture`：有明大子可吃時，暗兵卒開發扣分 (-80)
+
+4. **`src/ai/aiDebugReport.ts`**：
+   - `fmtTrace` 補免 6 個新欄位輸出
+
+5. **`tests/rules.test.ts`**：
+   - 修正舊測試「controlled dead rook」斷言反映新行為
+   - 新增 5 個測試：安全吃車優先級 / deadMajorHold抑制 / 暗兵卒延後懲罰 / 無明大子基線 / debug report 欄位名稱
+
+**測試**：`npm test` 全部通過；`npx tsc --noEmit` 無錯。
+
+---
+
 ### 2026-06-27 Fair AI Permission Boundary MVP（Claude）
 
 **目標**：建立正式下棋 AI 的公平資訊權限牆，避免 AI 在正式下棋時偷看未翻暗子的 realType。
