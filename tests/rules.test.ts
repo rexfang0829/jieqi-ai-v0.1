@@ -3617,3 +3617,69 @@ test('hidden recapture B2: unsafeEndgameCapture requires hiddenMajorRecaptureRis
 test('hidden recapture B3: unsafeCapturePenalty weight exists and is negative', () => {
   assertOk(defaultAiWeights.unsafeCapturePenalty < 0);
 });
+
+// ── Problem C: edge rook pressure — horse guard beats plain pawn development ──
+
+test('edge rook C1: horse guard to pawn-line square scores higher than plain pawn development under edge rook pressure', () => {
+  // Black edge rook (col 0) is revealed and on same column as a black unrevealed pawn.
+  // Two or more black pawns are still undeveloped (pawnSoldiersStillDeveloping=true).
+  // Horse at [0,1] can go to [2,2] (good guard square row=2, col=2).
+  // Plain pawn at [1,6] advancing should score lower.
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  // Blocker to prevent kings facing on col 4
+  place(board, 5, 4, piece('red', 'pawn', 'pawn', false));
+  // Red edge rook threatening col 0 pawn line
+  place(board, 5, 0, piece('red', 'pawn', 'rook', true));
+  // Black unrevealed pieces: horse + 3 pawns (so pawnSoldiersStillDeveloping=true)
+  place(board, 0, 1, piece('black', 'horse', 'horse', false));
+  place(board, 3, 0, piece('black', 'pawn', 'pawn', false)); // on col 0, attacked by red rook
+  place(board, 1, 3, piece('black', 'pawn', 'pawn', false));
+  place(board, 1, 6, piece('black', 'pawn', 'pawn', false));
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const horseToGuard = findMove(board, 'black', [0, 1], [2, 2]);
+  const plainPawnAdvance = findMove(board, 'black', [1, 6], [2, 6]);
+  const result = recommendMove(state, [horseToGuard, plainPawnAdvance]);
+  assertOk(result.traces);
+  const horseTrace = result.traces.find(t => t.move === horseToGuard);
+  const pawnTrace = result.traces.find(t => t.move === plainPawnAdvance);
+  assertOk(horseTrace);
+  assertOk(pawnTrace);
+  assertOk(horseTrace.score > pawnTrace.score);
+});
+
+test('edge rook C2: without edge rook pressure, normal pawn development is unaffected (no penalty)', () => {
+  // Same layout but no red rook -- pawnSoldierDelayedByEdgeRookPressure should be false.
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn', 'pawn', false));
+  place(board, 1, 3, piece('black', 'pawn', 'pawn', false));
+  place(board, 1, 6, piece('black', 'pawn', 'pawn', false));
+  place(board, 3, 0, piece('black', 'pawn', 'pawn', false));
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const pawnAdvance = findMove(board, 'black', [1, 6], [2, 6]);
+  const result = recommendMove(state, [pawnAdvance]);
+  assertOk(result.traces);
+  const pawnTrace = result.traces.find(t => t.move === pawnAdvance);
+  assertOk(pawnTrace);
+  assertOk(!pawnTrace.pawnSoldierDelayedByEdgeRookPressure);
+});
+
+test('edge rook C3: debug report contains new trace field names', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn', 'pawn', false));
+  place(board, 5, 0, piece('red', 'pawn', 'rook', true));
+  place(board, 0, 1, piece('black', 'horse', 'horse', false));
+  place(board, 3, 0, piece('black', 'pawn', 'pawn', false));
+  place(board, 1, 3, piece('black', 'pawn', 'pawn', false));
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const result = recommendMove(state);
+  const report = formatAiDebugReport({ modeName: '輔助盤面', state, recommendation: result });
+  assertOk(report.includes('edgeRookPawnLineLockRisk'));
+  assertOk(report.includes('horsePawnLineGuard'));
+  assertOk(report.includes('pawnSoldierDelayedByEdgeRookPressure'));
+});

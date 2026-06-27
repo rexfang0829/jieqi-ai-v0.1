@@ -94,6 +94,9 @@ export type AiMoveTrace = {
   hiddenMajorRecaptureRisk?: boolean;
   unsafeEndgameCapture?: boolean;
   unsafeCaptureExchangeNet?: number;
+  edgeRookPawnLineLockRisk?: boolean;
+  horsePawnLineGuard?: boolean;
+  pawnSoldierDelayedByEdgeRookPressure?: boolean;
 };
 
 /**

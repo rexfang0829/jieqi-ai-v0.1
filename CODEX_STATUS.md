@@ -1,3 +1,36 @@
+### 2026-06-27 修正邊 G / 邊路明車壓力時馬守兵線被蓋過（Claude）
+
+**目標**：當邊路明車（G）壓制兵線時，AI 應優先活馬守線（馬8進7 類），而非普通暗兵卒開發。
+
+**新增 / 修改檔案**：
+
+1. **`src/ai/simpleAi.ts`**：
+   - `structurePatternEvaluation` 回傳新增 `horsePawnLineGuard` 欄位
+   - `releasedHorseFromPressure` 納入 `horsePawnLineGuard`（馬守兵線也是目的性應手）
+   - 新增 `edgeRookPressure` 計算
+   - `pureBlindHorseActivation` 新增 `!structure.horsePawnLineGuard` 排除
+   - 新增 `horsePawnLineGuardEdgeRookBonus`：馬走好守格且邊路受車壓 +80
+   - 新增 `pawnSoldierDelayedByEdgeRookPressure`：邊路受車壓下普通暗兵卒開發 -90
+   - 新增 reason：`邊路明車壓兵線，優先活馬守線` / `邊 G 壓力下，延後普通暗兵卒開發`
+   - `MoveEvaluation` 新增 3 個欄位
+
+2. **`src/ai/aiWeights.ts`**：
+   - 新增 `horsePawnLineGuardEdgeRookBonus: 80`
+   - 新增 `pawnSoldierDelayedByEdgeRookPressurePenalty: -90`
+
+3. **`src/ai/aiTrace.ts`**：
+   - 新增 3 個 trace 欄位：`edgeRookPawnLineLockRisk` / `horsePawnLineGuard` / `pawnSoldierDelayedByEdgeRookPressure`
+
+4. **`src/ai/aiDebugReport.ts`**：
+   - `fmtTrace` 補充 3 個新欄位輸出
+
+5. **`tests/rules.test.ts`**：
+   - 新增 3 個測試（C1~C3 驗證邊路車壓力點）
+
+**測試**：`npm test` 全 199 項通過；`npx tsc --noEmit` 無錯。
+
+---
+
 ### 2026-06-27 修正暗兵卒白送偵測與暗大子回吃風險（Claude）
 
 **目標**：修正兩個 AI 實戰漏判問題。

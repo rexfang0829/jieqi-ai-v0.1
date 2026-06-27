@@ -120,6 +120,8 @@ export type AiWeights = {
   createNonCheckingThreatBonus: number;
   avoidAimlessMovePenalty: number;
   unsafeCapturePenalty: number;
+  horsePawnLineGuardEdgeRookBonus: number;
+  pawnSoldierDelayedByEdgeRookPressurePenalty: number;
 };
 
 export const defaultAiWeights: AiWeights = {
@@ -250,4 +252,6 @@ export const defaultAiWeights: AiWeights = {
   createNonCheckingThreatBonus: 40,
   avoidAimlessMovePenalty: -80,
   unsafeCapturePenalty: -120,
+  horsePawnLineGuardEdgeRookBonus: 80,
+  pawnSoldierDelayedByEdgeRookPressurePenalty: -90,
 };
