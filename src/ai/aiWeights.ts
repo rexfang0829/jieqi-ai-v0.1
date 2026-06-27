@@ -92,6 +92,18 @@ export type AiWeights = {
   firstMovePawnOpeningBonus: number;
   firstMoveBlindHorseActivationPenalty: number;
   firstMoveBlindMajorActivationCap: number;
+  pawnSoldierDevelopmentBonus: number;
+  pawnSoldierThreatRevealedMajorBonus: number;
+  pureBlindHorseActivationPenalty: number;
+  pureBlindHorseStructureCap: number;
+  pureBlindHorseMajorActivationCap: number;
+  pawnSoldierHiddenExtraBlindHorsePenalty: number;
+  pawnSoldierFollowUpHorseBonus: number;
+  pawnSoldierHorseFootBlockBonus: number;
+  pawnSoldierFollowUpElephantBonus: number;
+  pawnSoldierCenterPreferenceBonus: number;
+  pawnSoldierFollowUpAdvisorBonus: number;
+  pawnSoldierAntiAdvisorForkBonus: number;
 };
 
 export const defaultAiWeights: AiWeights = {
@@ -194,4 +206,16 @@ export const defaultAiWeights: AiWeights = {
   firstMovePawnOpeningBonus: 80,
   firstMoveBlindHorseActivationPenalty: -90,
   firstMoveBlindMajorActivationCap: 20,
+  pawnSoldierDevelopmentBonus: 70,
+  pawnSoldierThreatRevealedMajorBonus: 50,
+  pureBlindHorseActivationPenalty: -80,
+  pureBlindHorseStructureCap: 15,
+  pureBlindHorseMajorActivationCap: 0,
+  pawnSoldierHiddenExtraBlindHorsePenalty: -60,
+  pawnSoldierFollowUpHorseBonus: 45,
+  pawnSoldierHorseFootBlockBonus: 35,
+  pawnSoldierFollowUpElephantBonus: 25,
+  pawnSoldierCenterPreferenceBonus: 30,
+  pawnSoldierFollowUpAdvisorBonus: 35,
+  pawnSoldierAntiAdvisorForkBonus: 30,
 };

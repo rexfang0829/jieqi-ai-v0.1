@@ -581,3 +581,36 @@ npm.cmd run build
 - `majorActivation` was not removed; only first-move blind horse activation is capped/penalized.
 
 ---
+## 2026-06-27 Codex update
+
+### Latest completed work
+- Added pawn-soldier opening development heuristic for unrevealed `originalType === 'pawn'` pieces.
+- Added bonus when a pawn-soldier move pressures a revealed major piece using public board information only.
+- Reduced early pure blind-horse activation while own pawn soldiers are still undeveloped.
+- Pure blind horse is now capped/penalized only when it has no capture, effective check, immediate-win prevention, loose-hidden-piece rescue, or clear new threat.
+- Added pawn-soldier follow-up heuristics after revealed pawn-origin horse / elephant / advisor:
+  - same-file pawn soldier pressure and horse-foot block after horse reveal.
+  - center pawn soldier preference after elephant reveal.
+  - same-file anti-advisor-fork pressure after advisor reveal.
+- Updated AI debug report to print pawn-soldier, pure blind-horse, and loose-hidden-piece trace fields.
+- AiPanel main recommendation remains Fair AI; Oracle remains Debug comparison only.
+
+### Important chess note
+- Pawn soldiers are not treated as having a higher probability to reveal high-value pieces.
+- The heuristic values pawn soldiers because their surface value is lowest and opening development can gain initiative after reveal.
+- Hidden horse value is not removed; pure blind-horse activation is only reduced in the early pawn-soldier development phase.
+
+### Modified files
+- `src/ai/simpleAi.ts`: pawn-soldier development, follow-up rules, pure blind-horse cap/penalty, reasons, trace output.
+- `src/ai/aiWeights.ts`: added pawn-soldier and pure blind-horse weights.
+- `src/ai/aiTrace.ts`: added pawn-soldier / pure blind-horse trace fields.
+- `src/ai/aiDebugReport.ts`: prints new trace fields.
+- `tests/rules.test.ts`: added opening pawn-soldier regression tests and updated old pure-horse expectations.
+- `CODEX_STATUS.md`, `NEXT_TASK.md`: updated handoff notes.
+
+### Verification
+- `npm.cmd test`: passed.
+- `npx.cmd tsc --noEmit`: passed.
+- `npm.cmd run build`: passed.
+
+---

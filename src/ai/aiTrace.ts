@@ -55,6 +55,19 @@ export type AiMoveTrace = {
   firstMovePawnOpening?: boolean;
   firstMoveBlindHorseActivation?: boolean;
   firstMoveBlindHorsePenalty?: number;
+  hasUnrevealedPawnSoldiers?: boolean;
+  pawnSoldierDevelopment?: boolean;
+  pawnSoldierThreatRevealedMajor?: boolean;
+  pureBlindHorseActivation?: boolean;
+  pureBlindHorsePenalty?: number;
+  blindHorseStructureCapped?: boolean;
+  blindHorseMajorActivationCapped?: boolean;
+  pawnSoldierFollowUpHorse?: boolean;
+  pawnSoldierHorseFootBlock?: boolean;
+  pawnSoldierFollowUpElephant?: boolean;
+  pawnSoldierCenterPreference?: boolean;
+  pawnSoldierFollowUpAdvisor?: boolean;
+  pawnSoldierAntiAdvisorFork?: boolean;
 };
 
 /**

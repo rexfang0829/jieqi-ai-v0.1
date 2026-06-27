@@ -82,6 +82,19 @@ type MoveEvaluation = {
   firstMovePawnOpening: boolean;
   firstMoveBlindHorseActivation: boolean;
   firstMoveBlindHorsePenalty: number;
+  hasUnrevealedPawnSoldiers: boolean;
+  pawnSoldierDevelopment: boolean;
+  pawnSoldierThreatRevealedMajor: boolean;
+  pureBlindHorseActivation: boolean;
+  pureBlindHorsePenalty: number;
+  blindHorseStructureCapped: boolean;
+  blindHorseMajorActivationCapped: boolean;
+  pawnSoldierFollowUpHorse: boolean;
+  pawnSoldierHorseFootBlock: boolean;
+  pawnSoldierFollowUpElephant: boolean;
+  pawnSoldierCenterPreference: boolean;
+  pawnSoldierFollowUpAdvisor: boolean;
+  pawnSoldierAntiAdvisorFork: boolean;
 };
 
 type AiThreatInfo = {
@@ -96,6 +109,16 @@ type AiThreatInfo = {
 type LooseHiddenPieceReport = {
   loosePositions: Position[];
   protectedUnderAttackPositions: Position[];
+};
+
+type PawnSoldierFollowUp = {
+  pawnSoldierFollowUpHorse: boolean;
+  pawnSoldierHorseFootBlock: boolean;
+  pawnSoldierFollowUpElephant: boolean;
+  pawnSoldierCenterPreference: boolean;
+  pawnSoldierFollowUpAdvisor: boolean;
+  pawnSoldierAntiAdvisorFork: boolean;
+  score: number;
 };
 
 function detectRepetitiveCheck(state: GameState, move: Move, isCheck: boolean): boolean {
@@ -250,6 +273,101 @@ function isOpeningPawnStart(side: Side, position: Position): boolean {
 
 function isPriorityOpeningPawnFile(col: number): boolean {
   return col === 0 || col === 2 || col === 6 || col === 8;
+}
+
+function isUnrevealedPawnSoldier(piece: Piece | null | undefined): piece is Piece {
+  return !!piece && !piece.revealed && piece.originalType === 'pawn';
+}
+
+function hasUnrevealedPawnSoldiersForSide(board: Board, side: Side): boolean {
+  return board.some(row => row.some(piece =>
+    piece?.side === side && isUnrevealedPawnSoldier(piece)
+  ));
+}
+
+function countUnrevealedPawnSoldiersForSide(board: Board, side: Side): number {
+  return board.reduce((total, row) =>
+    total + row.filter(piece => piece?.side === side && isUnrevealedPawnSoldier(piece)).length,
+    0
+  );
+}
+
+function isPawnSoldierDevelopmentMove(move: Move): boolean {
+  return isUnrevealedPawnSoldier(move.piece);
+}
+
+function isRevealedMajorType(type: PieceType | null | undefined): boolean {
+  return type === 'rook' || type === 'cannon' || type === 'horse';
+}
+
+function moveFromPositionThreatensRevealedMajor(board: Board, side: Side, from: Position): boolean {
+  return getAllLegalMoves(board, side).some(move =>
+    samePosition(move.from, from) &&
+    !!move.captured &&
+    move.captured.revealed &&
+    isRevealedMajorType(move.captured.realType)
+  );
+}
+
+function isPawnOriginRevealedPiece(piece: Piece | null | undefined, type: PieceType): piece is Piece {
+  return !!piece && piece.revealed && piece.originalType === 'pawn' && piece.realType === type;
+}
+
+function isHorseFootBlockSquare(horse: Position, block: Position): boolean {
+  return Math.abs(horse.row - block.row) + Math.abs(horse.col - block.col) === 1;
+}
+
+function pawnSoldierFollowUpEvaluation(board: Board, side: Side, move: Move, weights: AiWeights): PawnSoldierFollowUp {
+  const empty = {
+    pawnSoldierFollowUpHorse: false,
+    pawnSoldierHorseFootBlock: false,
+    pawnSoldierFollowUpElephant: false,
+    pawnSoldierCenterPreference: false,
+    pawnSoldierFollowUpAdvisor: false,
+    pawnSoldierAntiAdvisorFork: false,
+    score: 0,
+  };
+  if (!isPawnSoldierDevelopmentMove(move)) return empty;
+
+  const enemy = opponent(side);
+  const result = { ...empty };
+  for (let row = 0; row < board.length; row++) {
+    for (let col = 0; col < board[row].length; col++) {
+      const piece = board[row][col];
+      if (piece?.side !== enemy || piece.originalType !== 'pawn' || !piece.revealed) continue;
+
+      const sameFile = move.from.col === col || move.to.col === col;
+      if (piece.realType === 'horse' && sameFile) {
+        result.pawnSoldierFollowUpHorse = true;
+        result.score += weights.pawnSoldierFollowUpHorseBonus;
+        if (isHorseFootBlockSquare({ row, col }, move.to)) {
+          result.pawnSoldierHorseFootBlock = true;
+          result.score += weights.pawnSoldierHorseFootBlockBonus;
+        }
+      }
+
+      if (piece.realType === 'elephant') {
+        const centerFile = move.from.col === 4 || move.to.col === 4;
+        const nearbyThirdOrFifth = col === 2 || col === 4 || col === 6;
+        if (centerFile || nearbyThirdOrFifth && Math.abs(move.to.col - col) <= 2) {
+          result.pawnSoldierFollowUpElephant = true;
+          result.score += weights.pawnSoldierFollowUpElephantBonus;
+          if (centerFile) {
+            result.pawnSoldierCenterPreference = true;
+            result.score += weights.pawnSoldierCenterPreferenceBonus;
+          }
+        }
+      }
+
+      if (piece.realType === 'advisor' && sameFile) {
+        result.pawnSoldierFollowUpAdvisor = true;
+        result.pawnSoldierAntiAdvisorFork = true;
+        result.score += weights.pawnSoldierFollowUpAdvisorBonus + weights.pawnSoldierAntiAdvisorForkBonus;
+      }
+    }
+  }
+
+  return result;
 }
 
 function openingPawnRevealBonus(state: GameState, move: Move, weights: AiWeights): number {
@@ -1004,6 +1122,18 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
   const moveRevealsUnknown = !move.piece.revealed;
   const revealDependentThreat = moveRevealsUnknown && threatByMovedPiece;
   const importantThreat = threatValue >= weights.pieceValues.horse && (threatDelta > 0 || threatByMovedPiece) && !revealDependentThreat;
+  const hasUnrevealedPawnSoldiers = hasUnrevealedPawnSoldiersForSide(state.board, state.turn);
+  const unrevealedPawnSoldierCount = countUnrevealedPawnSoldiersForSide(state.board, state.turn);
+  const pawnSoldiersStillDeveloping = unrevealedPawnSoldierCount >= 2;
+  const pawnSoldierDevelopment = isOpeningPhase(state, weights) && isPawnSoldierDevelopmentMove(move);
+  const pawnSoldierThreatRevealedMajor =
+    pawnSoldierDevelopment &&
+    moveFromPositionThreatensRevealedMajor(nextBoard, state.turn, move.to);
+  const pawnSoldierFollowUp = pawnSoldierFollowUpEvaluation(state.board, state.turn, move, weights);
+  const pawnSoldierDevelopmentScore = pawnSoldierDevelopment ? weights.pawnSoldierDevelopmentBonus : 0;
+  const pawnSoldierThreatRevealedMajorScore = pawnSoldierThreatRevealedMajor
+    ? weights.pawnSoldierThreatRevealedMajorBonus
+    : 0;
   const wasUnderAttack = isSquareAttacked(state.board, opponent(state.turn), move.from);
   const escapeBonus = wasUnderAttack && !reply.immediateCapture && movedPieceValue(move.piece, weights) >= weights.pieceValues.horse ? weights.escapeImportantPieceBonus : 0;
   const pressureBonus = kingZonePressureBonus(nextBoard, state.turn, move.to, weights);
@@ -1143,6 +1273,29 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     majorActivationScore > weights.firstMoveBlindMajorActivationCap
       ? -(majorActivationScore - weights.firstMoveBlindMajorActivationCap)
       : 0;
+  const pureBlindHorseActivation =
+    pawnSoldiersStillDeveloping &&
+    !move.piece.revealed &&
+    move.piece.originalType === 'horse' &&
+    captureGain === 0 &&
+    !effectiveCheck &&
+    !blocksImmediateWin &&
+    !rescuesLooseHiddenPiece &&
+    !importantThreat &&
+    (structure.score > 0 || majorActivation || structure.releasedHorseFromPressure);
+  const blindHorseStructureCapped =
+    pureBlindHorseActivation && structure.score > weights.pureBlindHorseStructureCap;
+  const blindHorseMajorActivationCapped =
+    pureBlindHorseActivation && majorActivationScore > weights.pureBlindHorseMajorActivationCap;
+  const finalStructureScore = blindHorseStructureCapped
+    ? weights.pureBlindHorseStructureCap
+    : structure.score;
+  const finalMajorActivationScore = blindHorseMajorActivationCapped
+    ? weights.pureBlindHorseMajorActivationCap
+    : majorActivationScore;
+  const pureBlindHorsePenalty = pureBlindHorseActivation
+    ? weights.pureBlindHorseActivationPenalty + weights.pawnSoldierHiddenExtraBlindHorsePenalty
+    : 0;
 
   const forcingReply =
     blocksImmediateWin ||
@@ -1165,10 +1318,12 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     pressureBonus > 0 ||
     keySquareScore >= weights.keySquareEnemyPalaceBonus ||
     hiddenPressureScore >= weights.hiddenPiecePressureBonus + weights.importantHiddenPiecePressureBonus ||
-    structure.score > 0 ||
+    finalStructureScore > 0 ||
     structure.pawnLineDefense ||
     structure.releasedHorseFromPressure ||
     structure.releasedElephantFromPressure ||
+    pawnSoldierDevelopment ||
+    pawnSoldierFollowUp.score > 0 ||
     blocksImmediateWin ||
     effectiveCheck ||
     rescuesLooseHiddenPiece ||
@@ -1200,10 +1355,13 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     keySquareScore +
     finalHiddenPressureScore +
     leaveKeySquareScore +
-    structure.score +
+    finalStructureScore +
     openingTempoPenalty +
-    majorActivationScore +
+    finalMajorActivationScore +
     opponentRevealSuppressionScore +
+    pawnSoldierDevelopmentScore +
+    pawnSoldierThreatRevealedMajorScore +
+    pawnSoldierFollowUp.score +
     revealChoicePenalty +
     blockDangerBonus +
     checkBonus +
@@ -1222,6 +1380,7 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     activationOnlyCapPenalty +
     firstMoveBlindHorsePenalty +
     firstMoveBlindMajorActivationCapPenalty +
+    pureBlindHorsePenalty +
     forcedBadDefensePenalty -
     Math.round(reply.maxReplyGain * weights.maxReplyGainPenaltyRatio);
 
@@ -1244,7 +1403,7 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     leaveKeySquareScore,
     hiddenPressureScore,
     controlsImportantHidden,
-    structureScore: structure.score,
+    structureScore: finalStructureScore,
     structurePatterns: structure.patterns,
     releasedHorseFromPressure: structure.releasedHorseFromPressure,
     releasedElephantFromPressure: structure.releasedElephantFromPressure,
@@ -1292,6 +1451,19 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     firstMovePawnOpening,
     firstMoveBlindHorseActivation,
     firstMoveBlindHorsePenalty: firstMoveBlindHorsePenalty + firstMoveBlindMajorActivationCapPenalty,
+    hasUnrevealedPawnSoldiers,
+    pawnSoldierDevelopment,
+    pawnSoldierThreatRevealedMajor,
+    pureBlindHorseActivation,
+    pureBlindHorsePenalty,
+    blindHorseStructureCapped,
+    blindHorseMajorActivationCapped,
+    pawnSoldierFollowUpHorse: pawnSoldierFollowUp.pawnSoldierFollowUpHorse,
+    pawnSoldierHorseFootBlock: pawnSoldierFollowUp.pawnSoldierHorseFootBlock,
+    pawnSoldierFollowUpElephant: pawnSoldierFollowUp.pawnSoldierFollowUpElephant,
+    pawnSoldierCenterPreference: pawnSoldierFollowUp.pawnSoldierCenterPreference,
+    pawnSoldierFollowUpAdvisor: pawnSoldierFollowUp.pawnSoldierFollowUpAdvisor,
+    pawnSoldierAntiAdvisorFork: pawnSoldierFollowUp.pawnSoldierAntiAdvisorFork,
   };
 }
 
@@ -1300,6 +1472,7 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (evaluation.rescuesLooseHiddenPiece) return '暗子無保護受攻擊，優先脫離';
   if (evaluation.postMoveLooseHiddenPiece && evaluation.postMoveLoosePiecePenalty < 0) return '下完仍有無保護暗子被抓，已扣分';
   if (evaluation.firstMoveBlindHorseActivation) return '第一手盲動暗馬，已降分';
+  if (evaluation.pureBlindHorseActivation) return '暗兵卒尚未開發，純暗馬活化已降分';
   if (evaluation.forcedBadDefense) return '暗士硬保死車，易卡陣，已扣分';
   if (evaluation.hangingMove) return '落點缺少保護，已扣分';
   if (evaluation.advisorRevealClogRisk && evaluation.advisorRevealClogPenalty < 0) return '暗士翻子易卡住將門，已扣分';
@@ -1312,6 +1485,15 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (best.captured && evaluation.targetGain >= weights.pieceValues.cannon) return '吃高價目標';
   if (best.captured && evaluation.exchangeNet >= weights.safeCaptureExchangeNet) return '安全吃子';
   if (best.captured && evaluation.exchangeNet >= 0) return '交換不虧';
+  if (evaluation.pawnSoldierHorseFootBlock) return '同路暗兵卒卡馬腳';
+  if (evaluation.pawnSoldierFollowUpHorse) return '暗兵卒接續壓制明馬';
+  if (evaluation.pawnSoldierCenterPreference) return '暗兵卒翻相，優先活中路';
+  if (evaluation.pawnSoldierFollowUpElephant) return '暗兵卒翻相，優先活中路';
+  if (evaluation.pawnSoldierAntiAdvisorFork) return '同路暗兵卒對翻，避免士抓蛇雙';
+  if (evaluation.pawnSoldierFollowUpAdvisor) return '同路暗兵卒對翻，避免士抓蛇雙';
+  if (evaluation.pawnSoldierThreatRevealedMajor) return '暗兵卒壓制對方明子';
+  if (evaluation.firstMovePawnOpening) return '第一手穩健翹邊兵';
+  if (evaluation.pawnSoldierDevelopment) return '開局優先開發暗兵卒';
   if (evaluation.revealTacticalSuppressed && !evaluation.effectiveCheck && !evaluation.releasedHorseFromPressure && !evaluation.releasedElephantFromPressure && !evaluation.preventsPawnLineLock) return '暗子翻開效果未知，未按確定將軍加分';
   if (evaluation.repetitiveCheck) return '無成果連將，改尋求增援';
   if (evaluation.effectiveCheck) return '有效將軍';
@@ -1334,7 +1516,6 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (newThreat && evaluation.threatDelta > 0) return '形成新的高價威脅';
   if (evaluation.escapeBonus > 0) return '脫離重要子力危險';
   if (evaluation.pressureBonus > 0) return '形成攻擊壓力';
-  if (evaluation.firstMovePawnOpening) return '第一手穩健翹邊兵';
   if (evaluation.controlsImportantHidden && !evaluation.edgeCannonPressureUnresolved) return '壓制對方重要暗子';
   if (evaluation.hiddenPressureScore > 0 && !evaluation.edgeCannonPressureUnresolved) return '壓制對方暗子';
   if (evaluation.keySquareScore >= weights.keySquareEnemyPalaceBonus) return '佔住關鍵點';
@@ -1430,6 +1611,19 @@ export function recommendMove(
     firstMovePawnOpening: evaluation.firstMovePawnOpening,
     firstMoveBlindHorseActivation: evaluation.firstMoveBlindHorseActivation,
     firstMoveBlindHorsePenalty: evaluation.firstMoveBlindHorsePenalty,
+    hasUnrevealedPawnSoldiers: evaluation.hasUnrevealedPawnSoldiers,
+    pawnSoldierDevelopment: evaluation.pawnSoldierDevelopment,
+    pawnSoldierThreatRevealedMajor: evaluation.pawnSoldierThreatRevealedMajor,
+    pureBlindHorseActivation: evaluation.pureBlindHorseActivation,
+    pureBlindHorsePenalty: evaluation.pureBlindHorsePenalty,
+    blindHorseStructureCapped: evaluation.blindHorseStructureCapped,
+    blindHorseMajorActivationCapped: evaluation.blindHorseMajorActivationCapped,
+    pawnSoldierFollowUpHorse: evaluation.pawnSoldierFollowUpHorse,
+    pawnSoldierHorseFootBlock: evaluation.pawnSoldierHorseFootBlock,
+    pawnSoldierFollowUpElephant: evaluation.pawnSoldierFollowUpElephant,
+    pawnSoldierCenterPreference: evaluation.pawnSoldierCenterPreference,
+    pawnSoldierFollowUpAdvisor: evaluation.pawnSoldierFollowUpAdvisor,
+    pawnSoldierAntiAdvisorFork: evaluation.pawnSoldierAntiAdvisorFork,
   }));
 
   return {

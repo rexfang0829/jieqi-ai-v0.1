@@ -46,6 +46,23 @@ function fmtTrace(t: AiMoveTrace): string {
     '  openingMajorGoal：' + bool(t.openingMajorGoal ?? false),
     '  majorActivation：' + bool(t.majorActivation ?? false),
     '  opponentRevealSuppression：' + bool(t.opponentRevealSuppression ?? false),
+    '  hasUnrevealedPawnSoldiers: ' + bool(t.hasUnrevealedPawnSoldiers),
+    '  pawnSoldierDevelopment: ' + bool(t.pawnSoldierDevelopment),
+    '  pawnSoldierThreatRevealedMajor: ' + bool(t.pawnSoldierThreatRevealedMajor),
+    '  pureBlindHorseActivation: ' + bool(t.pureBlindHorseActivation),
+    '  pureBlindHorsePenalty: ' + num(t.pureBlindHorsePenalty),
+    '  blindHorseStructureCapped: ' + bool(t.blindHorseStructureCapped),
+    '  blindHorseMajorActivationCapped: ' + bool(t.blindHorseMajorActivationCapped),
+    '  pawnSoldierFollowUpHorse: ' + bool(t.pawnSoldierFollowUpHorse),
+    '  pawnSoldierHorseFootBlock: ' + bool(t.pawnSoldierHorseFootBlock),
+    '  pawnSoldierFollowUpElephant: ' + bool(t.pawnSoldierFollowUpElephant),
+    '  pawnSoldierCenterPreference: ' + bool(t.pawnSoldierCenterPreference),
+    '  pawnSoldierFollowUpAdvisor: ' + bool(t.pawnSoldierFollowUpAdvisor),
+    '  pawnSoldierAntiAdvisorFork: ' + bool(t.pawnSoldierAntiAdvisorFork),
+    '  postMoveLooseHiddenPiece: ' + bool(t.postMoveLooseHiddenPiece),
+    '  postMoveProtectedUnderAttackCount: ' + num(t.postMoveProtectedUnderAttackCount),
+    '  rescuesLooseHiddenPiece: ' + bool(t.rescuesLooseHiddenPiece),
+    '  ignoresLooseHiddenPiece: ' + bool(t.ignoresLooseHiddenPiece),
   ];
   return lines.join('\n');
 }

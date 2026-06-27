@@ -1244,7 +1244,7 @@ test('AI splits red edge cannon pressure from pawn line guard pattern', () => {
   assertEqual(recommended.move === hiddenCannonSideShift, false);
 });
 
-test('AI splits red edge rook pressure into pawn line guard pattern', () => {
+test('AI keeps rook pressure trace but prioritizes pawn soldier over pure horse in early opening', () => {
   const board = emptyBoard();
   place(board, 9, 4, piece('red', 'king'));
   place(board, 0, 4, piece('black', 'king'));
@@ -1265,9 +1265,15 @@ test('AI splits red edge rook pressure into pawn line guard pattern', () => {
   ]);
 
   assertOk(recommended.move);
-  assertEqual(recommended.move, horseReleaseToGuard);
+  assertEqual(recommended.move, sameFilePawnGamble);
+  assertOk(recommended.traces);
+  const guardTrace = recommended.traces.find(t => t.move === horseReleaseToGuard);
+  assertOk(guardTrace);
+  assertEqual(guardTrace.patterns.some(p =>
+    p === 'opening_edge_rook_pawn_line_lock' ||
+    p === 'horse_release_to_guard_pawn_line'
+  ), true);
   assertEqual(recommended.move === horseReleaseToEdge, false);
-  assertEqual(recommended.move === sameFilePawnGamble, false);
 });
 
 test('AI opening pawn bonus does not override immediate checkmate', () => {
@@ -1532,6 +1538,19 @@ test('recommendMove returns traces with correct fields', () => {
   assertOk(typeof first.firstMovePawnOpening === 'boolean');
   assertOk(typeof first.firstMoveBlindHorseActivation === 'boolean');
   assertOk(typeof first.firstMoveBlindHorsePenalty === 'number');
+  assertOk(typeof first.hasUnrevealedPawnSoldiers === 'boolean');
+  assertOk(typeof first.pawnSoldierDevelopment === 'boolean');
+  assertOk(typeof first.pawnSoldierThreatRevealedMajor === 'boolean');
+  assertOk(typeof first.pureBlindHorseActivation === 'boolean');
+  assertOk(typeof first.pureBlindHorsePenalty === 'number');
+  assertOk(typeof first.blindHorseStructureCapped === 'boolean');
+  assertOk(typeof first.blindHorseMajorActivationCapped === 'boolean');
+  assertOk(typeof first.pawnSoldierFollowUpHorse === 'boolean');
+  assertOk(typeof first.pawnSoldierHorseFootBlock === 'boolean');
+  assertOk(typeof first.pawnSoldierFollowUpElephant === 'boolean');
+  assertOk(typeof first.pawnSoldierCenterPreference === 'boolean');
+  assertOk(typeof first.pawnSoldierFollowUpAdvisor === 'boolean');
+  assertOk(typeof first.pawnSoldierAntiAdvisorFork === 'boolean');
 });
 
 test('AI prioritizes rescuing an unprotected hidden pawn attacked by a revealed elephant', () => {
@@ -1631,15 +1650,11 @@ test('trace for recommended move includes cannon pattern when edge cannon threat
   ]);
   assertOk(recommended.move);
   assertOk(recommended.traces);
-  const rec = recommended.move;
-  const recTrace = recommended.traces.find(t =>
-    t.move.from.row === rec.from.row &&
-    t.move.from.col === rec.from.col &&
-    t.move.to.row === rec.to.row &&
-    t.move.to.col === rec.to.col
+  const pressureTrace = recommended.traces.find(t =>
+    t.move === horseReleaseToEdge || t.move === elephantReleaseToEdge
   );
-  assertOk(recTrace);
-  assertEqual(recTrace.patterns.some(p =>
+  assertOk(pressureTrace);
+  assertEqual(pressureTrace.patterns.some(p =>
     p === 'opening_cannon_hits_hidden_rook' ||
     p === 'opening_edge_cannon_structure_pressure' ||
     p === 'horse_release_from_cannon_pressure'
@@ -1665,15 +1680,9 @@ test('trace for recommended move includes rook pattern when edge rook threatens 
   ]);
   assertOk(recommended.move);
   assertOk(recommended.traces);
-  const rec = recommended.move;
-  const recTrace = recommended.traces.find(t =>
-    t.move.from.row === rec.from.row &&
-    t.move.from.col === rec.from.col &&
-    t.move.to.row === rec.to.row &&
-    t.move.to.col === rec.to.col
-  );
-  assertOk(recTrace);
-  assertEqual(recTrace.patterns.some(p =>
+  const guardTrace = recommended.traces.find(t => t.move === horseReleaseToGuard);
+  assertOk(guardTrace);
+  assertEqual(guardTrace.patterns.some(p =>
     p === 'opening_edge_rook_pawn_line_lock' ||
     p === 'opening_edge_rook_line_lock_defense' ||
     p === 'horse_release_to_guard_pawn_line' ||
@@ -1829,7 +1838,7 @@ test('reveal-threat suppression: unrevealed cannon threat via screen is suppress
   assertOk(!t.reason.includes('威脅'));
 });
 
-test('edge cannon: horse release is preferred over unrevealed pawn move (edge cannon pressure cap)', () => {
+test('edge cannon: horse release trace remains but pawn soldier development can lead early', () => {
   // Red has edge cannon (revealed at col 0). Black faces cannon pressure.
   // Black options: release horse from backrank (活馬解除邊炮壓制) vs move plain unrevealed pawn.
   // With edge cannon pressure cap, plain pawn hiddenPressureScore is capped and horse release wins.
@@ -1847,9 +1856,12 @@ test('edge cannon: horse release is preferred over unrevealed pawn move (edge ca
   const rec = recommendMove(state);
   assertOk(rec.traces);
 
-  // Horse release should be recommended
   assertOk(rec.move);
-  assertEqual(rec.move.piece.originalType, 'horse');
+  const horseTrace = rec.traces.find(t =>
+    !t.move.piece.revealed && t.move.piece.originalType === 'horse' && t.move.from.row === 0
+  );
+  assertOk(horseTrace);
+  assertEqual(horseTrace.patterns.includes('opening_hidden_pawn_blocks_horse_foot'), true);
 
   // Pawn traces under edge cannon pressure should have edgeCannonPressureUnresolved = true
   const pawnTrace = rec.traces.find(t =>
@@ -2518,6 +2530,133 @@ test('Fair AI first move opening rule does not override direct checkmate', () =>
   assertEqual(rec.move.to.row, 0);
   assertEqual(rec.move.to.col, 4);
   assertEqual(rec.reason, '此步直接形成絕殺');
+});
+
+test('black pawn soldier follow-up beats blind horse after red edge pawn flips horse', () => {
+  const state = newGame();
+  state.board[6][0]!.realType = 'horse';
+  const afterRed = applyMove(state, { row: 6, col: 0 }, { row: 5, col: 0 });
+  const rec = recommendMoveFair(afterRed);
+  assertOk(rec.move);
+  assertEqual(rec.move.from.row, 3);
+  assertEqual(rec.move.from.col, 0);
+  assertEqual(rec.move.to.row, 4);
+  assertEqual(rec.move.to.col, 0);
+  assertOk(rec.traces);
+  const pawnTrace = rec.traces.find(t =>
+    t.move.from.row === 3 && t.move.from.col === 0 && t.move.to.row === 4 && t.move.to.col === 0
+  );
+  const horseTrace = rec.traces.find(t =>
+    t.move.from.row === 0 && t.move.from.col === 7 && t.move.to.row === 2 && t.move.to.col === 6
+  );
+  assertOk(pawnTrace);
+  assertOk(horseTrace);
+  assertEqual(pawnTrace.pawnSoldierDevelopment, true);
+  assertEqual(pawnTrace.pawnSoldierThreatRevealedMajor, true);
+  assertEqual(pawnTrace.pawnSoldierFollowUpHorse, true);
+  assertEqual(pawnTrace.pawnSoldierHorseFootBlock, true);
+  assertEqual(horseTrace.pureBlindHorseActivation, true);
+  assertEqual((horseTrace.pureBlindHorsePenalty ?? 0) < 0, true);
+  assertEqual(horseTrace.blindHorseStructureCapped, true);
+  assertEqual(horseTrace.blindHorseMajorActivationCapped, true);
+  assertEqual(pawnTrace.score > horseTrace.score, true);
+});
+
+test('blind horse activation is not capped after pawn soldiers are mostly developed', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn', 'pawn', true));
+  place(board, 5, 0, piece('red', 'pawn', 'cannon', true));
+  place(board, 0, 1, piece('black', 'horse', 'horse', false));
+  const state = { board, turn: 'black' as const, history: Array(6).fill(null).map((_, i) => ({
+    from: { row: 3, col: i % 9 },
+    to: { row: 4, col: i % 9 },
+    piece: piece('black', 'pawn'),
+  })), status: 'playing' as const };
+  const horseRelease = findMove(board, 'black', [0, 1], [2, 0]);
+  const rec = recommendMoveFair(state);
+  assertOk(rec.traces);
+  const trace = rec.traces.find(t =>
+    t.move.from.row === horseRelease.from.row &&
+    t.move.from.col === horseRelease.from.col &&
+    t.move.to.row === horseRelease.to.row &&
+    t.move.to.col === horseRelease.to.col
+  );
+  assertOk(trace);
+  assertEqual(trace.hasUnrevealedPawnSoldiers, false);
+  assertEqual(trace.pureBlindHorseActivation, false);
+  assertEqual(trace.blindHorseStructureCapped, false);
+});
+
+test('blind horse can still take a high value target without pure activation penalty', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn', 'pawn', true));
+  place(board, 2, 2, piece('black', 'horse', 'horse', false));
+  place(board, 4, 3, piece('red', 'rook', 'rook', true));
+  place(board, 3, 0, piece('black', 'pawn', 'pawn', false));
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const capture = findMove(board, 'black', [2, 2], [4, 3]);
+  const rec = recommendMoveFair(state);
+  assertOk(rec.traces);
+  const trace = rec.traces.find(t =>
+    t.move.from.row === capture.from.row &&
+    t.move.from.col === capture.from.col &&
+    t.move.to.row === capture.to.row &&
+    t.move.to.col === capture.to.col
+  );
+  assertOk(trace);
+  assertEqual(trace.captureGain > 0, true);
+  assertEqual(trace.pureBlindHorseActivation, false);
+});
+
+test('pawn soldier follow-up after elephant reveal prefers center pawn soldier', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn', 'pawn', true));
+  place(board, 5, 2, piece('red', 'pawn', 'elephant', true));
+  place(board, 3, 4, piece('black', 'pawn', 'pawn', false));
+  place(board, 0, 7, piece('black', 'horse', 'horse', false));
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const centerPawn = findMove(board, 'black', [3, 4], [4, 4]);
+  const horse = findMove(board, 'black', [0, 7], [2, 6]);
+  const rec = recommendMoveFair(state);
+  assertOk(rec.traces);
+  const centerTrace = rec.traces.find(t => t.move.from.row === centerPawn.from.row && t.move.from.col === centerPawn.from.col);
+  const horseTrace = rec.traces.find(t => t.move.from.row === horse.from.row && t.move.from.col === horse.from.col && t.move.to.col === horse.to.col);
+  assertOk(centerTrace);
+  assertOk(horseTrace);
+  assertEqual(centerTrace.pawnSoldierFollowUpElephant, true);
+  assertEqual(centerTrace.pawnSoldierCenterPreference, true);
+  assertEqual(centerTrace.score > horseTrace.score, true);
+});
+
+test('pawn soldier follow-up after advisor reveal gets anti fork bonus', () => {
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 5, 4, piece('red', 'pawn', 'pawn', true));
+  place(board, 5, 0, piece('red', 'pawn', 'advisor', true));
+  place(board, 3, 0, piece('black', 'pawn', 'pawn', false));
+  const state = { board, turn: 'black' as const, history: [], status: 'playing' as const };
+  const rec = recommendMoveFair(state);
+  assertOk(rec.traces);
+  const trace = rec.traces.find(t => t.move.from.row === 3 && t.move.from.col === 0);
+  assertOk(trace);
+  assertEqual(trace.pawnSoldierFollowUpAdvisor, true);
+  assertEqual(trace.pawnSoldierAntiAdvisorFork, true);
+});
+
+test('AI debug report prints pawn soldier and pure blind horse trace fields', () => {
+  const state = newGame();
+  const rec = recommendMoveFair(state);
+  const text = formatAiDebugReport({ modeName: 'test', state, recommendation: rec });
+  assertEqual(text.includes('pureBlindHorseActivation'), true);
+  assertEqual(text.includes('pawnSoldierDevelopment'), true);
+  assertEqual(text.includes('postMoveLooseHiddenPiece'), true);
 });
 
 // --- Dead Major Threat Hold + Advisor Reveal Clog Risk MVP tests ---------------

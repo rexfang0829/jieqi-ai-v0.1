@@ -1,6 +1,11 @@
 # NEXT_TASK
 
 ## Completed this round
+- Prioritized pawn-soldier development over early pure blind-horse activation.
+- Added pawn-soldier pressure on revealed major pieces.
+- Added pawn-soldier follow-up heuristics for revealed pawn-origin horse / elephant / advisor.
+- Added pure blind-horse activation trace, cap, and penalty while pawn soldiers are still undeveloped.
+- Updated AI debug report to print pawn-soldier, pure blind-horse, and loose-hidden-piece trace fields.
 - Fixed Fair AI first move to prefer 1 / 3 / 7 / 9 hidden pawn openings over blind hidden horse activation.
 - Aligned AiPanel main recommendation with `recommendMoveFair`; Oracle is now Debug comparison only.
 - Added first-move Fair AI trace fields and regression tests.
