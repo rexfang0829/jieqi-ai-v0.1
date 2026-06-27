@@ -1,6 +1,42 @@
 # NEXT_TASK
 
 ## 此輪完成
+- AI Safety Gate 第二包：一手多效解危機 + 最大止損
+
+### 核心新增
+- 新增 `HighValueThreat` 型別：`{ position, pieceType, pieceValue, attackers, attackCount, protectedByOwnSide, estimatedLoss }`
+- 新增 `analyzeHighValueThreats(board, side, weights)`：取代 `scanHighValueThreats`，回傳完整 `HighValueThreat[]`
+- 利用 `estimatedLoss`（保護時為 0，否則為棋子價值）計算威脅損失變化
+- 新增 `threatLossBefore / threatLossAfter / threatLossReduced` 衡量解危效果
+- 新增 `partialDefense`：無法完全解危但降低損失（如守車使損失 500→0）
+- 新增 `multiPurposeDefense`：解危同時獲得吃子/將軍/其他威脅
+- 新增 `rescuesHighValuePiece / rescuesSecondaryPiece / blocksHorseFork / counterAttacksAttacker / forcesOpponentChoice`
+- 新增 `damageControl / minimumLossDefense`：損失控制分類
+- 新增 13 個 trace 欄位（`AiMoveTrace` + `MoveEvaluation`）
+- 新增 9 個權重（`AiWeights`）
+- 新增 6 個 reason strings（中文）
+- `formatAiDebugReport` 補充 13 個新 trace 欄位輸出
+- 新增測試：SG2 A1/A2/B/C/D/E（6 個功能測試）+ debug report 欄位測試（1 個）
+- `npx tsc --noEmit` 無錯；`npx tsc -p tsconfig.test.json` 無錯；SG2 A1-E 及 debug report test 全部通過
+
+## 建議下一步
+1. AI 開局理論回歸測試擴充。
+2. Pattern 觸發日誌 / 統計。
+3. AI VS AI 對局資料統計。
+4. 自我對弈調參實驗。
+5. Belief State / 剩餘池概率推演。
+6. Threat Map MVP。
+
+## 非明確指示不要做
+- 不改 Board UI。
+- 不偷看未翻暗子的 `realType`。
+- 不加後端或資料庫。
+
+---
+
+# NEXT_TASK
+
+## 此輪完成
 - 困斃（無合法棋步）結束時播放絕殺音效
 - 修正兩個 AI 實戰漏判問題
 
@@ -252,28 +288,4 @@
 
 # NEXT_TASK
 
-## 此輪完成
-- 修正邊 G / 邊路明車壓力時，馬8進7 類標準解被暗兵卒開發蓋過問題
-
-### 核心邏輯
-- `horsePawnLineGuard`（馬走好守格且邊路受車壓）納入 `releasedHorseFromPressure`，視為目的性應手
-- `pureBlindHorseActivation` 新增 `!structure.horsePawnLineGuard` 排除，避免好守格被誤降分
-- `horsePawnLineGuardEdgeRookBonus: +80`：邊路受車壓且暗兵卒尚在開發時，馬守兵線加分
-- `pawnSoldierDelayedByEdgeRookPressurePenalty: -90`：邊路受車壓下普通暗兵卒開發扣分
-- 新增 reason：「邊路明車壓兵線，優先活馬守線」/ 「邊 G 壓力下，延後普通暗兵卒開發」
-- 新增 3 個 trace 欄位：`edgeRookPawnLineLockRisk` / `horsePawnLineGuard` / `pawnSoldierDelayedByEdgeRookPressure`
-- 新增 3 個測試（C1~C3）
-- `npx tsc --noEmit` 無錯；`npm test` 全 199 項通過
-
-## 建議下一步
-1. AI 開局理論回歸測試擴充。
-2. Pattern 觸發日誌 / 統計。
-3. AI VS AI 對局資料統計。
-4. 自我對弈調參實驗。
-5. Belief State / 剩餘池概率推演。
-6. Threat Map MVP。
-
-## 非明確指示不要做
-- 不改 Board UI。
-- 不偷看未翻暗子的 `realType`。
-- 不加後端或資料庫。
+##

@@ -3794,9 +3794,142 @@ test('safety gate SG3: all evaluated traces have safetyGateTriggered when rook i
   place(board, 8, 2, piece('red', 'pawn', 'pawn', false));
   const state: GameState = { board, turn: 'red', history: [], status: 'playing' };
   const r = recommendMove(state);
-  assertOk(r.traces && r.traces.length > 0);
+  assertOk(r.traces);
+  assertOk(r.traces.length > 0);
   // Every evaluated move should see the safety gate active
   for (const t of r.traces) {
     assertOk(t.safetyGateTriggered);
   }
+});
+
+// === Safety Gate 第二包：一手多效解危機 + 最大止損 (SG2 A–E) ===
+
+test('SG2 A1: rescuesHighValuePiece=true when move escapes threatened rook', () => {
+  // Red revealed rook at [5,5] attacked by black horse at [3,6] (foot [4,6]).
+  // Red moves rook from [5,5] to [5,0] — threat resolved, rescuesHighValuePiece=true.
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 3, piece('black', 'king'));
+  place(board, 5, 5, piece('red', 'rook', 'rook', true));      // threatened rook
+  place(board, 3, 6, piece('black', 'horse', 'horse', true));  // attacker (foot [4,6])
+  place(board, 8, 2, piece('red', 'pawn', 'pawn', false));     // pawn dev alternative
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const rookEscape = findMove(board, 'red', [5, 5], [5, 0]);
+  const result = recommendMove(state, [rookEscape]);
+  assertOk(result.traces);
+  const t = result.traces.find(tr => tr.move === rookEscape);
+  assertOk(t);
+  assertOk(t.safetyGateTriggered);
+  assertOk(t.resolvedHighValueThreat);
+  assertOk(t.rescuesHighValuePiece);
+  assertEqual(t.decisionLayer, 1);
+});
+
+test('SG2 A2: AI prefers rook escape over pawn development under single rook threat', () => {
+  // Same board — rook escape must score higher than pawn move.
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 3, piece('black', 'king'));
+  place(board, 5, 5, piece('red', 'rook', 'rook', true));
+  place(board, 3, 6, piece('black', 'horse', 'horse', true));
+  place(board, 8, 2, piece('red', 'pawn', 'pawn', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const rookEscape = findMove(board, 'red', [5, 5], [5, 0]);
+  const pawnDev   = findMove(board, 'red', [8, 2], [7, 2]);
+  const result = recommendMove(state, [rookEscape, pawnDev]);
+  assertOk(result.traces);
+  const rookTrace = result.traces.find(t => t.move === rookEscape);
+  const pawnTrace = result.traces.find(t => t.move === pawnDev);
+  assertOk(rookTrace);
+  assertOk(pawnTrace);
+  assertOk(rookTrace.score > pawnTrace.score);
+  assertOk(rookTrace.rescuesHighValuePiece);
+  assertOk(pawnTrace.unresolvedHighValueThreat);
+  assertOk(pawnTrace.ignoredHigherPriorityThreat);
+});
+
+test('SG2 B: multiPurposeDefense=true when rook escape also captures an enemy piece', () => {
+  // Red rook at [5,5] threatened by black horse at [3,6].
+  // Black revealed pawn at [5,0]: rook can escape to [5,0] AND capture it (captureGain>0).
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 3, piece('black', 'king'));
+  place(board, 5, 5, piece('red', 'rook', 'rook', true));
+  place(board, 3, 6, piece('black', 'horse', 'horse', true));
+  place(board, 5, 0, piece('black', 'pawn', 'pawn', true));    // capturable on escape square
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const rookCaptureEscape = findMove(board, 'red', [5, 5], [5, 0]);
+  const result = recommendMove(state, [rookCaptureEscape]);
+  assertOk(result.traces);
+  const t = result.traces.find(tr => tr.move === rookCaptureEscape);
+  assertOk(t);
+  assertOk(t.resolvedHighValueThreat);
+  assertOk(t.rescuesHighValuePiece);
+  assertOk(t.multiPurposeDefense);
+});
+
+test('SG2 C: counterAttacksAttacker=true when move captures the horse threatening our rook', () => {
+  // Red rook1 at [5,5] threatened by black horse at [3,6] (foot [4,6]).
+  // Red rook2 at [1,6] moves to [3,6] — captures the attacker.
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 3, piece('black', 'king'));
+  place(board, 5, 5, piece('red', 'rook', 'rook', true));      // threatened rook
+  place(board, 3, 6, piece('black', 'horse', 'horse', true));  // attacker
+  place(board, 1, 6, piece('red', 'rook', 'rook', true));      // will capture the horse
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const captureHorse = findMove(board, 'red', [1, 6], [3, 6]);
+  const result = recommendMove(state, [captureHorse]);
+  assertOk(result.traces);
+  const t = result.traces.find(tr => tr.move === captureHorse);
+  assertOk(t);
+  assertOk(t.safetyGateTriggered);
+  assertOk(t.counterAttacksAttacker);
+  assertOk(t.resolvedHighValueThreat);
+});
+
+test('SG2 D: partialDefense=true when move protects the threatened rook (reduces estimatedLoss)', () => {
+  // Red rook1 at [5,5] is attacked by black horse at [3,6] (foot [4,6]) and currently unprotected.
+  // Red rook_guard at [7,4] moves to [5,4]: it now sits on same row as rook1 and can capture a probe there.
+  // Guard was NOT on col 5 before the move, so rook1 was unprotected (estimatedLoss=500).
+  // After move: rook1 is protected (estimatedLoss->0), but still attacked -> partialDefense=true.
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 3, piece('black', 'king'));
+  place(board, 5, 5, piece('red', 'rook', 'rook', true));      // threatened, unprotected
+  place(board, 3, 6, piece('black', 'horse', 'horse', true));  // attacker (foot [4,6])
+  place(board, 7, 4, piece('red', 'rook', 'rook', true));      // guard: NOT on col5/row5 yet
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const protect = findMove(board, 'red', [7, 4], [5, 4]);      // move to same row as rook1
+  const result = recommendMove(state, [protect]);
+  assertOk(result.traces);
+  const t = result.traces.find(tr => tr.move === protect);
+  assertOk(t);
+  assertOk(t.safetyGateTriggered);
+  assertOk(!t.resolvedHighValueThreat);
+  assertOk(t.damageControl);
+  assertOk(t.partialDefense);
+  assertOk((t.threatLossReduced ?? 0) > 0);
+});
+
+test('SG2 E: damageControl=true, partialDefense=false when unrelated move does not affect threat', () => {
+  // Red rook at [5,5] threatened by black horse at [3,6].
+  // Red moves unrevealed pawn at [8,2]->[7,2]: completely unrelated, threat unchanged.
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 3, piece('black', 'king'));
+  place(board, 5, 5, piece('red', 'rook', 'rook', true));
+  place(board, 3, 6, piece('black', 'horse', 'horse', true));
+  place(board, 8, 2, piece('red', 'pawn', 'pawn', false));
+  const state = { board, turn: 'red' as const, history: [], status: 'playing' as const };
+  const pawnDev = findMove(board, 'red', [8, 2], [7, 2]);
+  const result = recommendMove(state, [pawnDev]);
+  assertOk(result.traces);
+  const t = result.traces.find(tr => tr.move === pawnDev);
+  assertOk(t);
+  assertOk(t.safetyGateTriggered);
+  assertOk(t.damageControl);
+  assertOk(!t.resolvedHighValueThreat);
+  assertOk(!t.partialDefense);
+  assertOk(t.unresolvedHighValueThreat);
 });

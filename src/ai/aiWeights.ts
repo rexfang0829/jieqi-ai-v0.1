@@ -125,6 +125,15 @@ export type AiWeights = {
   unresolvedHighValueThreatPenalty: number;
   ignoredHigherPriorityThreatPenalty: number;
   resolvedHighValueThreatBonus: number;
+  multiPurposeDefenseBonus: number;
+  rescuesHighValuePieceBonus: number;
+  rescuesSecondaryPieceBonus: number;
+  blocksHorseForkBonus: number;
+  counterAttacksAttackerBonus: number;
+  forcesOpponentChoiceBonus: number;
+  minimumLossDefenseBonus: number;
+  partialDefensePenalty: number;
+  unresolvedThreatAfterDefensePenalty: number;
 };
 
 export const defaultAiWeights: AiWeights = {
@@ -260,4 +269,13 @@ export const defaultAiWeights: AiWeights = {
   unresolvedHighValueThreatPenalty: -250,
   ignoredHigherPriorityThreatPenalty: -180,
   resolvedHighValueThreatBonus: 120,
+  multiPurposeDefenseBonus: 180,
+  rescuesHighValuePieceBonus: 130,
+  rescuesSecondaryPieceBonus: 70,
+  blocksHorseForkBonus: 80,
+  counterAttacksAttackerBonus: 90,
+  forcesOpponentChoiceBonus: 60,
+  minimumLossDefenseBonus: 90,
+  partialDefensePenalty: -90,
+  unresolvedThreatAfterDefensePenalty: -180,
 };

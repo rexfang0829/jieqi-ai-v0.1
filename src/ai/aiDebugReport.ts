@@ -99,6 +99,19 @@ function fmtTrace(t: AiMoveTrace): string {
     '  postMoveProtectedUnderAttackCount: ' + num(t.postMoveProtectedUnderAttackCount),
     '  rescuesLooseHiddenPiece: ' + bool(t.rescuesLooseHiddenPiece),
     '  ignoresLooseHiddenPiece: ' + bool(t.ignoresLooseHiddenPiece),
+    '  multiPurposeDefense: ' + bool(t.multiPurposeDefense),
+    '  rescuesHighValuePiece: ' + bool(t.rescuesHighValuePiece),
+    '  rescuesSecondaryPiece: ' + bool(t.rescuesSecondaryPiece),
+    '  blocksHorseFork: ' + bool(t.blocksHorseFork),
+    '  counterAttacksAttacker: ' + bool(t.counterAttacksAttacker),
+    '  forcesOpponentChoice: ' + bool(t.forcesOpponentChoice),
+    '  damageControl: ' + bool(t.damageControl),
+    '  minimumLossDefense: ' + bool(t.minimumLossDefense),
+    '  partialDefense: ' + bool(t.partialDefense),
+    '  unresolvedThreatAfterDefense: ' + bool(t.unresolvedThreatAfterDefense),
+    '  threatLossBefore: ' + num(t.threatLossBefore),
+    '  threatLossAfter: ' + num(t.threatLossAfter),
+    '  threatLossReduced: ' + num(t.threatLossReduced),
   ];
   return lines.join('\n');
 }

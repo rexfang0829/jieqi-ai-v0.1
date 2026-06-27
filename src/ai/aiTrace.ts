@@ -104,6 +104,19 @@ export type AiMoveTrace = {
   unresolvedHighValueThreat?: boolean;
   resolvedHighValueThreat?: boolean;
   ignoredHigherPriorityThreat?: boolean;
+  multiPurposeDefense?: boolean;
+  rescuesHighValuePiece?: boolean;
+  rescuesSecondaryPiece?: boolean;
+  blocksHorseFork?: boolean;
+  counterAttacksAttacker?: boolean;
+  forcesOpponentChoice?: boolean;
+  damageControl?: boolean;
+  minimumLossDefense?: boolean;
+  partialDefense?: boolean;
+  unresolvedThreatAfterDefense?: boolean;
+  threatLossBefore?: number;
+  threatLossAfter?: number;
+  threatLossReduced?: number;
 };
 
 /**
