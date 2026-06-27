@@ -112,6 +112,13 @@ export type AiWeights = {
   pawnSoldierDevelopmentSuppressedByPawnAttackPenalty: number;
   repeatedCheckingCyclePenalty: number;
   repeatedPositionPenalty: number;
+  towardEnemyKingBonus: number;
+  restrictKingMobilityBonus: number;
+  attackPalaceGuardBonus: number;
+  improveMajorActivityBonus: number;
+  passedPawnAdvanceBonus: number;
+  createNonCheckingThreatBonus: number;
+  avoidAimlessMovePenalty: number;
 };
 
 export const defaultAiWeights: AiWeights = {
@@ -228,10 +235,17 @@ export const defaultAiWeights: AiWeights = {
   pawnSoldierAntiAdvisorForkBonus: 30,
   revealedMajorCapturePriorityBonus: 90,
   safeRevealedRookCaptureBonus: 120,
-  safeRevealedMajorCaptureBonus: 80,
+  safeRevealedMajorCaptureBonus: 0,
   pawnSoldierDelayWhenMajorCaptureAvailablePenalty: -80,
   pawnSoldierWalksIntoRevealedPawnAttackPenalty: -120,
   pawnSoldierDevelopmentSuppressedByPawnAttackPenalty: -80,
   repeatedCheckingCyclePenalty: -300,
   repeatedPositionPenalty: -250,
+  towardEnemyKingBonus: 25,
+  restrictKingMobilityBonus: 45,
+  attackPalaceGuardBonus: 35,
+  improveMajorActivityBonus: 20,
+  passedPawnAdvanceBonus: 30,
+  createNonCheckingThreatBonus: 40,
+  avoidAimlessMovePenalty: -80,
 };

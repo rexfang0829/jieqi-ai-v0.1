@@ -2864,3 +2864,153 @@ test('debug report 含新增 repetitiveCheck 相關欄位', () => {
     assertOk(text.includes('repetitiveCheckSuppressed'));
     assertOk(text.includes('repetitionCount'));
 });
+// ===== endgame heuristics tests =====
+test('中盤局面啟動 endgamePlanActive', () => {
+    // After opening phase (history.length > 12), endgamePlanActive should be true
+    // Kings are on different columns to avoid face-off; rook at [5][0] blocks col 4 via [5][4] not needed
+    const board = emptyBoard();
+    place(board, 9, 3, piece('red', 'king')); // red king off-center
+    place(board, 0, 5, piece('black', 'king')); // black king off-center
+    place(board, 5, 0, piece('red', 'rook'));
+    const dummyMove = {
+        piece: piece('red', 'king'), from: { row: 9, col: 3 }, to: { row: 9, col: 3 }, captured: null,
+    };
+    const history = Array(14).fill(dummyMove);
+    const state = { board, turn: 'red', history, status: 'playing' };
+    const rec = (0, simpleAi_1.recommendMove)(state);
+    assertOk(rec.traces);
+    const best = rec.traces.find(t => t.move.from.row === rec.move.from.row && t.move.from.col === rec.move.from.col &&
+        t.move.to.row === rec.move.to.row && t.move.to.col === rec.move.to.col);
+    assertOk(best);
+    assertEqual(best.endgamePlanActive, true);
+});
+test('靠近敵將有 towardEnemyKing', () => {
+    // Red revealed rook moves closer to black king → towardEnemyKing
+    // Kings on different columns to avoid illegal face-off
+    const board = emptyBoard();
+    place(board, 9, 3, piece('red', 'king'));
+    place(board, 0, 5, piece('black', 'king'));
+    place(board, 8, 0, piece('red', 'rook'));
+    const dummyMove = {
+        piece: piece('red', 'king'), from: { row: 9, col: 3 }, to: { row: 9, col: 3 }, captured: null,
+    };
+    const history = Array(14).fill(dummyMove);
+    const state = { board, turn: 'red', history, status: 'playing' };
+    const rec = (0, simpleAi_1.recommendMove)(state);
+    assertOk(rec.traces);
+    // Any upward rook move from [8][0] moves closer to black king at [0][5]
+    const rookMoveUp = rec.traces.find(t => t.move.from.row === 8 && t.move.from.col === 0 && t.move.to.row < 8);
+    assertOk(rookMoveUp);
+    assertEqual(rookMoveUp.towardEnemyKing, true);
+});
+test('限制將帥活動有 restrictKingMobility', () => {
+    // Red rook moves to row 0 to restrict black king's moves
+    const board = emptyBoard();
+    place(board, 9, 3, piece('red', 'king'));
+    place(board, 0, 5, piece('black', 'king'));
+    place(board, 2, 0, piece('red', 'rook'));
+    const dummyMove = {
+        piece: piece('red', 'king'), from: { row: 9, col: 3 }, to: { row: 9, col: 3 }, captured: null,
+    };
+    const history = Array(14).fill(dummyMove);
+    const state = { board, turn: 'red', history, status: 'playing' };
+    const rec = (0, simpleAi_1.recommendMove)(state);
+    assertOk(rec.traces);
+    const rookToRow0 = rec.traces.find(t => t.move.from.row === 2 && t.move.from.col === 0 && t.move.to.row === 0);
+    assertOk(rookToRow0);
+    assertEqual(rookToRow0.restrictKingMobility, true);
+});
+test('吃掉士象有 attackPalaceGuard', () => {
+    // Red rook capturing black advisor triggers attackPalaceGuard
+    const board = emptyBoard();
+    place(board, 9, 3, piece('red', 'king'));
+    place(board, 0, 5, piece('black', 'king'));
+    const blackAdvisor = piece('black', 'advisor');
+    place(board, 1, 3, blackAdvisor);
+    place(board, 1, 0, piece('red', 'rook'));
+    const dummyMove = {
+        piece: piece('red', 'king'), from: { row: 9, col: 3 }, to: { row: 9, col: 3 }, captured: null,
+    };
+    const history = Array(14).fill(dummyMove);
+    const state = { board, turn: 'red', history, status: 'playing' };
+    const rec = (0, simpleAi_1.recommendMove)(state);
+    assertOk(rec.traces);
+    const captureAdvisor = rec.traces.find(t => t.move.from.row === 1 && t.move.from.col === 0 &&
+        t.move.to.row === 1 && t.move.to.col === 3);
+    assertOk(captureAdvisor);
+    assertEqual(captureAdvisor.attackPalaceGuard, true);
+});
+test('過河兵卒推進有 passedPawnAdvance', () => {
+    // Red revealed crossed pawn moving forward → passedPawnAdvance
+    const board = emptyBoard();
+    place(board, 9, 3, piece('red', 'king'));
+    place(board, 0, 5, piece('black', 'king'));
+    // Red pawn at row 3 (crossed the river for red: row <= 4)
+    place(board, 3, 0, piece('red', 'pawn'));
+    const dummyMove = {
+        piece: piece('red', 'king'), from: { row: 9, col: 3 }, to: { row: 9, col: 3 }, captured: null,
+    };
+    const history = Array(14).fill(dummyMove);
+    const state = { board, turn: 'red', history, status: 'playing' };
+    const rec = (0, simpleAi_1.recommendMove)(state);
+    assertOk(rec.traces);
+    // Pawn moving from row 3 to row 2 (forward for red) triggers passedPawnAdvance
+    const pawnForward = rec.traces.find(t => t.move.from.row === 3 && t.move.from.col === 0 && t.move.to.row === 2);
+    assertOk(pawnForward);
+    assertEqual(pawnForward.passedPawnAdvance, true);
+});
+test('非將軍但形成威脅有 createNonCheckingThreat', () => {
+    // Rook threatens black horse without giving check → createNonCheckingThreat
+    const board = emptyBoard();
+    place(board, 9, 3, piece('red', 'king'));
+    place(board, 0, 5, piece('black', 'king'));
+    place(board, 3, 6, piece('black', 'horse'));
+    // Red rook at [3][0]: moving to [3][1] threatens horse at [3][6], not giving check
+    place(board, 3, 0, piece('red', 'rook'));
+    const dummyMove = {
+        piece: piece('red', 'king'), from: { row: 9, col: 3 }, to: { row: 9, col: 3 }, captured: null,
+    };
+    const history = Array(14).fill(dummyMove);
+    const state = { board, turn: 'red', history, status: 'playing' };
+    const rec = (0, simpleAi_1.recommendMove)(state);
+    assertOk(rec.traces);
+    const nonCheckThreat = rec.traces.find(t => t.createNonCheckingThreat === true && t.checking === false);
+    assertOk(nonCheckThreat);
+});
+test('無意義來回走子有 avoidAimlessMove 並扣分', () => {
+    // Only kings present in endgame; king moves have no endgame purpose → avoidAimlessMove
+    const board = emptyBoard();
+    place(board, 9, 3, piece('red', 'king'));
+    place(board, 0, 5, piece('black', 'king'));
+    const dummyMove = {
+        piece: piece('red', 'king'), from: { row: 9, col: 3 }, to: { row: 9, col: 3 }, captured: null,
+    };
+    const history = Array(14).fill(dummyMove);
+    const state = { board, turn: 'red', history, status: 'playing' };
+    const rec = (0, simpleAi_1.recommendMove)(state);
+    assertOk(rec.traces);
+    const aimless = rec.traces.find(t => t.avoidAimlessMove === true);
+    assertOk(aimless);
+    assertOk((aimless.endgamePlanScore ?? 0) < 0);
+});
+test('debug report 含新增 endgame 相關欄位', () => {
+    const board = emptyBoard();
+    place(board, 9, 3, piece('red', 'king'));
+    place(board, 0, 5, piece('black', 'king'));
+    place(board, 5, 0, piece('red', 'rook'));
+    const dummyMove = {
+        piece: piece('red', 'king'), from: { row: 9, col: 3 }, to: { row: 9, col: 3 }, captured: null,
+    };
+    const history = Array(14).fill(dummyMove);
+    const state = { board, turn: 'red', history, status: 'playing' };
+    const rec = (0, simpleAi_1.recommendMove)(state);
+    const text = (0, aiDebugReport_1.formatAiDebugReport)({ modeName: 'test', state, recommendation: rec });
+    assertOk(text.includes('endgamePlanActive'));
+    assertOk(text.includes('towardEnemyKing'));
+    assertOk(text.includes('restrictKingMobility'));
+    assertOk(text.includes('attackPalaceGuard'));
+    assertOk(text.includes('improveMajorActivity'));
+    assertOk(text.includes('passedPawnAdvance'));
+    assertOk(text.includes('createNonCheckingThreat'));
+    assertOk(text.includes('avoidAimlessMove'));
+});

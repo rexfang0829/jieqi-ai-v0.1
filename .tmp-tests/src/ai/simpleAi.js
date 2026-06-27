@@ -926,6 +926,103 @@ function findOwnMajorsUnderAttack(board, side) {
     }
     return result;
 }
+function chebyshevDist(a, b) {
+    return Math.max(Math.abs(a.row - b.row), Math.abs(a.col - b.col));
+}
+function isPalaceGuardPiece(piece) {
+    const t = publicType(piece);
+    return t === 'advisor' || t === 'elephant';
+}
+function isMajorActivePiece(piece) {
+    const t = publicType(piece);
+    return t === 'rook' || t === 'cannon' || t === 'horse';
+}
+function enemyPalaceCenter(side) {
+    return side === 'red' ? { row: 1, col: 4 } : { row: 8, col: 4 };
+}
+function computeEndgamePlan(state, move, nextBoard, checking, importantThreat, captureGain, blocksImmediateWin, rescuesLooseHiddenPiece, weights) {
+    const inactive = {
+        endgamePlanActive: false,
+        towardEnemyKing: false,
+        restrictKingMobility: false,
+        attackPalaceGuard: false,
+        improveMajorActivity: false,
+        passedPawnAdvance: false,
+        createNonCheckingThreat: false,
+        avoidAimlessMove: false,
+        endgamePlanScore: 0,
+    };
+    if (isOpeningPhase(state, weights))
+        return inactive;
+    const opp = opponent(state.turn);
+    const movedPiece = nextBoard[move.to.row][move.to.col];
+    const palaceCenter = enemyPalaceCenter(state.turn);
+    const kingPos = opponentKingPosition(nextBoard, state.turn);
+    // towardEnemyKing: revealed major moves closer to enemy king
+    let towardEnemyKing = false;
+    if (kingPos && movedPiece.revealed && isMajorActivePiece(movedPiece)) {
+        const distBefore = chebyshevDist(move.from, kingPos);
+        const distAfter = chebyshevDist(move.to, kingPos);
+        towardEnemyKing = distAfter < distBefore;
+    }
+    // restrictKingMobility: opponent king has fewer legal moves after this move
+    let restrictKingMobility = false;
+    {
+        const oppMovesBefore = (0, checkRules_1.getAllLegalMoves)(state.board, opp).filter(m => publicType(m.piece) === 'king').length;
+        const oppMovesAfter = (0, checkRules_1.getAllLegalMoves)(nextBoard, opp).filter(m => publicType(m.piece) === 'king').length;
+        restrictKingMobility = oppMovesAfter < oppMovesBefore;
+    }
+    // attackPalaceGuard: captured advisor/elephant, OR moved revealed piece can capture advisor/elephant
+    let attackPalaceGuard = false;
+    if (move.captured && isPalaceGuardPiece(move.captured)) {
+        attackPalaceGuard = true;
+    }
+    else if (movedPiece.revealed) {
+        const followUp = (0, checkRules_1.getAllLegalMoves)(nextBoard, state.turn);
+        attackPalaceGuard = followUp.some(m => m.from.row === move.to.row && m.from.col === move.to.col &&
+            m.captured != null && isPalaceGuardPiece(m.captured));
+    }
+    // improveMajorActivity: revealed rook/cannon/horse moves closer to enemy palace center
+    let improveMajorActivity = false;
+    if (movedPiece.revealed && isMajorActivePiece(movedPiece)) {
+        const distBefore = chebyshevDist(move.from, palaceCenter);
+        const distAfter = chebyshevDist(move.to, palaceCenter);
+        improveMajorActivity = distAfter < distBefore;
+    }
+    // passedPawnAdvance: revealed crossed pawn moving forward
+    let passedPawnAdvance = false;
+    if (movedPiece.revealed && publicType(movedPiece) === 'pawn' && isCrossedPawn(movedPiece, move.to)) {
+        const movingForward = state.turn === 'red'
+            ? move.to.row < move.from.row
+            : move.to.row > move.from.row;
+        passedPawnAdvance = movingForward;
+    }
+    // createNonCheckingThreat: important threat without giving check
+    const createNonCheckingThreat = !checking && importantThreat;
+    // avoidAimlessMove: no endgame or general purpose detected, and not already penalized as meaningless
+    const hasAnyPurpose = towardEnemyKing || restrictKingMobility || attackPalaceGuard ||
+        improveMajorActivity || passedPawnAdvance || createNonCheckingThreat ||
+        captureGain > 0 || checking || blocksImmediateWin || rescuesLooseHiddenPiece;
+    const avoidAimlessMove = !hasAnyPurpose;
+    const endgamePlanScore = (towardEnemyKing ? weights.towardEnemyKingBonus : 0) +
+        (restrictKingMobility ? weights.restrictKingMobilityBonus : 0) +
+        (attackPalaceGuard ? weights.attackPalaceGuardBonus : 0) +
+        (improveMajorActivity ? weights.improveMajorActivityBonus : 0) +
+        (passedPawnAdvance ? weights.passedPawnAdvanceBonus : 0) +
+        (createNonCheckingThreat ? weights.createNonCheckingThreatBonus : 0) +
+        (avoidAimlessMove ? weights.avoidAimlessMovePenalty : 0);
+    return {
+        endgamePlanActive: true,
+        towardEnemyKing,
+        restrictKingMobility,
+        attackPalaceGuard,
+        improveMajorActivity,
+        passedPawnAdvance,
+        createNonCheckingThreat,
+        avoidAimlessMove,
+        endgamePlanScore,
+    };
+}
 function allowsOpponentWin(state, move) {
     const next = (0, gameEngine_1.applyMove)(state, move.from, move.to);
     if (next === state || next.status !== 'playing')
@@ -1167,6 +1264,7 @@ function evaluateMove(state, move, blocksImmediateWin, weights, posRevealedMajor
     const blockDangerBonus = blocksImmediateWin ? weights.blockImmediateWinBonus : 0;
     const protectionScore = protectedMove ? weights.protectedMoveBonus : 0;
     const hangingPenalty = hangingMove ? weights.hangingMovePenalty : 0;
+    const endgamePlan = computeEndgamePlan(state, move, nextBoard, checking, importantThreat, captureGain, blocksImmediateWin, rescuesLooseHiddenPiece, weights);
     const score = captureGain -
         reply.possibleLoss +
         revealScore(move, weights) +
@@ -1209,7 +1307,8 @@ function evaluateMove(state, move, blocksImmediateWin, weights, posRevealedMajor
         firstMoveBlindHorsePenalty +
         firstMoveBlindMajorActivationCapPenalty +
         pureBlindHorsePenalty +
-        forcedBadDefensePenalty -
+        forcedBadDefensePenalty +
+        endgamePlan.endgamePlanScore -
         Math.round(reply.maxReplyGain * weights.maxReplyGainPenaltyRatio);
     return {
         score,
@@ -1306,6 +1405,15 @@ function evaluateMove(state, move, blocksImmediateWin, weights, posRevealedMajor
         repeatedPositionRisk,
         repetitiveCheckSuppressed: false,
         repetitionCount: 0,
+        endgamePlanActive: endgamePlan.endgamePlanActive,
+        towardEnemyKing: endgamePlan.towardEnemyKing,
+        restrictKingMobility: endgamePlan.restrictKingMobility,
+        attackPalaceGuard: endgamePlan.attackPalaceGuard,
+        improveMajorActivity: endgamePlan.improveMajorActivity,
+        passedPawnAdvance: endgamePlan.passedPawnAdvance,
+        createNonCheckingThreat: endgamePlan.createNonCheckingThreat,
+        avoidAimlessMove: endgamePlan.avoidAimlessMove,
+        endgamePlanScore: endgamePlan.endgamePlanScore,
     };
 }
 function reasonFor(best, evaluation, avoidedOpponentWin, weights) {
@@ -1431,6 +1539,20 @@ function reasonFor(best, evaluation, avoidedOpponentWin, weights) {
         return '開局優先翹 1379 路兵';
     if (evaluation.risk > 0 || evaluation.immediateCapture)
         return '避免明顯送子';
+    if (evaluation.avoidAimlessMove)
+        return '無明確目標，已降分';
+    if (evaluation.towardEnemyKing)
+        return '中殘局靠近敵將';
+    if (evaluation.restrictKingMobility)
+        return '限制將帥活動';
+    if (evaluation.attackPalaceGuard)
+        return '攻擊九宮防線';
+    if (evaluation.createNonCheckingThreat)
+        return '形成非將軍威脅';
+    if (evaluation.improveMajorActivity)
+        return '改善大子位置';
+    if (evaluation.passedPawnAdvance)
+        return '過河兵卒推進';
     return '簡單評分最佳';
 }
 function recommendMove(state, candidateMoves, weights = aiWeights_1.defaultAiWeights) {
@@ -1562,6 +1684,15 @@ function recommendMove(state, candidateMoves, weights = aiWeights_1.defaultAiWei
         repeatedPositionRisk: evaluation.repeatedPositionRisk,
         repetitiveCheckSuppressed: suppressedRepetitiveMoves.has(move),
         repetitionCount: evaluation.repetitionCount,
+        endgamePlanActive: evaluation.endgamePlanActive,
+        towardEnemyKing: evaluation.towardEnemyKing,
+        restrictKingMobility: evaluation.restrictKingMobility,
+        attackPalaceGuard: evaluation.attackPalaceGuard,
+        improveMajorActivity: evaluation.improveMajorActivity,
+        passedPawnAdvance: evaluation.passedPawnAdvance,
+        createNonCheckingThreat: evaluation.createNonCheckingThreat,
+        avoidAimlessMove: evaluation.avoidAimlessMove,
+        endgamePlanScore: evaluation.endgamePlanScore,
     }));
     return {
         move: best,

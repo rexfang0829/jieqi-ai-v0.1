@@ -1,5 +1,34 @@
 ## 最新完成的工作
 
+### 2026-06-27 中殘局目標 heuristic MVP（Claude）
+
+**目標**：修正 AI VS AI 無意義來回重複和棋，新增中殘局方向性評分。
+
+**新增 / 修改檔案**：
+
+1. **`src/ai/aiWeights.ts`**：
+   - 新增 7 個權重：`towardEnemyKingBonus(25)` / `restrictKingMobilityBonus(45)` / `attackPalaceGuardBonus(35)` / `improveMajorActivityBonus(20)` / `passedPawnAdvanceBonus(30)` / `createNonCheckingThreatBonus(40)` / `avoidAimlessMovePenalty(-80)`
+
+2. **`src/ai/aiTrace.ts`**：
+   - 新增 9 個 trace 欄位：`endgamePlanActive` / `towardEnemyKing` / `restrictKingMobility` / `attackPalaceGuard` / `improveMajorActivity` / `passedPawnAdvance` / `createNonCheckingThreat` / `avoidAimlessMove` / `endgamePlanScore`
+
+3. **`src/ai/simpleAi.ts`**：
+   - 新增 helper：`chebyshevDist` / `isPalaceGuardPiece` / `isMajorActivePiece` / `enemyPalaceCenter`
+   - 新增 `EndgamePlan` 型別與 `computeEndgamePlan()` 函式
+   - `evaluateMove` 整合 `computeEndgamePlan`，加分加入總分
+   - `reasonFor` 新增 7 個中文 reason strings
+   - traces 新增 9 個 endgame 欄位
+
+4. **`src/ai/aiDebugReport.ts`**：
+   - `fmtTrace` 補充 9 個新欄位輸出
+
+5. **`tests/rules.test.ts`**：
+   - 新增 8 個測試：endgamePlanActive / towardEnemyKing / restrictKingMobility / attackPalaceGuard / passedPawnAdvance / createNonCheckingThreat / avoidAimlessMove / debug report 欄位名稱
+
+**測試**：`npm test` 全部通過；`npx tsc --noEmit` 無錯。
+
+---
+
 
 ## Task #122 — 修正 AI VS AI 來回連將 / 重複殺卡死問題
 **Status**: ✅ Done  

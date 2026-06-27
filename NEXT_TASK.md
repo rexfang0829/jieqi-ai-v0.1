@@ -1,6 +1,35 @@
 # NEXT_TASK
 
 ## 此輪完成
+- 新增中殘局目標 heuristic MVP：修正 AI VS AI 無意義來回和棋
+- `endgamePlanActive`：開局後（history.length > 12）自動啟動
+- 新增 6 個加分：`towardEnemyKing(25)` / `restrictKingMobility(45)` / `attackPalaceGuard(35)` / `improveMajorActivity(20)` / `passedPawnAdvance(30)` / `createNonCheckingThreat(40)`
+- 新增 1 個懲罰：`avoidAimlessMove(-80)`：無明確中殘局目標時扣分
+- 新增 helper：`chebyshevDist` / `isPalaceGuardPiece` / `isMajorActivePiece` / `enemyPalaceCenter` / `computeEndgamePlan`
+- 新增 8 個 trace 欄位 + `endgamePlanScore`（共 9 個）
+- `formatAiDebugReport` 補充 9 個新 trace 欄位輸出
+- 新增 7 個 reason strings（中文）
+- 新增 8 個測試
+- `npx tsc --noEmit` 無錯；`npm test` 全部通過
+
+## 建議下一步
+1. AI 開局理論回歸測試擴充。
+2. Pattern 觸發日誌 / 統計。
+3. AI VS AI 對局資料統計。
+4. 自我對弈調參實驗。
+5. Belief State / 剩餘池概率推演。
+6. Threat Map MVP。
+
+## 非明確指示不要做
+- 不改 Board UI。
+- 不偷看未翻暗子的 `realType`。
+- 不加後端或資料庫。
+
+---
+
+# NEXT_TASK
+
+## 此輪完成
 - 修正 AI VS AI 來回連將 / 重複殺卡死問題
 - 擴充 detectRepetitiveCheck 至所有棋子類型（車、炮、馬等）
 - 新增 detectRepeatedCheckingCycle：偵測 A→B, B→A, A→B 來回模式

@@ -82,12 +82,21 @@ export type AiMoveTrace = {
   repeatedPositionRisk?: boolean;
   repetitiveCheckSuppressed?: boolean;
   repetitionCount?: number;
+  endgamePlanActive?: boolean;
+  towardEnemyKing?: boolean;
+  restrictKingMobility?: boolean;
+  attackPalaceGuard?: boolean;
+  improveMajorActivity?: boolean;
+  passedPawnAdvance?: boolean;
+  createNonCheckingThreat?: boolean;
+  avoidAimlessMove?: boolean;
+  endgamePlanScore?: number;
 };
 
 /**
  * Return type of recommendMove().
  * Extends the previous { move, score, reason } shape with an optional traces array.
- * Existing callers that only read .move / .score / .reason are unaffected.
+lers that only read .move / .score / .reason are unaffected.
  */
 export type AiRecommendation = {
   move: Move | null;
