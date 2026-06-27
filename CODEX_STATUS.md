@@ -18,7 +18,7 @@
 
 3. **`src/components/HumanVsAiPanel.tsx`**：正式對局 AI 改用 `recommendMoveFair`
 4. **`src/App.tsx`**：AI vs AI 兩處改用 `recommendMoveFair`
-5. **`src/components/AiPanel.tsx`**：輔助盤面/debug 改用 `recommendMoveOracle`
+5. **`src/components/AiPanel.tsx`**：主推薦改用 `recommendMoveFair`；Oracle 僅作 debug 對照用途
 
 6. **`tests/rules.test.ts`**（新增 4 個測試）：
    - `Fair AI view hides realType for unrevealed pieces`
@@ -28,7 +28,7 @@
 
 **哪些模式已改用 recommendMoveFair**：Human vs AI、AI vs AI
 
-**哪些地方仍保留 Oracle**：AiPanel（輔助盤面/debug 分析）
+**哪些地方仍保留 Oracle**：AiPanel 提供 Oracle debug 對照欄位（主推薦已改用 Fair AI）
 
 **測試**：`npm test` 全部通過（含 4 個新 fair info 測試）；`npx tsc --noEmit` 無錯。
 
@@ -500,117 +500,14 @@ npm.cmd run build
 - 一般揭棋、人 vs AI、AI VS AI、回放、輔助盤面已傳入 lastMove
 - AI 測試報告加入盤面快照
 - 補 formatAiDebugReport 測試：tests/rules.test.ts import 移至頂層 + 統整測試 (3 個)
-## 2026-06-27 Codex update
-
-### Latest completed work
-- Added post-move loose hidden piece evaluation to `simpleAi`.
-- AI now scans own hidden pieces after each candidate move.
-- If an own hidden piece is attacked by an opponent revealed piece and has no defender, the move is marked as leaving a loose hidden piece.
-- If the move truly gets that hidden piece out of revealed-piece attack, it receives the rescue bonus.
-- If the attacked hidden piece has a defender, it is tracked as protected under attack, not treated as a free loss.
-- Hidden enemy attackers still use public information only; unrevealed attackers do not count as revealed-piece loose-piece threats.
-- Pure activation / cannon-screen moves that ignore loose hidden pieces are capped and penalized.
-
-### Modified files
-- `src/ai/simpleAi.ts`: added post-move loose hidden piece scan, scoring, trace fields, and reasons.
-- `src/ai/aiWeights.ts`: added loose hidden piece / rescue / protected-under-attack weights.
-- `src/ai/aiTrace.ts`: added trace fields for loose hidden piece analysis.
-- `tests/rules.test.ts`: added regression tests for loose hidden piece rescue, protected under attack, and hidden-cannon fair-info behavior.
-- `CODEX_STATUS.md`: updated this handoff note.
-- `NEXT_TASK.md`: updated completed/current task notes.
-
-### Verification
-- `npm.cmd test`: passed.
-- `npx.cmd tsc --noEmit`: passed.
-- `npm.cmd run build`: passed.
-
-### Known limits
-- This is a one-ply heuristic, not Belief State or Monte Carlo.
-- Protected-under-attack is intentionally not treated as an urgent free-loss rescue.
-- The evaluator does not peek at unrevealed `realType`.
 
 ---
-## 2026-06-27 Codex test/document update
 
-### Latest completed work
-- Strengthened test coverage for post-move loose hidden piece evaluation.
-- Confirmed trace fields cover `postMoveLooseHiddenPiece`, `postMoveLooseHiddenPieceCount`, `postMoveProtectedUnderAttackCount`, `postMoveLoosePiecePenalty`, `rescuesLooseHiddenPiece`, and `ignoresLooseHiddenPiece`.
-- Documented the loose hidden piece MVP weights: `postMoveLooseHiddenPiecePenalty`, `rescueLooseHiddenPieceBonus`, `protectedUnderAttackPenaltyCap`, and `activationOnlyCapWhenLoosePieceExists`.
-- Chess logic covered: hidden piece attacked with no defender is a free-loss risk; hidden piece attacked with a defender is exchangeable pressure, not urgent rescue.
+### 2026-06-27 AI 策略補充（CODEX 更新）
 
-### Tests added or tightened
-- Revealed elephant attacks an unprotected black hidden pawn: moving the pawn gets `rescuesLooseHiddenPiece === true`, no post-move loose flag, and scores above pure hidden horse activation.
-- Same position: black hidden horse activation that ignores the pawn gets `postMoveLooseHiddenPiece === true`, `ignoresLooseHiddenPiece === true`, and a negative loose-piece penalty.
-- Cannon pressure on a defended hidden horse is tracked as protected under attack, not as loose hidden piece danger.
+以下為已完成但尚未記錄於 CODEX 的策略項目：
 
-### Verification
-- `npm.cmd test`: passed.
-- `npx.cmd tsc --noEmit`: passed.
-- `npm.cmd run build`: passed.
-
-### Scope note
-- This remains loose hidden piece MVP only.
-- No AI scoring weights or evaluation logic changed in this round.
-- No Board UI, moveNotation, gameEngine, checkRules, or Fair AI permission boundary changes.
-
----
-## 2026-06-27 Codex update
-
-### Latest completed work
-- Fixed Fair AI first-move opening bias so a fully unknown initial position prefers stable 1 / 3 / 7 / 9 hidden pawn openings.
-- Added first-move scoring controls: `firstMovePawnOpeningBonus`, `firstMoveBlindHorseActivationPenalty`, and `firstMoveBlindMajorActivationCap`.
-- Added trace fields: `firstMovePawnOpening`, `firstMoveBlindHorseActivation`, and `firstMoveBlindHorsePenalty`.
-- First-move hidden horse activation is only penalized when a priority hidden pawn option exists and the horse move has no capture, check, rescue, immediate-win prevention, or revealed-piece threat reason.
-- Changed AiPanel main recommendation to use `recommendMoveFair`; Oracle remains available only as 天眼 Debug comparison.
-- Added a small non-UI helper module for AiPanel recommendations and report composition.
-
-### Tests added
-- `recommendMoveFair(newGame())` chooses a 1 / 3 / 7 / 9 hidden pawn opening.
-- Blind first-move hidden horse activation scores below priority hidden pawn openings.
-- AiPanel main recommendation matches Fair AI while Oracle remains Debug-only.
-- Direct checkmate can still override first-move pawn-opening preference.
-
-### Verification
-- `npm.cmd test`: passed.
-- `npx.cmd tsc --noEmit`: passed.
-- `npm.cmd run build`: passed.
-
-### Scope note
-- No Board UI, moveNotation, gameEngine, checkRules, or Fair AI permission boundary changes.
-- `recommendMoveOracle` remains available for Debug / 天眼 comparison.
-- `majorActivation` was not removed; only first-move blind horse activation is capped/penalized.
-
----
-## 2026-06-27 Codex update
-
-### Latest completed work
-- Added pawn-soldier opening development heuristic for unrevealed `originalType === 'pawn'` pieces.
-- Added bonus when a pawn-soldier move pressures a revealed major piece using public board information only.
-- Reduced early pure blind-horse activation while own pawn soldiers are still undeveloped.
-- Pure blind horse is now capped/penalized only when it has no capture, effective check, immediate-win prevention, loose-hidden-piece rescue, or clear new threat.
-- Added pawn-soldier follow-up heuristics after revealed pawn-origin horse / elephant / advisor:
-  - same-file pawn soldier pressure and horse-foot block after horse reveal.
-  - center pawn soldier preference after elephant reveal.
-  - same-file anti-advisor-fork pressure after advisor reveal.
-- Updated AI debug report to print pawn-soldier, pure blind-horse, and loose-hidden-piece trace fields.
-- AiPanel main recommendation remains Fair AI; Oracle remains Debug comparison only.
-
-### Important chess note
-- Pawn soldiers are not treated as having a higher probability to reveal high-value pieces.
-- The heuristic values pawn soldiers because their surface value is lowest and opening development can gain initiative after reveal.
-- Hidden horse value is not removed; pure blind-horse activation is only reduced in the early pawn-soldier development phase.
-
-### Modified files
-- `src/ai/simpleAi.ts`: pawn-soldier development, follow-up rules, pure blind-horse cap/penalty, reasons, trace output.
-- `src/ai/aiWeights.ts`: added pawn-soldier and pure blind-horse weights.
-- `src/ai/aiTrace.ts`: added pawn-soldier / pure blind-horse trace fields.
-- `src/ai/aiDebugReport.ts`: prints new trace fields.
-- `tests/rules.test.ts`: added opening pawn-soldier regression tests and updated old pure-horse expectations.
-- `CODEX_STATUS.md`, `NEXT_TASK.md`: updated handoff notes.
-
-### Verification
-- `npm.cmd test`: passed.
-- `npx.cmd tsc --noEmit`: passed.
-- `npm.cmd run build`: passed.
-
----
+- **暗兵卒優先策略**：開局優先翻自方兵卒，不急於翻大子，降低資訊洩漏風險
+- **純暗馬活化降權**：未翻馬在開局階段不給予過高活化分，避免提前暴露
+- **暗兵卒 follow-up heuristic**：翻出兵卒後，優先帶動馬 / 相 / 士進行配合，加強陣型完整性
+- **debug report trace 欄位**：`AiMoveTrace` 已含完整欄位（advisorRevealClogRisk / deadMajorThreatHold / forcedBadDefense 等），`formatAiDebugReport` 輸出含盤面快照與 top-5 候選步
