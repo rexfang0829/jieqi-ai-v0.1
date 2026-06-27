@@ -114,7 +114,14 @@ export function HumanVsAiPanel({ onHome, storage }: Props) {
       const allowed = filterThirdRepetitionMoves(current, pastRef.current, legal);
       const candidates = allowed.length ? allowed : legal;
       const r = recommendMoveFair(current);
-      if (!r.move) { setAiThinking(false); return; }
+      if (!r.move) {
+        // Stalemate: AI has no legal moves → current player loses
+        const winSide = current.turn === 'red' ? 'black' : 'red';
+        const winStatus = winSide === 'red' ? 'red_win' : 'black_win';
+        setGameState({ ...current, status: winStatus });
+        setAiThinking(false);
+        return;
+      }
 
       // Save undo entry before AI move
       const undoEntry: UndoEntry = {

@@ -1,3 +1,26 @@
+### 2026-06-27 困斃（無合法棋步）結束時播放絕殺音效（Claude）
+
+**目標**：輪到一方卻無合法棋步（困斃），應判對方勝、設定 `status`、播放 `playEndgameSound()`。
+
+**修改檔案**：
+
+1. **`src/game/gameState.ts`**：`applyMove` 改用 `getAllLegalMoves(board, nextTurn).length === 0` 取代 `isCheckmate`，純困斃亦正確設定勝者 status。
+
+2. **`src/game/checkRules.ts`**：新增 `isStalemate(board, side)` 與 `winnerWhenNoLegalMoves(side)` 工具函式。
+
+3. **`src/App.tsx`**：
+   - 新增 `aiVsAiLastStatusRef`
+   - `aiVsAiStep()` / 自動播放 interval：`r.move === null` 時設定困斃勝者 status、顯示勝利訊息、播放音效。
+   - AI VS AI 結束效果加入 `shouldPlayEndgameSound` 音效觸發。
+
+4. **`src/components/HumanVsAiPanel.tsx`**：AI 步驟觸發 `r.move === null` 時防禦性設定困斃勝者 status。
+
+5. **`tests/rules.test.ts`**：新增 S1–S4 四個困斃測試；修正 reveal-choice-risk-fair-info 測試（紅王改置宮內 col=3，原 col=0 在宮外致困斃誤判）。
+
+**驗收**：`npx tsc --noEmit` 乾淨，stalemate S1–S4 全過，reveal-choice-risk-fair-info 修正通過。
+
+---
+
 ### 2026-06-27 修正邊 G / 邊路明車壓力時馬守兵線被蓋過（Claude）
 
 **目標**：當邊路明車（G）壓制兵線時，AI 應優先活馬守線（馬8進7 類），而非普通暗兵卒開發。

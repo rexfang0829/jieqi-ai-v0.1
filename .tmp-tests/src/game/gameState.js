@@ -29,6 +29,8 @@ function applyMove(state, from, to) {
         flipped,
     };
     const nextTurn = state.turn === 'red' ? 'black' : 'red';
-    const status = (0, checkRules_1.isCheckmate)(board, nextTurn) ? (state.turn === 'red' ? 'red_win' : 'black_win') : 'playing';
+    const status = (0, checkRules_1.getAllLegalMoves)(board, nextTurn).length === 0
+        ? (state.turn === 'red' ? 'red_win' : 'black_win')
+        : 'playing';
     return { ...state, board, turn: nextTurn, history: [...state.history, move], status };
 }

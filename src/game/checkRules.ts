@@ -63,3 +63,13 @@ export function getAllLegalMoves(board: Board, side: Side): Move[] {
 export function isCheckmate(board: Board, side: Side): boolean {
   return isInCheck(board, side) && getAllLegalMoves(board, side).length === 0;
 }
+
+/** Pure stalemate: side has no legal moves and is NOT in check. */
+export function isStalemate(board: Board, side: Side): boolean {
+  return !isInCheck(board, side) && getAllLegalMoves(board, side).length === 0;
+}
+
+/** In 揭棋, the player with no legal moves loses; return the winner. */
+export function winnerWhenNoLegalMoves(side: Side): Side {
+  return side === 'red' ? 'black' : 'red';
+}

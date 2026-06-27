@@ -361,6 +361,12 @@ function isSquareAttackedByRevealedPawn(board, bySide, target) {
         m.captured &&
         samePosition(m.to, target));
 }
+function hiddenMajorCanRecaptureAt(board, enemySide, target) {
+    return (0, checkRules_1.getAllLegalMoves)(board, enemySide).some(m => !m.piece.revealed &&
+        (m.piece.originalType === 'rook' || m.piece.originalType === 'cannon' || m.piece.originalType === 'horse') &&
+        samePosition(m.to, target) &&
+        m.captured != null);
+}
 function analyzeLooseHiddenPieces(board, side) {
     const loosePositions = [];
     const protectedUnderAttackPositions = [];
@@ -651,6 +657,7 @@ function structurePatternEvaluation(state, move, nextBoard, hasClearGain, weight
             pawnLineDefense: false,
             preventsPawnLineLock: false,
             badHorseRelease: false,
+            horsePawnLineGuard: false,
         };
     }
     if (!move.piece.revealed && move.piece.originalType === 'pawn' && isOpeningPawnStart(state.turn, move.from)) {
@@ -664,6 +671,7 @@ function structurePatternEvaluation(state, move, nextBoard, hasClearGain, weight
             pawnLineDefense: false,
             preventsPawnLineLock: false,
             badHorseRelease: false,
+            horsePawnLineGuard: false,
         };
     }
     const beforeCannonThreat = cannonLineThreatAgainstSide(state.board, state.turn, weights);
@@ -743,13 +751,14 @@ function structurePatternEvaluation(state, move, nextBoard, hasClearGain, weight
     return {
         score,
         patterns: [...patterns],
-        releasedHorseFromPressure: horseCannonRelease || releasedHorse && !edgeCannonPressure && beforeCannonThreat > 0,
+        releasedHorseFromPressure: horseCannonRelease || horsePawnLineGuard || releasedHorse && !edgeCannonPressure && beforeCannonThreat > 0,
         releasedElephantFromPressure: elephantCannonRelease || releasedElephant && !edgeCannonPressure && beforeCannonThreat > 0,
         weakScreen,
         preservesHiddenCannon: preservesHiddenCannon && !hasClearGain,
         pawnLineDefense,
         preventsPawnLineLock,
         badHorseRelease,
+        horsePawnLineGuard,
     };
 }
 /**
@@ -1081,6 +1090,7 @@ function evaluateMove(state, move, blocksImmediateWin, weights, posRevealedMajor
     const structure = structurePatternEvaluation(state, move, nextBoard, hasClearGain, weights);
     // Edge cannon pressure: cap hiddenPressureScore for plain pawn moves that don't resolve pressure
     const edgeCannonPressure = isOpeningPhase(state, weights) && hasOpeningEdgeCannonPressure(state.board, state.turn);
+    const edgeRookPressure = isOpeningPhase(state, weights) && hasOpeningEdgeRookPawnLineLockRisk(state.board, state.turn);
     const isPlainUnrevealedPawnMove = !move.piece.revealed && move.piece.originalType === 'pawn' &&
         !structure.releasedHorseFromPressure && !structure.releasedElephantFromPressure &&
         !structure.preventsPawnLineLock && !structure.pawnLineDefense && captureGain === 0;
@@ -1136,10 +1146,11 @@ function evaluateMove(state, move, blocksImmediateWin, weights, posRevealedMajor
     // 暗兵卒開發延後（Req C）
     const pawnSoldierDelayedByMajorCapture = pawnSoldierDevelopment && revealedMajorCaptureAvailable;
     const pawnSoldierDelayPenalty = pawnSoldierDelayedByMajorCapture ? weights.pawnSoldierDelayWhenMajorCaptureAvailablePenalty : 0;
-    // 暗兵卒走入已翻兵卒攻擊（白送）
-    const pawnSoldierProtectedAfterAdvance = pawnSoldierDevelopment &&
+    // 暗兵卒走入已翻兵卒攻擊（白送）—— 不限開局階段
+    const isUnrevealedPawnMove = isUnrevealedPawnSoldier(move.piece);
+    const pawnSoldierProtectedAfterAdvance = isUnrevealedPawnMove &&
         isSquareProtectedBySide(nextBoard, state.turn, move.to);
-    const pawnSoldierWalksIntoRevealedPawnAttack = pawnSoldierDevelopment &&
+    const pawnSoldierWalksIntoRevealedPawnAttack = isUnrevealedPawnMove &&
         captureGain === 0 &&
         !blocksImmediateWin &&
         isSquareAttackedByRevealedPawn(nextBoard, opponent(state.turn), move.to) &&
@@ -1150,6 +1161,17 @@ function evaluateMove(state, move, blocksImmediateWin, weights, posRevealedMajor
         ? weights.pawnSoldierWalksIntoRevealedPawnAttackPenalty : 0;
     const pawnSoldierDevelopmentSuppressedByPawnAttackPenalty = pawnSoldierDevelopmentSuppressedByPawnAttack
         ? weights.pawnSoldierDevelopmentSuppressedByPawnAttackPenalty : 0;
+    // 暗大子回吃風險
+    const hiddenMajorRecaptureRisk = captureGain > 0 &&
+        !blocksImmediateWin &&
+        !effectiveCheck &&
+        hiddenMajorCanRecaptureAt(nextBoard, opponent(state.turn), move.to);
+    const unsafeCaptureExchangeNet = captureGain -
+        Math.round(defensiveTargetValue(move.piece, state.board, move.from, weights));
+    const unsafeEndgameCapture = hiddenMajorRecaptureRisk &&
+        unsafeCaptureExchangeNet < 0 &&
+        !isSquareProtectedBySide(nextBoard, state.turn, move.to);
+    const unsafeCapturePenalty = unsafeEndgameCapture ? weights.unsafeCapturePenalty : 0;
     // 硬保死車扣分：暗士翻子保護己方已被對方控制的車
     const ownMajorsUnderAttack = findOwnMajorsUnderAttack(state.board, state.turn);
     const defendsDoomedMajor = advisorRevealClogRisk && ownMajorsUnderAttack.length > 0 &&
@@ -1209,6 +1231,7 @@ function evaluateMove(state, move, blocksImmediateWin, weights, posRevealedMajor
         !blocksImmediateWin &&
         !rescuesLooseHiddenPiece &&
         !importantThreat &&
+        !structure.horsePawnLineGuard &&
         (structure.score > 0 || majorActivation || structure.releasedHorseFromPressure);
     const blindHorseStructureCapped = pureBlindHorseActivation && structure.score > weights.pureBlindHorseStructureCap;
     const blindHorseMajorActivationCapped = pureBlindHorseActivation && majorActivationScore > weights.pureBlindHorseMajorActivationCap;
@@ -1220,6 +1243,14 @@ function evaluateMove(state, move, blocksImmediateWin, weights, posRevealedMajor
         : majorActivationScore;
     const pureBlindHorsePenalty = pureBlindHorseActivation
         ? weights.pureBlindHorseActivationPenalty + weights.pawnSoldierHiddenExtraBlindHorsePenalty
+        : 0;
+    // Edge rook pressure: boost horse guard moves, penalize plain pawn development that ignores edge rook
+    const horsePawnLineGuardEdgeRookBonus = pawnSoldiersStillDeveloping && structure.horsePawnLineGuard && edgeRookPressure
+        ? weights.horsePawnLineGuardEdgeRookBonus
+        : 0;
+    const pawnSoldierDelayedByEdgeRookPressure = pawnSoldierDevelopment && edgeRookPressure && !pawnSoldierThreatRevealedMajor;
+    const pawnSoldierDelayedByEdgeRookPressurePenalty = pawnSoldierDelayedByEdgeRookPressure
+        ? weights.pawnSoldierDelayedByEdgeRookPressurePenalty
         : 0;
     const forcingReply = blocksImmediateWin ||
         effectiveCheck ||
@@ -1308,6 +1339,9 @@ function evaluateMove(state, move, blocksImmediateWin, weights, posRevealedMajor
         firstMoveBlindMajorActivationCapPenalty +
         pureBlindHorsePenalty +
         forcedBadDefensePenalty +
+        unsafeCapturePenalty +
+        horsePawnLineGuardEdgeRookBonus +
+        pawnSoldierDelayedByEdgeRookPressurePenalty +
         endgamePlan.endgamePlanScore -
         Math.round(reply.maxReplyGain * weights.maxReplyGainPenaltyRatio);
     return {
@@ -1414,6 +1448,12 @@ function evaluateMove(state, move, blocksImmediateWin, weights, posRevealedMajor
         createNonCheckingThreat: endgamePlan.createNonCheckingThreat,
         avoidAimlessMove: endgamePlan.avoidAimlessMove,
         endgamePlanScore: endgamePlan.endgamePlanScore,
+        hiddenMajorRecaptureRisk,
+        unsafeEndgameCapture,
+        unsafeCaptureExchangeNet,
+        edgeRookPawnLineLockRisk: structure.horsePawnLineGuard ? true : edgeRookPressure,
+        horsePawnLineGuard: structure.horsePawnLineGuard,
+        pawnSoldierDelayedByEdgeRookPressure,
     };
 }
 function reasonFor(best, evaluation, avoidedOpponentWin, weights) {
@@ -1489,6 +1529,10 @@ function reasonFor(best, evaluation, avoidedOpponentWin, weights) {
         return '有效將軍';
     if (evaluation.lowQualityCheck)
         return '無成果將軍，已降分';
+    if (evaluation.horsePawnLineGuard)
+        return '邊路明車壓兵線，優先活馬守線';
+    if (evaluation.pawnSoldierDelayedByEdgeRookPressure)
+        return '邊 G 壓力下，延後普通暗兵卒開發';
     if (evaluation.releasedHorseFromPressure)
         return '活馬解除邊炮壓制';
     if (evaluation.releasedElephantFromPressure)
@@ -1553,6 +1597,8 @@ function reasonFor(best, evaluation, avoidedOpponentWin, weights) {
         return '改善大子位置';
     if (evaluation.passedPawnAdvance)
         return '過河兵卒推進';
+    if (evaluation.unsafeEndgameCapture)
+        return '吃子後遭暗大子回吃，交換不利';
     return '簡單評分最佳';
 }
 function recommendMove(state, candidateMoves, weights = aiWeights_1.defaultAiWeights) {
@@ -1693,6 +1739,12 @@ function recommendMove(state, candidateMoves, weights = aiWeights_1.defaultAiWei
         createNonCheckingThreat: evaluation.createNonCheckingThreat,
         avoidAimlessMove: evaluation.avoidAimlessMove,
         endgamePlanScore: evaluation.endgamePlanScore,
+        hiddenMajorRecaptureRisk: evaluation.hiddenMajorRecaptureRisk,
+        unsafeEndgameCapture: evaluation.unsafeEndgameCapture,
+        unsafeCaptureExchangeNet: evaluation.unsafeCaptureExchangeNet,
+        edgeRookPawnLineLockRisk: evaluation.edgeRookPawnLineLockRisk,
+        horsePawnLineGuard: evaluation.horsePawnLineGuard,
+        pawnSoldierDelayedByEdgeRookPressure: evaluation.pawnSoldierDelayedByEdgeRookPressure,
     }));
     return {
         move: best,

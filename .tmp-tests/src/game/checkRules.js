@@ -4,6 +4,8 @@ exports.findKing = findKing;
 exports.isInCheck = isInCheck;
 exports.getAllLegalMoves = getAllLegalMoves;
 exports.isCheckmate = isCheckmate;
+exports.isStalemate = isStalemate;
+exports.winnerWhenNoLegalMoves = winnerWhenNoLegalMoves;
 const moveRules_1 = require("./moveRules");
 function cloneBoard(board) {
     return board.map(row => row.map(p => p ? { ...p } : null));
@@ -72,4 +74,12 @@ function getAllLegalMoves(board, side) {
 }
 function isCheckmate(board, side) {
     return isInCheck(board, side) && getAllLegalMoves(board, side).length === 0;
+}
+/** Pure stalemate: side has no legal moves and is NOT in check. */
+function isStalemate(board, side) {
+    return !isInCheck(board, side) && getAllLegalMoves(board, side).length === 0;
+}
+/** In 揭棋, the player with no legal moves loses; return the winner. */
+function winnerWhenNoLegalMoves(side) {
+    return side === 'red' ? 'black' : 'red';
 }

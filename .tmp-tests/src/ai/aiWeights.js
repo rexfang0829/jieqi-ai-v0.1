@@ -128,4 +128,7 @@ exports.defaultAiWeights = {
     passedPawnAdvanceBonus: 30,
     createNonCheckingThreatBonus: 40,
     avoidAimlessMovePenalty: -80,
+    unsafeCapturePenalty: -120,
+    horsePawnLineGuardEdgeRookBonus: 80,
+    pawnSoldierDelayedByEdgeRookPressurePenalty: -90,
 };

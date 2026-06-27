@@ -135,6 +135,7 @@ export default function App() {
   const aiVsAiIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const aiVsAiStateRef = useRef<GameState>(aiVsAiState);
   const aiVsAiPastRef = useRef<GameState[]>([]);
+  const aiVsAiLastStatusRef = useRef<GameState['status']>('playing');
 
   /* ── 棋譜模式子頁狀態 ── */
   const [recordsPage, setRecordsPage] = useState<RecordsPage>('library');
@@ -583,7 +584,14 @@ export default function App() {
       return;
     }
     const r = recommendMoveFair(current);
-    if (!r.move) { setAiVsAiMsg('AI 無合法步，對局結束'); return; }
+    if (!r.move) {
+      const winSide = current.turn === 'red' ? 'black' : 'red';
+      const winStatus = winSide === 'red' ? 'red_win' : 'black_win';
+      setAiVsAiState({ ...current, status: winStatus });
+      setAiVsAiMsg((winSide === 'red' ? '紅方' : '黑方') + '困斃對方，勝！');
+      playEndgameSound();
+      return;
+    }
     const next = applyMove(current, r.move.from, r.move.to);
     const nextPast = [...aiVsAiPastRef.current, current];
     aiVsAiPastRef.current = nextPast;
@@ -699,7 +707,15 @@ export default function App() {
         return;
       }
       const r = recommendMoveFair(current);
-      if (!r.move) { setAiVsAiAutoPlay(false); setAiVsAiMsg('AI 無合法步，對局結束'); return; }
+      if (!r.move) {
+        setAiVsAiAutoPlay(false);
+        const winSide = current.turn === 'red' ? 'black' : 'red';
+        const winStatus = winSide === 'red' ? 'red_win' : 'black_win';
+        setAiVsAiState({ ...current, status: winStatus });
+        setAiVsAiMsg((winSide === 'red' ? '紅方' : '黑方') + '困斃對方，勝！');
+        playEndgameSound();
+        return;
+      }
       const nextPast = [...aiVsAiPastRef.current, current];
       aiVsAiPastRef.current = nextPast;
       setAiVsAiPast(nextPast);
@@ -718,9 +734,18 @@ export default function App() {
 
   /* ── AI VS AI：對局結束時停止並顯示結果 ── */
   useEffect(() => {
+    const prev = aiVsAiLastStatusRef.current;
+    aiVsAiLastStatusRef.current = aiVsAiState.status;
     if (!aiVsAiInitial || aiVsAiState.history.length === 0) return;
-    if (aiVsAiState.status === 'red_win') { setAiVsAiAutoPlay(false); setAiVsAiMsg('紅方勝！'); }
-    else if (aiVsAiState.status === 'black_win') { setAiVsAiAutoPlay(false); setAiVsAiMsg('黑方勝！'); }
+    if (aiVsAiState.status === 'red_win') {
+      setAiVsAiAutoPlay(false);
+      setAiVsAiMsg('紅方勝！');
+      if (shouldPlayEndgameSound(prev, aiVsAiState.status)) playEndgameSound();
+    } else if (aiVsAiState.status === 'black_win') {
+      setAiVsAiAutoPlay(false);
+      setAiVsAiMsg('黑方勝！');
+      if (shouldPlayEndgameSound(prev, aiVsAiState.status)) playEndgameSound();
+    }
   }, [aiVsAiState.status]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Play mode：自動存檔（每手 + 結束時） ── */
@@ -1365,6 +1390,7 @@ export default function App() {
       </div>
       {syncMode && (
         <div className={`panel syncPanel ${syncError ? 'syncError' : ''}`} style={{marginBottom:'12px'}}>
+    
           {syncError || (syncFrom ? '同步上一手：請點終點' : '同步上一手：請點起點')}
         </div>
       )}

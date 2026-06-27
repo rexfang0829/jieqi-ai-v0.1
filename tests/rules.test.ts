@@ -1,4 +1,4 @@
-import { getAllLegalMoves, isCheckmate, isInCheck } from '../src/game/checkRules';
+import { getAllLegalMoves, isCheckmate, isInCheck, isStalemate, winnerWhenNoLegalMoves } from '../src/game/checkRules';
 import { recommendMove } from '../src/ai/simpleAi';
 import { defaultAiWeights } from '../src/ai/aiWeights';
 import { formatAiDebugReport } from '../src/ai/aiDebugReport';
@@ -2355,11 +2355,12 @@ test('公平資訊防呆 F: AI 不可因未翻 realType 不同而改變 openingM
 test('reveal choice risk fair info: watcher hidden realType must not change score or penalty', () => {
   // 兩盤面公開資訊完全相同：看住落點的黑暗子 originalType='rook'，只有 realType 不同。
   // revealChoiceRisk / revealChoicePenalty / score 必須相同，確保不偷看 realType。
-  // 注意：紅王放 col=0、黑王放 col=4（不同列，不需要阻隔兵），
+  // 注意：紅王放 col=3、黑王放 col=4（不同列，不互照），
   //        且紅方無其他棋子可回吃，確保 opponentReplyPenalty 的 recaptureValue=0 在兩盤相同。
+  //        (原本 col=0，但 col=0 的王不在宮內無法移動，困斃判負會影響測試結果)
   function makeState(watcherRealType: PieceType): GameState {
     const board = emptyBoard();
-    place(board, 9, 0, piece('red', 'king'));                           // 紅王在 col0
+    place(board, 9, 3, piece('red', 'king'));                           // 紅王在宮內 col3
     place(board, 0, 4, piece('black', 'king'));                         // 黑王在 col4（不同列，不互照）
     place(board, 4, 2, piece('red', 'rook', 'rook', true));             // 紅明車（走子方）
     place(board, 4, 4, piece('black', 'pawn', 'pawn', false));          // 黑暗卒（低外觀被吃目標）
@@ -3682,4 +3683,52 @@ test('edge rook C3: debug report contains new trace field names', () => {
   assertOk(report.includes('edgeRookPawnLineLockRisk'));
   assertOk(report.includes('horsePawnLineGuard'));
   assertOk(report.includes('pawnSoldierDelayedByEdgeRookPressure'));
+});
+
+// === 困斃 (Stalemate) Tests ===
+
+test('stalemate S1: isStalemate returns true when side has no legal moves and is not in check', () => {
+  // Black king at [0,3], cannot move: [0,4] guarded by rookA on col 4, [1,3] guarded by rookB on row 1.
+  // Red advisors occupy both target squares. Black is NOT in check.
+  const board = emptyBoard();
+  place(board, 9, 5, piece('red', 'king'));
+  place(board, 5, 4, piece('red', 'rook', 'rook', true));    // guards col 4
+  place(board, 1, 0, piece('red', 'rook', 'rook', true));    // guards row 1
+  place(board, 0, 4, piece('red', 'advisor', 'advisor', true)); // blocks [0,4]
+  place(board, 1, 3, piece('red', 'advisor', 'advisor', true)); // blocks [1,3]
+  place(board, 0, 3, piece('black', 'king'));
+  assertOk(!isInCheck(board, 'black'));
+  assertOk(getAllLegalMoves(board, 'black').length === 0);
+  assertOk(isStalemate(board, 'black'));
+  assertOk(!isStalemate(board, 'red'));
+});
+
+test('stalemate S2: isStalemate returns false when side is in check', () => {
+  // Black king in check → not stalemate (would be checkmate if also 0 legal moves)
+  const board = emptyBoard();
+  place(board, 9, 4, piece('red', 'king'));
+  place(board, 0, 4, piece('black', 'king'));
+  place(board, 1, 4, piece('red', 'rook', 'rook', true)); // checks black king on col 4
+  assertOk(isInCheck(board, 'black'));
+  assertOk(!isStalemate(board, 'black'));
+});
+
+test('stalemate S3: winnerWhenNoLegalMoves returns opponent of losing side', () => {
+  assertEqual(winnerWhenNoLegalMoves('black'), 'red');
+  assertEqual(winnerWhenNoLegalMoves('red'), 'black');
+});
+
+test('stalemate S4: applyMove sets status to red_win when black has zero legal moves after red move (pure stalemate)', () => {
+  // Red rookB at [1,1] moves to [1,0], completing the blockade of black king at [0,3].
+  // After the move: black has 0 legal moves, is NOT in check → pure stalemate → red_win.
+  const board = emptyBoard();
+  place(board, 9, 5, piece('red', 'king'));
+  place(board, 5, 4, piece('red', 'rook', 'rook', true));      // guards col 4
+  place(board, 1, 1, piece('red', 'rook', 'rook', true));      // will move to [1,0]
+  place(board, 0, 4, piece('red', 'advisor', 'advisor', true)); // blocks [0,4]
+  place(board, 1, 3, piece('red', 'advisor', 'advisor', true)); // blocks [1,3]
+  place(board, 0, 3, piece('black', 'king'));
+  const state: GameState = { board, turn: 'red', history: [], status: 'playing' };
+  const next  = applyMove(state, { row: 1, col: 1 }, { row: 1, col: 0 });
+  assertEqual(next.status, 'red_win');
 });

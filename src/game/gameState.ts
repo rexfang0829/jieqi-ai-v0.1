@@ -1,6 +1,6 @@
 import type { GameState, Move, Position } from '../types/chess';
 import { createInitialBoard } from './initialBoard';
-import { getAllLegalMoves, isCheckmate } from './checkRules';
+import { getAllLegalMoves } from './checkRules';
 
 export function newGame(): GameState {
   return { board: createInitialBoard(), turn: 'red', history: [], status: 'playing' };
@@ -28,6 +28,8 @@ export function applyMove(state: GameState, from: Position, to: Position): GameS
     flipped,
   };
   const nextTurn = state.turn === 'red' ? 'black' : 'red';
-  const status = isCheckmate(board, nextTurn) ? (state.turn === 'red' ? 'red_win' : 'black_win') : 'playing';
+  const status = getAllLegalMoves(board, nextTurn).length === 0
+    ? (state.turn === 'red' ? 'red_win' : 'black_win')
+    : 'playing';
   return { ...state, board, turn: nextTurn, history: [...state.history, move], status };
 }
