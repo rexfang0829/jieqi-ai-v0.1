@@ -1467,12 +1467,13 @@ function computeEndgamePlan(
 
   const opp = opponent(state.turn);
   const movedPiece = nextBoard[move.to.row][move.to.col]!;
+  const moveRevealsUnknown = !move.piece.revealed;
   const palaceCenter = enemyPalaceCenter(state.turn);
   const kingPos = opponentKingPosition(nextBoard, state.turn);
 
   // towardEnemyKing: revealed major moves closer to enemy king
   let towardEnemyKing = false;
-  if (kingPos && movedPiece.revealed && isMajorActivePiece(movedPiece)) {
+  if (!moveRevealsUnknown && kingPos && movedPiece.revealed && isMajorActivePiece(movedPiece)) {
     const distBefore = chebyshevDist(move.from, kingPos);
     const distAfter = chebyshevDist(move.to, kingPos);
     towardEnemyKing = distAfter < distBefore;
@@ -1490,7 +1491,7 @@ function computeEndgamePlan(
   let attackPalaceGuard = false;
   if (move.captured && isPalaceGuardPiece(move.captured)) {
     attackPalaceGuard = true;
-  } else if (movedPiece.revealed) {
+  } else if (!moveRevealsUnknown && movedPiece.revealed) {
     const followUp = getAllLegalMoves(nextBoard, state.turn);
     attackPalaceGuard = followUp.some(m =>
       m.from.row === move.to.row && m.from.col === move.to.col &&
@@ -1500,7 +1501,7 @@ function computeEndgamePlan(
 
   // improveMajorActivity: revealed rook/cannon/horse moves closer to enemy palace center
   let improveMajorActivity = false;
-  if (movedPiece.revealed && isMajorActivePiece(movedPiece)) {
+  if (!moveRevealsUnknown && movedPiece.revealed && isMajorActivePiece(movedPiece)) {
     const distBefore = chebyshevDist(move.from, palaceCenter);
     const distAfter = chebyshevDist(move.to, palaceCenter);
     improveMajorActivity = distAfter < distBefore;
@@ -1508,7 +1509,7 @@ function computeEndgamePlan(
 
   // passedPawnAdvance: revealed crossed pawn moving forward
   let passedPawnAdvance = false;
-  if (movedPiece.revealed && publicType(movedPiece) === 'pawn' && isCrossedPawn(movedPiece, move.to)) {
+  if (!moveRevealsUnknown && movedPiece.revealed && publicType(movedPiece) === 'pawn' && isCrossedPawn(movedPiece, move.to)) {
     const movingForward = state.turn === 'red'
       ? move.to.row < move.from.row
       : move.to.row > move.from.row;
@@ -1758,7 +1759,10 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
   let dynamicMoverValue = 0;
   let cannonFrameAdjustment = 0;
   let horseMobilityAdjustment = 0;
-  if (moved.revealed) {
+
+  // 暗子一動會翻開，但評估時不可直接把它當 originalType 的炮/馬吃功能加分。
+  // 例如暗包移動後不能先拿「炮有炮架」加分；必須等完整牌池/最差翻出系統再處理。
+  if (!moveRevealsUnknown && moved.revealed) {
     if (movedPieceType === 'cannon') {
       cannonFrameAdjustment = cannonFrameAdjust(nextBoard, move.to, weights);
       const phaseAdj = dynamicValuePhase === 'opening'
