@@ -37,6 +37,11 @@ function notationPrefixForMove(board: Board, move: Pick<Move, 'from' | 'piece'>)
   const moving = move.piece;
   const type = moving.revealed ? moving.realType : moving.originalType;
 
+  // 士、象、將帥用「路數 + 進/退」即可辨識，不使用前/後。
+  if (type === 'advisor' || type === 'elephant' || type === 'king') {
+    return undefined;
+  }
+
   const sameFilePieces: { row: number }[] = [];
 
   for (let r = 0; r < 10; r++) {

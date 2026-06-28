@@ -204,7 +204,7 @@ export const defaultAiWeights: AiWeights = {
   kingZoneLineBonus: 15,
   effectiveCheckBonus: 35,
   importantThreatRatio: 0.12,
-  blockImmediateWinBonus: 70,
+  blockImmediateWinBonus: 260,
   escapeImportantPieceBonus: 45,
   possibleLossMultiplier: 1.8,
   maxReplyGainPenaltyRatio: 0.25,
