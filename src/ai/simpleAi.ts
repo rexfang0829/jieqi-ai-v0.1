@@ -2503,7 +2503,7 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
 }
 
 function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: boolean, weights: AiWeights): string {
-  if (avoidedOpponentWin) return '避免對方一步殺';
+  if (evaluation.blocksImmediateWin) return '避免對方一步殺';
   if (evaluation.resolvedHighValueThreat && evaluation.multiPurposeDefense) return '一手多效：解除大子威脅並同時創造威脅';
   if (evaluation.rescuesHighValuePiece) return '安全門：解救己方明車';
   if (evaluation.rescuesSecondaryPiece) return '安全門：解救己方明炮/明馬';
