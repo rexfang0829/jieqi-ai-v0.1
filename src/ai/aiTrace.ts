@@ -32,6 +32,8 @@ export type AiMoveTrace = {
   edgeCannonPressureUnresolved: boolean;
   speculativeAttack: boolean;
   safeCapturePriority: boolean;
+  prematureHiddenMajorLowHiddenCapture?: boolean;
+  prematureHiddenMajorLowHiddenCapturePenalty?: number;
   repetitiveCheck: boolean;
   repetitiveCheckPenalty: number;
   revealChoiceRisk: boolean;

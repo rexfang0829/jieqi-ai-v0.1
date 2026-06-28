@@ -59,6 +59,8 @@ type MoveEvaluation = {
   edgeCannonPressureUnresolved: boolean;
   speculativeAttack: boolean;
   safeCapturePriority: boolean;
+  prematureHiddenMajorLowHiddenCapture: boolean;
+  prematureHiddenMajorLowHiddenCapturePenalty: number;
   repetitiveCheck: boolean;
   repetitiveCheckPenaltyScore: number;
   revealChoiceRisk: boolean;
@@ -1806,8 +1808,34 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     ? Math.min(hiddenPressureScore, weights.edgeCannonPressureHiddenPressureCap)
     : hiddenPressureScore;
 
-  // Safe capture priority: boost definite captures over speculative pressure
-  const safeCapturePriority = captureGain > 0 && exchangeNet >= 0;
+  // 高價暗子主動吃低外觀暗子：實戰上通常不急著交換。
+  // 例如暗車吃黑暗卒，應等對方暗卒翻開後再決定是否用暗車交換。
+  const hiddenMajorLowHiddenCapture =
+    moveRevealsUnknown &&
+    !!move.captured &&
+    !move.captured.revealed &&
+    (
+      move.piece.originalType === 'rook' ||
+      move.piece.originalType === 'cannon' ||
+      move.piece.originalType === 'horse'
+    ) &&
+    (
+      move.captured.originalType === 'pawn' ||
+      move.captured.originalType === 'advisor' ||
+      move.captured.originalType === 'elephant'
+    ) &&
+    captureGain < weights.pieceValues.horse &&
+    !blocksImmediateWin &&
+    !effectiveCheck;
+
+  const prematureHiddenMajorLowHiddenCapture = hiddenMajorLowHiddenCapture;
+  const prematureHiddenMajorLowHiddenCapturePenalty = prematureHiddenMajorLowHiddenCapture
+    ? weights.unsafeCapturePenalty
+    : 0;
+
+  // Safe capture priority: boost definite captures over speculative pressure.
+  // 但高價暗子主動吃低外觀暗子不算「確定安全吃子」。
+  const safeCapturePriority = captureGain > 0 && exchangeNet >= 0 && !prematureHiddenMajorLowHiddenCapture;
   const safeCapturePriorityBonus = safeCapturePriority ? weights.safeCapturePriorityBonus : 0;
 
   // Speculative hidden cannon attack: penalize unrevealed cannon threatening unrevealed target (no capture)
@@ -2267,6 +2295,7 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     purposePenalty +
     checkPenalty +
     safeCapturePriorityBonus +
+    prematureHiddenMajorLowHiddenCapturePenalty +
     speculativeAttackPenalty +
     repetitiveCheckPenaltyScore +
     repeatedCheckingCyclePenaltyScore +
@@ -2350,6 +2379,8 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     edgeCannonPressureUnresolved,
     speculativeAttack,
     safeCapturePriority,
+    prematureHiddenMajorLowHiddenCapture,
+    prematureHiddenMajorLowHiddenCapturePenalty,
     repetitiveCheck,
     repetitiveCheckPenaltyScore,
     revealChoiceRisk,
@@ -2497,6 +2528,7 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (evaluation.hangingMove) return '落點缺少保護，已扣分';
   if (evaluation.advisorRevealClogRisk && evaluation.advisorRevealClogPenalty < 0) return '暗士翻子易卡住將門，已扣分';
   if (evaluation.revealChoiceRisk) return '吃低價暗子後給對方選擇權，已降分';
+  if (evaluation.prematureHiddenMajorLowHiddenCapture) return '高價暗子主動吃低價暗子，已降分';
   if (best.captured && evaluation.exchangeNet < 0) return '交換可能虧損，已扣分';
   if (evaluation.capturedConnectedAdvisor) return '吃掉連環士';
   if (evaluation.capturedCrossedPawn) return '吃過河兵';
@@ -2719,6 +2751,8 @@ export function recommendMove(
     edgeCannonPressureUnresolved: evaluation.edgeCannonPressureUnresolved,
     speculativeAttack: evaluation.speculativeAttack,
     safeCapturePriority: evaluation.safeCapturePriority,
+    prematureHiddenMajorLowHiddenCapture: evaluation.prematureHiddenMajorLowHiddenCapture,
+    prematureHiddenMajorLowHiddenCapturePenalty: evaluation.prematureHiddenMajorLowHiddenCapturePenalty,
     repetitiveCheck: evaluation.repetitiveCheck,
     repetitiveCheckPenalty: evaluation.repetitiveCheckPenaltyScore,
     revealChoiceRisk: evaluation.revealChoiceRisk,
