@@ -46,5 +46,7 @@ export function moveText(move: Move): string {
   const piece = move.piece;
   const type = typeForNotation(piece);
   const hiddenPrefix = piece.revealed ? '' : '暗';
-  return `${hiddenPrefix}${pieceTypeName(piece.side, type)}${fileNumber(piece.side, move.from.col)}${actionText(piece, move)}${captureText(move)}`;
+  const prefix = move.notationPrefix ?? '';
+  const fromFile = prefix ? '' : fileNumber(piece.side, move.from.col);
+  return `${hiddenPrefix}${prefix}${pieceTypeName(piece.side, type)}${fromFile}${actionText(piece, move)}${captureText(move)}`;
 }

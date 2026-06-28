@@ -33,6 +33,32 @@ export function isInCheck(board: Board, side: Side): boolean {
   return kingsFace(board);
 }
 
+function notationPrefixForMove(board: Board, move: Pick<Move, 'from' | 'piece'>): '前' | '後' | undefined {
+  const moving = move.piece;
+  const type = moving.revealed ? moving.realType : moving.originalType;
+
+  const sameFilePieces: { row: number }[] = [];
+
+  for (let r = 0; r < 10; r++) {
+    const p = board[r][move.from.col];
+    if (!p || p.side !== moving.side) continue;
+
+    const pType = p.revealed ? p.realType : p.originalType;
+    if (pType !== type) continue;
+
+    sameFilePieces.push({ row: r });
+  }
+
+  if (sameFilePieces.length < 2) return undefined;
+
+  const frontRow =
+    moving.side === 'red'
+      ? Math.min(...sameFilePieces.map(p => p.row))
+      : Math.max(...sameFilePieces.map(p => p.row));
+
+  return move.from.row === frontRow ? '前' : '後';
+}
+
 export function getAllLegalMoves(board: Board, side: Side): Move[] {
   const moves: Move[] = [];
   for (let r=0;r<10;r++) for (let c=0;c<9;c++) {
@@ -53,13 +79,13 @@ export function getAllLegalMoves(board: Board, side: Side): Move[] {
           capturedWasHidden: captured ? !captured.revealed : undefined,
           captureKind: captured ? (captured.revealed ? 'revealed' : 'hidden') : undefined,
           flipped: !piece.revealed,
+          notationPrefix: notationPrefixForMove(board, { from, piece }),
         });
       }
     }
   }
   return moves;
 }
-
 export function isCheckmate(board: Board, side: Side): boolean {
   return isInCheck(board, side) && getAllLegalMoves(board, side).length === 0;
 }

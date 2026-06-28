@@ -21,6 +21,7 @@ export type Move = {
   capturedWasHidden?: boolean;
   captureKind?: 'hidden' | 'revealed';
   flipped?: boolean;
+  notationPrefix?: '前' | '後';
 };
 
 export type GameStatus = 'playing' | 'red_win' | 'black_win' | 'draw';

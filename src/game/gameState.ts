@@ -19,8 +19,7 @@ export function applyMove(state: GameState, from: Position, to: Position): GameS
   board[to.row][to.col] = {...moving, revealed: true};
   board[from.row][from.col] = null;
   const move: Move = {
-    from,
-    to,
+    ...legal,
     piece: moving,
     captured,
     capturedWasHidden: captured ? !captured.revealed : undefined,
