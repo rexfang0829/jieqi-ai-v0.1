@@ -123,6 +123,27 @@ function fmtTrace(t: AiMoveTrace): string {
     '  dynamicValuePhase: ' + (t.dynamicValuePhase ?? '-'),
     '  cannonFrameAdjustment: ' + num(t.cannonFrameAdjustment),
     '  horseMobilityAdjustment: ' + num(t.horseMobilityAdjustment),
+    '  forcingMove: ' + bool(t.forcingMove),
+    '  forcingTargetKind: ' + (t.forcingTargetKind ?? '-'),
+    '  forcingTargetType: ' + (t.forcingTargetType ?? '-'),
+    '  forcingTargetRevealed: ' + bool(t.forcingTargetRevealed),
+    '  forcingTargetValue: ' + num(t.forcingTargetValue),
+    '  forcingMoveQuality: ' + (t.forcingMoveQuality ?? '-'),
+    '  forcingMoveProgress: ' + num(t.forcingMoveProgress),
+    '  unproductiveForcingMove: ' + bool(t.unproductiveForcingMove),
+    '  repetitiveForcingMove: ' + bool(t.repetitiveForcingMove),
+    '  forcingCycle: ' + bool(t.forcingCycle),
+    '  mutualChaseLoop: ' + bool(t.mutualChaseLoop),
+    '  loopBreakingMove: ' + bool(t.loopBreakingMove),
+    '  productiveAlternative: ' + bool(t.productiveAlternative),
+    '  seekNewInformation: ' + bool(t.seekNewInformation),
+    '  loopBreakingDevelopment: ' + bool(t.loopBreakingDevelopment),
+    '  boardStateRefreshMove: ' + bool(t.boardStateRefreshMove),
+    '  palaceThreatMapScore: ' + num(t.palaceThreatMapScore),
+    '  cannonPalaceRestriction: ' + bool(t.cannonPalaceRestriction),
+    '  kingJoinAttack: ' + bool(t.kingJoinAttack),
+    '  lowValuePieceSupportsMateNet: ' + bool(t.lowValuePieceSupportsMateNet),
+    '  mateNetPotential: ' + bool(t.mateNetPotential),
   ];
   return lines.join('\n');
 }
@@ -205,6 +226,78 @@ export function formatAiDebugReport(input: AiDebugReportInput): string {
       const t = top5[i];
       lines.push((i + 1) + '. ' + moveText(t.move) + '｜' + t.score + '｜' + t.reason);
     }
+  }
+
+  /* Task 6 (第四包): Forcing Move Quality */
+  lines.push('');
+  lines.push('--- Forcing Move Quality（強制步品質） ---');
+  if (selectedTrace) {
+    const t = selectedTrace;
+    lines.push('forcingMove：' + bool(t.forcingMove));
+    if (t.forcingMove) {
+      lines.push('forcingTargetKind：' + (t.forcingTargetKind ?? '-'));
+      lines.push('forcingTargetType：' + (t.forcingTargetType ?? '-'));
+      lines.push('forcingTargetRevealed：' + bool(t.forcingTargetRevealed));
+      lines.push('forcingTargetValue：' + num(t.forcingTargetValue));
+      lines.push('forcingMoveQuality：' + (t.forcingMoveQuality ?? '-'));
+      lines.push('forcingMoveProgress：' + num(t.forcingMoveProgress));
+      lines.push('unproductiveForcingMove：' + bool(t.unproductiveForcingMove));
+    } else {
+      lines.push('（此步不構成 forcingMove）');
+    }
+  } else {
+    lines.push('（無推薦步 trace 可供分析）');
+  }
+
+  /* Task 6 (第四包): Chase/Cycle Detection */
+  lines.push('');
+  lines.push('--- Chase/Cycle Detection（追逃循環偵測） ---');
+  if (selectedTrace) {
+    const t = selectedTrace;
+    lines.push('repetitiveForcingMove：' + bool(t.repetitiveForcingMove));
+    lines.push('forcingCycle：' + bool(t.forcingCycle));
+    lines.push('mutualChaseLoop：' + bool(t.mutualChaseLoop));
+    if (t.mutualChaseLoop || t.forcingCycle) {
+      lines.push('判定：雙方來回追逃，局面沒有改變');
+    } else if (t.repetitiveForcingMove) {
+      lines.push('判定：近期已多次追同一目標，未取得實質進展');
+    } else {
+      lines.push('判定：未偵測到追逃循環');
+    }
+  } else {
+    lines.push('（無推薦步 trace 可供分析）');
+  }
+
+  /* Task 6 (第四包): Loop Breaking Alternatives */
+  lines.push('');
+  lines.push('--- Loop Breaking Alternatives（破循環替代方案） ---');
+  if (selectedTrace) {
+    const t = selectedTrace;
+    if (t.loopBreakingMove) {
+      lines.push('已採用破循環替代步：放棄無成果追擊，改為：');
+      if (t.seekNewInformation) lines.push('  - 翻新子（seekNewInformation / boardStateRefreshMove）');
+      if (t.loopBreakingDevelopment) lines.push('  - 改善低價子（loopBreakingDevelopment）');
+      lines.push('  - productiveAlternative：' + bool(t.productiveAlternative));
+    } else {
+      lines.push('未觸發破循環邏輯（目前最佳步非無成果/重複/循環強制步，或已被安全門/解殺優先）');
+    }
+  } else {
+    lines.push('（無推薦步 trace 可供分析）');
+  }
+
+  /* Task 6 (第四包): Palace Threat Map MVP */
+  lines.push('');
+  lines.push('--- Palace Threat Map MVP（九宮威脅地圖，僅供參考，非絕殺判斷） ---');
+  if (selectedTrace) {
+    const t = selectedTrace;
+    lines.push('palaceThreatMapScore：' + num(t.palaceThreatMapScore));
+    lines.push('cannonPalaceRestriction：' + bool(t.cannonPalaceRestriction));
+    lines.push('kingJoinAttack：' + bool(t.kingJoinAttack));
+    lines.push('lowValuePieceSupportsMateNet：' + bool(t.lowValuePieceSupportsMateNet));
+    lines.push('mateNetPotential：' + bool(t.mateNetPotential));
+    lines.push('（此區塊僅為啟發式九宮壓迫參考分數，不可取代真正的絕殺/解殺判斷）');
+  } else {
+    lines.push('（無推薦步 trace 可供分析）');
   }
 
   lines.push('');

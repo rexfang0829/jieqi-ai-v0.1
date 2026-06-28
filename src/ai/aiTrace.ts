@@ -128,6 +128,30 @@ export type AiMoveTrace = {
   dynamicValuePhase?: 'opening' | 'midgame' | 'endgame';
   cannonFrameAdjustment?: number;
   horseMobilityAdjustment?: number;
+
+  // Task 6 (第四包): forcing move quality + chase loop suppression MVP
+  forcingMove?: boolean;
+  forcingTargetKind?: 'king' | 'major' | 'hiddenMajor' | null;
+  forcingTargetType?: PieceType | null;
+  forcingTargetRevealed?: boolean | null;
+  forcingTargetValue?: number;
+  forcingMoveQuality?: 'productive' | 'neutral' | 'unproductive' | 'repetitive' | 'cycle';
+  forcingMoveProgress?: number;
+  unproductiveForcingMove?: boolean;
+  repetitiveForcingMove?: boolean;
+  forcingCycle?: boolean;
+  mutualChaseLoop?: boolean;
+  loopBreakingMove?: boolean;
+  productiveAlternative?: boolean;
+  seekNewInformation?: boolean;
+  loopBreakingDevelopment?: boolean;
+  boardStateRefreshMove?: boolean;
+  // Optional: 九宮 (palace) threat map MVP
+  palaceThreatMapScore?: number;
+  cannonPalaceRestriction?: boolean;
+  kingJoinAttack?: boolean;
+  lowValuePieceSupportsMateNet?: boolean;
+  mateNetPotential?: boolean;
 };
 
 /**

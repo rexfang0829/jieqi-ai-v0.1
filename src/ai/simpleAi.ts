@@ -156,6 +156,28 @@ type MoveEvaluation = {
   dynamicValuePhase: 'opening' | 'midgame' | 'endgame';
   cannonFrameAdjustment: number;
   horseMobilityAdjustment: number;
+  // Task 6 (第四包): forcing move quality + chase loop suppression MVP
+  forcingMove: boolean;
+  forcingTargetKind: 'king' | 'major' | 'hiddenMajor' | null;
+  forcingTargetType: PieceType | null;
+  forcingTargetRevealed: boolean | null;
+  forcingTargetValue: number;
+  forcingMoveQuality: 'productive' | 'neutral' | 'unproductive' | 'repetitive' | 'cycle';
+  forcingMoveProgress: number;
+  unproductiveForcingMove: boolean;
+  repetitiveForcingMove: boolean;
+  forcingCycle: boolean;
+  mutualChaseLoop: boolean;
+  loopBreakingMove: boolean;
+  productiveAlternative: boolean;
+  seekNewInformation: boolean;
+  loopBreakingDevelopment: boolean;
+  boardStateRefreshMove: boolean;
+  palaceThreatMapScore: number;
+  cannonPalaceRestriction: boolean;
+  kingJoinAttack: boolean;
+  lowValuePieceSupportsMateNet: boolean;
+  mateNetPotential: boolean;
 };
 
 type AiThreatInfo = {
@@ -213,6 +235,195 @@ function detectRepeatedCheckingCycle(state: GameState, move: Move, isCheck: bool
     samePosition(prev2.from, prev4.to) &&
     samePosition(prev2.to, prev4.from)
   );
+}
+
+// ─── Task 6 (第四包)：forcing move 品質 + 追逃循環抑制 MVP ──────────────────────
+// 以下偵測函式只使用棋譜公開歷史（from/to/captured/piece.side）與合法走法，
+// 不偷看 unrevealed 棋子的 realType，符合公平資訊原則。皆為 4–8 ply 視窗的
+// 啟發式 MVP，不取代真正的搜尋引擎。
+
+/**
+ * Task 6：同側重複強制步偵測。連續三次（含本步）由我方發出強制步，且中間
+ * 兩步歷史紀錄都沒有吃子，視為重複強制步。邏輯與 detectRepetitiveCheck 相同，
+ * 但泛化到所有 forcingMove（將軍或攻擊大子），不限將軍。
+ * 重要：只檢查「歷史上」是否有進展，不因本步恰好是安全吃子就豁免——
+ * 單次安全抓子不是永久豁免，同型安全抓子重複出現仍會被判定為重複強制步。
+ */
+function detectRepetitiveForcingMove(state: GameState, move: Move, isForcingMove: boolean): boolean {
+  if (!isForcingMove) return false;
+  const h = state.history;
+  if (h.length < 4) return false;
+  const prev1 = h[h.length - 2];
+  const prev2 = h[h.length - 4];
+  if (!prev1 || !prev2) return false;
+  if (prev1.piece.side !== state.turn || prev2.piece.side !== state.turn) return false;
+  if (prev1.captured || prev2.captured) return false;
+  return true;
+}
+
+/**
+ * Task 6：偵測我方同一棋子在兩格之間來回追擊（A→B, B→A, A→B），
+ * 過去兩步歷史紀錄沒有吃子。同樣不因本步是安全吃子而豁免。
+ */
+function detectBackAndForthChase(state: GameState, move: Move): boolean {
+  const h = state.history;
+  if (h.length < 4) return false;
+  const prev2 = h[h.length - 2];
+  const prev4 = h[h.length - 4];
+  if (!prev2 || !prev4) return false;
+  if (prev2.piece.side !== state.turn || prev4.piece.side !== state.turn) return false;
+  if (prev2.captured || prev4.captured) return false;
+  return (
+    samePosition(move.from, prev2.to) &&
+    samePosition(move.to, prev2.from) &&
+    samePosition(prev2.from, prev4.to) &&
+    samePosition(prev2.to, prev4.from)
+  );
+}
+
+/**
+ * Task 6：偵測對方棋子在兩格之間來回逃竄（被追擊的目標也來回逃跑），
+ * 即雙方來回追逃循環的「對方側」訊號。
+ */
+function detectTwoSideChaseCycle(state: GameState, move: Move): boolean {
+  const h = state.history;
+  if (h.length < 3) return false;
+  const oppLast = h[h.length - 1];
+  const oppPrev = h[h.length - 3];
+  if (!oppLast || !oppPrev) return false;
+  if (oppLast.piece.side === state.turn || oppPrev.piece.side === state.turn) return false;
+  if (oppLast.captured || oppPrev.captured) return false;
+  return (
+    samePosition(oppLast.from, oppPrev.to) &&
+    samePosition(oppLast.to, oppPrev.from)
+  );
+}
+
+/**
+ * Task 6：雙方追逃循環——我方來回追擊且對方來回逃竄，局面實質沒有改變。
+ */
+function detectMutualChaseLoop(state: GameState, move: Move, isForcingMove: boolean): boolean {
+  if (!isForcingMove) return false;
+  return detectBackAndForthChase(state, move) && detectTwoSideChaseCycle(state, move);
+}
+
+/**
+ * Task 6：廣義強制步循環偵測。同一步（from→to）在最近 4–8 ply 視窗內由我方
+ * 重複出現，且視窗期間沒有吃子，代表局面正在原地循環（不限單一棋子來回兩格，
+ * 也能抓到較鬆散的循環型態）。
+ */
+function detectForcingCycle(state: GameState, move: Move, isForcingMove: boolean): boolean {
+  if (!isForcingMove) return false;
+  const h = state.history;
+  if (h.length < 4) return false;
+  const window = h.slice(Math.max(0, h.length - 8));
+  let repeated = false;
+  let anyCapture = false;
+  for (const entry of window) {
+    if (entry.piece.side !== state.turn) continue;
+    if (entry.captured) anyCapture = true;
+    if (samePosition(entry.from, move.from) && samePosition(entry.to, move.to)) {
+      repeated = true;
+    }
+  }
+  if (anyCapture) return false;
+  return repeated;
+}
+
+/**
+ * Task 6：九宮（palace）威脅地圖 MVP 用——回傳敵方九宮的 9 個格子座標。
+ * 僅用於啟發式壓迫評估，不可取代真正的絕殺/解殺判斷。
+ */
+function enemyPalaceSquares(side: Side): Position[] {
+  const rows = side === 'red' ? [0, 1, 2] : [7, 8, 9];
+  const squares: Position[] = [];
+  for (const row of rows) {
+    for (let col = 3; col <= 5; col++) squares.push({ row, col });
+  }
+  return squares;
+}
+
+/** Task 6：計算我方目前能攻擊到的敵方九宮格數（公開合法走法，公平資訊）。 */
+function countPalaceControlledSquares(board: Board, side: Side, palaceSquares: Position[]): number {
+  let count = 0;
+  for (const sq of palaceSquares) {
+    if (isSquareAttacked(board, side, sq)) count += 1;
+  }
+  return count;
+}
+
+type PalaceThreatMapMvp = {
+  palaceThreatMapScore: number;
+  cannonPalaceRestriction: boolean;
+  kingJoinAttack: boolean;
+  lowValuePieceSupportsMateNet: boolean;
+  mateNetPotential: boolean;
+};
+
+const inactivePalaceThreatMap: PalaceThreatMapMvp = {
+  palaceThreatMapScore: 0,
+  cannonPalaceRestriction: false,
+  kingJoinAttack: false,
+  lowValuePieceSupportsMateNet: false,
+  mateNetPotential: false,
+};
+
+/**
+ * Task 6：九宮威脅地圖 MVP（僅供參考，非絕殺判斷）。統計我方可攻擊的敵方
+ * 九宮格數變化、敵方將帥逃格數，並偵測炮鎮九宮線、將帥助攻、低價子補位等
+ * 型態。只用合法走法與棋子是否已翻開等公開資訊，不偷看 unrevealed realType。
+ * 只在 forcingMove 成立時才計算，避免與一般威脅評估重疊灌分。
+ */
+function computePalaceThreatMapMvp(
+  state: GameState,
+  move: Move,
+  nextBoard: Board,
+  forcingMove: boolean,
+  weights: AiWeights
+): PalaceThreatMapMvp {
+  if (!forcingMove) return inactivePalaceThreatMap;
+
+  const side = state.turn;
+  const opp = opponent(side);
+  const palaceSquares = enemyPalaceSquares(side);
+  const beforeControlled = countPalaceControlledSquares(state.board, side, palaceSquares);
+  const afterControlled = countPalaceControlledSquares(nextBoard, side, palaceSquares);
+  const kingEscapeSquares = getAllLegalMoves(nextBoard, opp).filter(m => publicType(m.piece) === 'king').length;
+
+  const movedPiece = nextBoard[move.to.row][move.to.col];
+  const movedToPalaceLine = palaceSquares.some(sq => sq.col === move.to.col || sq.row === move.to.row);
+
+  const cannonPalaceRestriction =
+    !!movedPiece && movedPiece.revealed && publicType(movedPiece) === 'cannon' &&
+    movedToPalaceLine && afterControlled > beforeControlled;
+
+  const kingJoinAttack =
+    !!movedPiece && publicType(movedPiece) === 'king' &&
+    !isPositionAttackedByRevealedEnemy(nextBoard, side, move.to) &&
+    afterControlled > 0;
+
+  const lowValuePieceSupportsMateNet =
+    !!movedPiece &&
+    (publicType(movedPiece) === 'advisor' || publicType(movedPiece) === 'elephant' || publicType(movedPiece) === 'pawn') &&
+    palaceSquares.some(sq => sq.row === move.to.row && sq.col === move.to.col) &&
+    afterControlled >= beforeControlled;
+
+  const mateNetPotential = afterControlled >= 2 && kingEscapeSquares <= 1;
+
+  const palaceThreatMapScore =
+    Math.max(0, afterControlled - beforeControlled) * Math.round(weights.palaceThreatMapBonus / 2) +
+    (cannonPalaceRestriction ? weights.cannonPalaceRestrictionBonus : 0) +
+    (kingJoinAttack ? weights.kingJoinAttackBonus : 0) +
+    (lowValuePieceSupportsMateNet ? weights.lowValueMateNetSupportBonus : 0) +
+    (mateNetPotential ? weights.palaceThreatMapBonus : 0);
+
+  return {
+    palaceThreatMapScore,
+    cannonPalaceRestriction,
+    kingJoinAttack,
+    lowValuePieceSupportsMateNet,
+    mateNetPotential,
+  };
 }
 
 function publicType(piece: { originalType: PieceType; realType: PieceType; revealed: boolean }): PieceType {
@@ -1932,6 +2143,95 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     decisionLayer = 4; decisionLayerLabel = '預設—無明確目標';
   }
 
+  // ─── Task 6 (第四包)：forcing move 品質 + 追逃循環抑制 MVP ────────────────
+  // forcingMove：(1) 本步形成有效將軍；或 (2)-(4) 攻擊/壓迫對方大子（已翻明
+  // 或公開可推斷的暗大子），統一以既有的 importantThreat + afterThreat 判斷
+  // （afterThreat 內部已用 publicType 計算 targetType，不偷看 realType）。
+  // 直接吃掉敵方大子本身就是一種「攻擊大子」——不必等afterThreat才算forcingMove。
+  const capturedPieceForForcing = move.captured ?? null;
+  const capturedMajorValue = capturedPieceForForcing
+    ? weights.pieceValues[publicType(capturedPieceForForcing)]
+    : 0;
+  const directMajorCapture = !!capturedPieceForForcing && capturedMajorValue >= weights.pieceValues.horse;
+  const forcingCaptureMajor = directMajorCapture || (importantThreat && !!afterThreat);
+  const forcingMove = checking || forcingCaptureMajor;
+  let forcingTargetKind: 'king' | 'major' | 'hiddenMajor' | null = null;
+  let forcingTargetType: PieceType | null = null;
+  let forcingTargetRevealed: boolean | null = null;
+  let forcingTargetValue = 0;
+  if (checking) {
+    forcingTargetKind = 'king';
+    forcingTargetType = 'king';
+    forcingTargetRevealed = true;
+    forcingTargetValue = weights.pieceValues.king;
+  } else if (directMajorCapture && capturedPieceForForcing) {
+    forcingTargetKind = capturedPieceForForcing.revealed ? 'major' : 'hiddenMajor';
+    forcingTargetType = publicType(capturedPieceForForcing);
+    forcingTargetRevealed = capturedPieceForForcing.revealed;
+    forcingTargetValue = capturedMajorValue;
+  } else if (forcingCaptureMajor && afterThreat) {
+    forcingTargetKind = afterThreat.targetRevealed ? 'major' : 'hiddenMajor';
+    forcingTargetType = afterThreat.targetType;
+    forcingTargetRevealed = afterThreat.targetRevealed;
+    forcingTargetValue = afterThreat.value;
+  }
+
+  // 追逃循環 / 重複強制步偵測：只用棋譜公開歷史（4–8 ply 視窗）。
+  // 重要：不把「安全抓高價子」當永久豁免——這些偵測函式不看本步是否吃子，
+  // 只看歷史走法型態，因此同型安全抓子若已進入追逃循環仍會被判定。
+  const repetitiveForcingMove = detectRepetitiveForcingMove(state, move, forcingMove);
+  const mutualChaseLoop = detectMutualChaseLoop(state, move, forcingMove);
+  const forcingCycle = mutualChaseLoop || detectForcingCycle(state, move, forcingMove);
+
+  // 強制步是否取得「實質進展」：直接取勝/有利吃子/有效將軍/解除己方危機/
+  // 一手多效/形成第二威脅/壓縮對方將帥活動空間 任一項即視為有進展。
+  // 注意：單純「形成一個新威脅」（threatDelta > 0）不足以視為實質進展——
+  // 若對手能簡單回應（撤子）就化解，威脅本身仍是空的。實質進展需要更具體的
+  // 收穫：直接取勝、有利吃子、有效將軍、解除己方危機、一手多效、或壓縮敵方
+  // 將帥活動空間。這也呼應使用者要求：安全抓子/威脅不是永久豁免，
+  // 沒有實際斬獲的「光威脅」預設視為無成果強制步。
+  const forcingMoveRealProgress = forcingMove && (
+    blocksImmediateWin ||
+    (captureGain > 0 && exchangeNet >= 0) ||
+    (checkingQuality !== 'none' && checkingQuality !== 'meaninglessCheck') ||
+    resolvedHighValueThreat ||
+    multiPurposeDefense ||
+    endgamePlan.restrictKingMobility
+  );
+
+  const forcingMoveQuality: 'productive' | 'neutral' | 'unproductive' | 'repetitive' | 'cycle' =
+    !forcingMove ? 'neutral'
+    : (mutualChaseLoop || forcingCycle) ? 'cycle'
+    : repetitiveForcingMove ? 'repetitive'
+    : !forcingMoveRealProgress ? 'unproductive'
+    : 'productive';
+  const unproductiveForcingMove = forcingMoveQuality === 'unproductive';
+  const forcingMoveProgress = forcingMoveQuality === 'productive'
+    ? Math.max(captureGain, threatDelta, 0)
+    : 0;
+
+  const productiveForcingMoveBonusApplied =
+    forcingMoveQuality === 'productive' ? weights.productiveForcingMoveBonus : 0;
+  const unproductiveForcingMovePenaltyApplied =
+    unproductiveForcingMove ? weights.unproductiveForcingMovePenalty : 0;
+  const repetitiveForcingMovePenaltyApplied =
+    forcingMoveQuality === 'repetitive' ? weights.repetitiveForcingMovePenalty : 0;
+  const forcingCyclePenaltyApplied = mutualChaseLoop
+    ? weights.mutualChaseLoopPenalty
+    : forcingCycle ? weights.forcingCyclePenalty : 0;
+
+  // 九宮威脅地圖 MVP（僅供參考，非絕殺判斷；只在 forcingMove 時計算，避免與
+  // 一般威脅評估重疊灌分）。
+  const palaceThreatMap = computePalaceThreatMapMvp(state, move, nextBoard, forcingMove, weights);
+
+  // loopBreakingMove 相關欄位由 recommendMove() 的 Need C 區塊在挑選替代步時
+  // 寫入，evaluateMove() 階段一律先設為 false。
+  const loopBreakingMove = false;
+  const productiveAlternative = false;
+  const seekNewInformation = false;
+  const loopBreakingDevelopment = false;
+  const boardStateRefreshMove = false;
+
   const score =
     captureGain -
     reply.possibleLoss +
@@ -1994,7 +2294,12 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     unresolvedThreatAfterDefensePenaltyScore +
     checkingQualityScore +
     dynamicMoverValue +
-    dynamicTargetValue -
+    dynamicTargetValue +
+    productiveForcingMoveBonusApplied +
+    unproductiveForcingMovePenaltyApplied +
+    repetitiveForcingMovePenaltyApplied +
+    forcingCyclePenaltyApplied +
+    palaceThreatMap.palaceThreatMapScore -
     Math.round(reply.maxReplyGain * weights.maxReplyGainPenaltyRatio);
 
   return {
@@ -2138,6 +2443,27 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     dynamicValuePhase,
     cannonFrameAdjustment,
     horseMobilityAdjustment,
+    forcingMove,
+    forcingTargetKind,
+    forcingTargetType,
+    forcingTargetRevealed,
+    forcingTargetValue,
+    forcingMoveQuality,
+    forcingMoveProgress,
+    unproductiveForcingMove,
+    repetitiveForcingMove,
+    forcingCycle,
+    mutualChaseLoop,
+    loopBreakingMove,
+    productiveAlternative,
+    seekNewInformation,
+    loopBreakingDevelopment,
+    boardStateRefreshMove,
+    palaceThreatMapScore: palaceThreatMap.palaceThreatMapScore,
+    cannonPalaceRestriction: palaceThreatMap.cannonPalaceRestriction,
+    kingJoinAttack: palaceThreatMap.kingJoinAttack,
+    lowValuePieceSupportsMateNet: palaceThreatMap.lowValuePieceSupportsMateNet,
+    mateNetPotential: palaceThreatMap.mateNetPotential,
   };
 }
 
@@ -2153,6 +2479,12 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (evaluation.forcesOpponentChoice) return '安全門：迫使對方在多威脅中選擇';
   if (evaluation.ignoredHigherPriorityThreat) return '忽略明大子受攻，已重扣分';
   if (evaluation.unresolvedHighValueThreat && !evaluation.captureGain && !evaluation.effectiveCheck && !evaluation.blocksImmediateWin) return '明大子受攻未解，已扣分';
+  if (evaluation.loopBreakingMove) return '破循環：放棄無成果追擊，改為翻新子 / 改善低價子 / 九宮壓迫 / 改攻另一翼';
+  if (evaluation.mutualChaseLoop || evaluation.forcingCycle) return '追逃循環：雙方來回追逃，局面沒有改變';
+  if (evaluation.repetitiveForcingMove) return '重複強制步：近期已多次追同一目標';
+  if (evaluation.unproductiveForcingMove) return '無成果強制步：對方有簡單回應，未取得實質進展';
+  if (evaluation.forcingMove && evaluation.forcingMoveQuality === 'productive') return '有效強制步：取得實質進展';
+  if (evaluation.cannonPalaceRestriction) return '九宮壓迫：限制敵方將帥逃格';
   if (evaluation.rescuesLooseHiddenPiece) return '暗子無保護受攻擊，優先脫離';
   if (evaluation.postMoveLooseHiddenPiece && evaluation.postMoveLoosePiecePenalty < 0) return '下完仍有無保護暗子被抓，已扣分';
   if (evaluation.firstMoveBlindHorseActivation) return '第一手盲動暗馬，已降分';
@@ -2298,6 +2630,64 @@ export function recommendMove(
     }
   }
 
+  // Need C (第四包)：若最佳候選是無成果／重複／循環強制步，且未觸發安全門、
+  // 也不是直接解殺/阻殺，嘗試以「翻新子／改善低價子／九宮壓迫／改攻另一翼」
+  // 等真正改變局面的替代步取代。loopBreakingMove 的加分絕不可覆寫安全門
+  // （decisionLayer 1）或解殺（blocksImmediateWin）—— 這兩者優先序最高。
+  if (
+    bestEvaluation.decisionLayer !== 1 &&
+    !bestEvaluation.resolvedHighValueThreat &&
+    !bestEvaluation.blocksImmediateWin &&
+    (
+      bestEvaluation.unproductiveForcingMove ||
+      bestEvaluation.repetitiveForcingMove ||
+      bestEvaluation.forcingCycle ||
+      bestEvaluation.mutualChaseLoop
+    )
+  ) {
+    const eligible = evaluations.filter(({ move, evaluation }) =>
+      move !== best &&
+      !evaluation.unproductiveForcingMove &&
+      !evaluation.repetitiveForcingMove &&
+      !evaluation.forcingCycle &&
+      !evaluation.mutualChaseLoop &&
+      !evaluation.meaningless
+    );
+
+    if (eligible.length > 0) {
+      const ranked = eligible.map(candidate => {
+        const movedType = candidate.move.piece.revealed
+          ? candidate.move.piece.realType
+          : candidate.move.piece.originalType;
+        const isLowValuePieceMove = movedType === 'advisor' || movedType === 'elephant' || movedType === 'pawn';
+        const isReveal = candidate.evaluation.moveRevealsUnknown;
+        const bonus =
+          weights.loopBreakingMoveBonus +
+          (isReveal ? weights.seekNewInformationBonus : 0) +
+          (isLowValuePieceMove ? weights.loopBreakingDevelopmentBonus : 0);
+        return { ...candidate, isReveal, isLowValuePieceMove, adjustedScore: candidate.evaluation.score + bonus };
+      });
+      const altBest = ranked.reduce((a, b) => (b.adjustedScore > a.adjustedScore ? b : a));
+
+      // 只有替代步分數沒有遠遜於原本最佳步時才採用，避免為了破循環犧牲過多價值。
+      if (altBest.adjustedScore >= bestEvaluation.score - weights.loopBreakingMoveBonus) {
+        const newEvaluation: MoveEvaluation = {
+          ...altBest.evaluation,
+          score: altBest.adjustedScore,
+          loopBreakingMove: true,
+          productiveAlternative: true,
+          seekNewInformation: altBest.isReveal,
+          boardStateRefreshMove: altBest.isReveal,
+          loopBreakingDevelopment: altBest.isLowValuePieceMove,
+        };
+        best = altBest.move;
+        bestEvaluation = newEvaluation;
+        const idx = evaluations.findIndex(({ move }) => move === altBest.move);
+        if (idx >= 0) evaluations[idx] = { move: altBest.move, evaluation: newEvaluation };
+      }
+    }
+  }
+
   const traces: AiMoveTrace[] = evaluations.map(({ move, evaluation }) => ({
     move,
     score: evaluation.score,
@@ -2421,6 +2811,27 @@ export function recommendMove(
     dynamicValuePhase: evaluation.dynamicValuePhase,
     cannonFrameAdjustment: evaluation.cannonFrameAdjustment,
     horseMobilityAdjustment: evaluation.horseMobilityAdjustment,
+    forcingMove: evaluation.forcingMove,
+    forcingTargetKind: evaluation.forcingTargetKind,
+    forcingTargetType: evaluation.forcingTargetType,
+    forcingTargetRevealed: evaluation.forcingTargetRevealed,
+    forcingTargetValue: evaluation.forcingTargetValue,
+    forcingMoveQuality: evaluation.forcingMoveQuality,
+    forcingMoveProgress: evaluation.forcingMoveProgress,
+    unproductiveForcingMove: evaluation.unproductiveForcingMove,
+    repetitiveForcingMove: evaluation.repetitiveForcingMove,
+    forcingCycle: evaluation.forcingCycle,
+    mutualChaseLoop: evaluation.mutualChaseLoop,
+    loopBreakingMove: evaluation.loopBreakingMove,
+    productiveAlternative: evaluation.productiveAlternative,
+    seekNewInformation: evaluation.seekNewInformation,
+    loopBreakingDevelopment: evaluation.loopBreakingDevelopment,
+    boardStateRefreshMove: evaluation.boardStateRefreshMove,
+    palaceThreatMapScore: evaluation.palaceThreatMapScore,
+    cannonPalaceRestriction: evaluation.cannonPalaceRestriction,
+    kingJoinAttack: evaluation.kingJoinAttack,
+    lowValuePieceSupportsMateNet: evaluation.lowValuePieceSupportsMateNet,
+    mateNetPotential: evaluation.mateNetPotential,
   }));
 
   return {

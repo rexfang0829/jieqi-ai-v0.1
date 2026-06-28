@@ -146,6 +146,19 @@ export type AiWeights = {
   cannonNoFramePenalty: number;
   horseHighMobilityBonus: number;
   horseLowMobilityPenalty: number;
+  // Task 6 (第四包): forcing move quality + chase loop suppression MVP
+  unproductiveForcingMovePenalty: number;
+  repetitiveForcingMovePenalty: number;
+  forcingCyclePenalty: number;
+  mutualChaseLoopPenalty: number;
+  productiveForcingMoveBonus: number;
+  loopBreakingMoveBonus: number;
+  seekNewInformationBonus: number;
+  loopBreakingDevelopmentBonus: number;
+  palaceThreatMapBonus: number;
+  cannonPalaceRestrictionBonus: number;
+  kingJoinAttackBonus: number;
+  lowValueMateNetSupportBonus: number;
 };
 
 export const defaultAiWeights: AiWeights = {
@@ -302,4 +315,17 @@ export const defaultAiWeights: AiWeights = {
   cannonNoFramePenalty: -20,
   horseHighMobilityBonus: 20,
   horseLowMobilityPenalty: -30,
+  // Task 6 (第四包): forcing move quality + chase loop suppression MVP
+  unproductiveForcingMovePenalty: -80,
+  repetitiveForcingMovePenalty: -140,
+  forcingCyclePenalty: -260,
+  mutualChaseLoopPenalty: -280,
+  productiveForcingMoveBonus: 60,
+  loopBreakingMoveBonus: 90,
+  seekNewInformationBonus: 45,
+  loopBreakingDevelopmentBonus: 55,
+  palaceThreatMapBonus: 60,
+  cannonPalaceRestrictionBonus: 70,
+  kingJoinAttackBonus: 50,
+  lowValueMateNetSupportBonus: 45,
 };
