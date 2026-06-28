@@ -46,6 +46,8 @@ type MoveEvaluation = {
   openingTempoPenalty: number;
   forcingReply: boolean;
   blocksImmediateWin: boolean;
+  hiddenRevealMateDefense?: boolean;
+  hiddenRevealMateDefensePenalty?: number;
   checking: boolean;
   effectiveCheck: boolean;
   lowQualityCheck: boolean;
@@ -1720,6 +1722,14 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
   const rawChecking = next !== state && next.status === 'playing' && isInCheck(next.board, next.turn);
   const checking = moveRevealsUnknown ? false : rawChecking;
   const revealTacticalSuppressed = moveRevealsUnknown && (rawChecking || revealDependentThreat);
+
+  // 防一步殺時，明子確定防殺優先於暗子翻開防殺。
+  // 暗子翻開防殺不一定錯，但穩定性較差，避免 AI 在有明子解法時選翻暗子。
+  const hiddenRevealMateDefense = blocksImmediateWin && moveRevealsUnknown;
+  const hiddenRevealMateDefensePenalty = hiddenRevealMateDefense
+    ? weights.unsafeCapturePenalty
+    : 0;
+
   const effectiveCheck = checking && (
     captureGain > 0 ||
     importantThreat ||
@@ -2296,6 +2306,7 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     checkPenalty +
     safeCapturePriorityBonus +
     prematureHiddenMajorLowHiddenCapturePenalty +
+    hiddenRevealMateDefensePenalty +
     speculativeAttackPenalty +
     repetitiveCheckPenaltyScore +
     repeatedCheckingCyclePenaltyScore +
@@ -2366,6 +2377,8 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     openingTempoPenalty,
     forcingReply,
     blocksImmediateWin,
+    hiddenRevealMateDefense,
+    hiddenRevealMateDefensePenalty,
     checking,
     effectiveCheck,
     lowQualityCheck,
@@ -2503,6 +2516,7 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
 }
 
 function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: boolean, weights: AiWeights): string {
+  if (evaluation.hiddenRevealMateDefense) return '翻暗子防殺穩定性較低，已降分';
   if (evaluation.blocksImmediateWin) return '避免對方一步殺';
   if (evaluation.resolvedHighValueThreat && evaluation.multiPurposeDefense) return '一手多效：解除大子威脅並同時創造威脅';
   if (evaluation.rescuesHighValuePiece) return '安全門：解救己方明車';
@@ -2737,6 +2751,8 @@ export function recommendMove(
     keySquareScore: evaluation.keySquareScore,
     hiddenPressureScore: evaluation.hiddenPressureScore,
     leaveKeySquareScore: evaluation.leaveKeySquareScore,
+    hiddenRevealMateDefense: evaluation.hiddenRevealMateDefense,
+    hiddenRevealMateDefensePenalty: evaluation.hiddenRevealMateDefensePenalty,
     checking: evaluation.checking,
     effectiveCheck: evaluation.effectiveCheck,
     lowQualityCheck: evaluation.lowQualityCheck,

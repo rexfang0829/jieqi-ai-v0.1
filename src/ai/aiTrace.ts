@@ -18,6 +18,8 @@ export type AiMoveTrace = {
   keySquareScore: number;
   hiddenPressureScore: number;
   leaveKeySquareScore: number;
+  hiddenRevealMateDefense?: boolean;
+  hiddenRevealMateDefensePenalty?: number;
   checking: boolean;
   effectiveCheck: boolean;
   lowQualityCheck: boolean;
