@@ -255,6 +255,11 @@ function detectRepeatedCheckingCycle(state: GameState, move: Move, isCheck: bool
  */
 function detectRepetitiveForcingMove(state: GameState, move: Move, isForcingMove: boolean): boolean {
   if (!isForcingMove) return false;
+
+  // 本手若已經吃到已翻明子，代表取得實質進展。
+  // 例如「車七進一吃黑馬」不應因前兩手只是開兵而被誤判成重複強制步。
+  if (move.captured?.revealed) return false;
+
   const h = state.history;
   if (h.length < 4) return false;
   const prev1 = h[h.length - 2];
@@ -769,6 +774,15 @@ function isSquareAttackedByRevealedPawn(board: Board, bySide: Side, target: Posi
   return getAllLegalMoves(board, bySide).some(m =>
     m.piece.revealed &&
     publicType(m.piece) === 'pawn' &&
+    m.captured &&
+    samePosition(m.to, target)
+  );
+}
+
+function isSquareAttackedByRevealedMajor(board: Board, bySide: Side, target: Position): boolean {
+  return getAllLegalMoves(board, bySide).some(m =>
+    m.piece.revealed &&
+    (publicType(m.piece) === 'rook' || publicType(m.piece) === 'cannon' || publicType(m.piece) === 'horse') &&
     m.captured &&
     samePosition(m.to, target)
   );
@@ -1701,9 +1715,16 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
   const unrevealedPawnSoldierCount = countUnrevealedPawnSoldiersForSide(state.board, state.turn);
   const pawnSoldiersStillDeveloping = unrevealedPawnSoldierCount >= 2;
   const pawnSoldierDevelopment = isOpeningPhase(state, weights) && isPawnSoldierDevelopmentMove(move);
-  const pawnSoldierThreatRevealedMajor =
+  const pawnSoldierThreatensRevealedMajor =
     pawnSoldierDevelopment &&
     moveFromPositionThreatensRevealedMajor(nextBoard, state.turn, move.to);
+  const pawnSoldierFeedsRevealedMajor =
+    pawnSoldierThreatensRevealedMajor &&
+    isSquareAttackedByRevealedMajor(nextBoard, opponent(state.turn), move.to) &&
+    !isSquareProtectedBySide(nextBoard, state.turn, move.to);
+  const pawnSoldierThreatRevealedMajor =
+    pawnSoldierThreatensRevealedMajor &&
+    !pawnSoldierFeedsRevealedMajor;
   const pawnSoldierFollowUp = pawnSoldierFollowUpEvaluation(state.board, state.turn, move, weights);
   const pawnSoldierDevelopmentScore = pawnSoldierDevelopment ? weights.pawnSoldierDevelopmentBonus : 0;
   const pawnSoldierThreatRevealedMajorScore = pawnSoldierThreatRevealedMajor
@@ -1912,15 +1933,17 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
   const pawnSoldierWalksIntoRevealedPawnAttack = isUnrevealedPawnMove &&
     captureGain === 0 &&
     !blocksImmediateWin &&
-    isSquareAttackedByRevealedPawn(nextBoard, opponent(state.turn), move.to) &&
+    isSquareAttackedByRevealedPawn(nextBoard, opponent(state.turn), move.to);
+  const pawnSoldierSelfSacrifice =
+    pawnSoldierWalksIntoRevealedPawnAttack &&
     !pawnSoldierProtectedAfterAdvance;
-  const pawnSoldierSelfSacrifice = pawnSoldierWalksIntoRevealedPawnAttack;
   const pawnSoldierDevelopmentSuppressedByPawnAttack = pawnSoldierWalksIntoRevealedPawnAttack;
   const pawnSoldierWalksIntoPawnAttackPenalty = pawnSoldierWalksIntoRevealedPawnAttack
-    ? weights.pawnSoldierWalksIntoRevealedPawnAttackPenalty : 0;
+    ? Math.round(weights.pawnSoldierWalksIntoRevealedPawnAttackPenalty * (pawnSoldierProtectedAfterAdvance ? 0.5 : 1))
+    : 0;
   const pawnSoldierDevelopmentSuppressedByPawnAttackPenalty = pawnSoldierDevelopmentSuppressedByPawnAttack
-    ? weights.pawnSoldierDevelopmentSuppressedByPawnAttackPenalty : 0;
-
+    ? weights.pawnSoldierDevelopmentSuppressedByPawnAttackPenalty
+    : 0;
   // 暗大子回吃風險
   const hiddenMajorRecaptureRisk = captureGain > 0 &&
     !blocksImmediateWin &&
@@ -1958,7 +1981,8 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
     rescuedLooseHiddenPieceCount === 0 &&
     !rescuesLooseHiddenPiece;
   const postMoveLoosePiecePenalty =
-    postMoveLooseHiddenPieceCount * weights.postMoveLooseHiddenPiecePenalty;
+    postMoveLooseHiddenPieceCount *
+    (structure.horsePawnLineGuard ? Math.round(weights.postMoveLooseHiddenPiecePenalty * 0.35) : weights.postMoveLooseHiddenPiecePenalty);
   const rescueLooseHiddenPieceScore = rescuesLooseHiddenPiece ? weights.rescueLooseHiddenPieceBonus : 0;
   const protectedUnderAttackPenalty = postMoveProtectedUnderAttackCount > 0
     ? Math.max(
@@ -2025,7 +2049,7 @@ function evaluateMove(state: GameState, move: Move, blocksImmediateWin: boolean,
   // Edge rook pressure: boost horse guard moves, penalize plain pawn development that ignores edge rook
   const horsePawnLineGuardEdgeRookBonus =
     pawnSoldiersStillDeveloping && structure.horsePawnLineGuard && edgeRookPressure
-      ? weights.horsePawnLineGuardEdgeRookBonus
+      ? weights.horsePawnLineGuardEdgeRookBonus + weights.pawnLineDefenseBonus + weights.preventEnemyRookPawnLineLockBonus
       : 0;
   const pawnSoldierDelayedByEdgeRookPressure =
     pawnSoldierDevelopment && edgeRookPressure && !pawnSoldierThreatRevealedMajor;
@@ -2528,9 +2552,10 @@ function reasonFor(best: Move, evaluation: MoveEvaluation, avoidedOpponentWin: b
   if (evaluation.forcesOpponentChoice) return '安全門：迫使對方在多威脅中選擇';
   if (evaluation.ignoredHigherPriorityThreat) return '忽略明大子受攻，已重扣分';
   if (evaluation.unresolvedHighValueThreat && !evaluation.captureGain && !evaluation.effectiveCheck && !evaluation.blocksImmediateWin) return '明大子受攻未解，已扣分';
+  if (evaluation.horsePawnLineGuard) return '補防兵線，防止明車突破';
   if (evaluation.loopBreakingMove) return '破循環：放棄無成果追擊，改為翻新子 / 改善低價子 / 九宮壓迫 / 改攻另一翼';
   if (evaluation.mutualChaseLoop || evaluation.forcingCycle) return '追逃循環：雙方來回追逃，局面沒有改變';
-  if (evaluation.repetitiveForcingMove) return '重複強制步：近期已多次追同一目標';
+  if (evaluation.repetitiveForcingMove) return '重複強制步：近期多次無吃子強制步，已降分';
   if (evaluation.unproductiveForcingMove) return '無成果強制步：對方有簡單回應，未取得實質進展';
   if (evaluation.forcingMove && evaluation.forcingMoveQuality === 'productive') return '有效強制步：取得實質進展';
   if (evaluation.cannonPalaceRestriction) return '九宮壓迫：限制敵方將帥逃格';
